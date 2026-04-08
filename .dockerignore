@@ -1,0 +1,7 @@
+resources/
+testdata/
+SKILL.md
+*.pdf
+*.xlsx
+.git/
+bin/
