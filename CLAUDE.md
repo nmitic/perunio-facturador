@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-perunio-facturador is a **stateless Go microservice** for SUNAT (Peru Tax Authority) electronic invoicing compliance. It handles XML generation, digital signing, SUNAT SOAP submission, CDR parsing, and PDF generation.
+perunio-facturador is a **stateful Go microservice** for SUNAT (Peru Tax Authority) electronic invoicing. It owns the full facturador domain: certificates, series, draft documents, daily summaries, void communications, and the compliance pipeline (validate → XML → sign → ZIP → SOAP → CDR → PDF).
 
-It is called by the Node.js backend (`perunio-backend`) via HTTP REST. It does NOT handle business logic, database access, or file storage — those remain in the backend.
+It talks directly to the shared PostgreSQL DB (RLS-isolated by tenant), Cloudflare R2 buckets, and AWS Secrets Manager. Clients (frontend/admin) call it directly; `perunio-backend` handles auth/billing/consultas but no longer touches facturador resources.
 
 ## Development Commands
 
@@ -24,10 +24,14 @@ go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
 ## Architecture
 
 ```
-cmd/app/main.go              # Entry point, config loading, HTTP server
+cmd/app/main.go              # Entry point: awssecrets -> db pool -> r2 client -> http server
 internal/
-  config/                    # Environment-based configuration
-  model/                     # Request/response types, SUNAT catalogs
+  awssecrets/                # AWS Secrets Manager client (JWT + encryption keys)
+  config/                    # Environment config (R2, DB, SUNAT URLs)
+  auth/                      # JWT middleware + tenant-id context helpers
+  db/                        # pgxpool + WithTenant (RLS) + table helpers
+  r2/                        # Cloudflare R2 (S3-compatible) certificates + documents
+  model/                     # Domain types shared across the pipeline
   xmlbuilder/                # UBL 2.1 (Invoice/NC/ND) and 2.0 (RC/RA) XML builders
   signature/                 # PFX loading, XMLDSig RSA-SHA1 signing
   soap/                      # SUNAT SOAP client (sendBill, sendSummary, getStatus)
@@ -35,35 +39,75 @@ internal/
   zipper/                    # ZIP creation for SUNAT submission
   validation/                # Pre-submission validation with SUNAT error codes
   pdf/                       # Invoice PDF generation with QR code
-  crypto/                    # AES-256-GCM decryption (compatible with Node.js backend)
-  http/                      # Chi router, handlers, middleware
+  crypto/                    # AES-256-GCM en/decryption (shared format with Node.js)
+  http/                      # Chi router, JWT middleware, route handlers
 ```
 
 ## API Endpoints
 
-All authenticated via `X-API-Key` header.
+All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS256, same secret as `perunio-backend`, sourced from AWS Secrets Manager). RLS isolation is enforced in `db.WithTenant` by setting `app.current_tenant_id` on the transaction.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/api/v1/documents/issue` | Full pipeline: validate -> XML -> sign -> ZIP -> SOAP -> CDR -> PDF |
-| `POST` | `/api/v1/documents/validate` | Dry run validation only |
-| `POST` | `/api/v1/documents/cdr` | Query CDR for specific document |
-| `POST` | `/api/v1/summaries/issue` | Issue Resumen Diario (async, returns ticket) |
-| `POST` | `/api/v1/summaries/status` | Poll ticket status |
-| `POST` | `/api/v1/voids/issue` | Issue Comunicacion de Baja (async, returns ticket) |
-| `POST` | `/api/v1/voids/status` | Poll ticket status |
-| `POST` | `/api/v1/certificates/validate` | Validate PFX certificate |
-| `GET` | `/health` | Health check |
+### Certificates
+- `GET /certificates/{companyId}` — list
+- `POST /certificates/{companyId}` — upload PFX + encrypt password
+- `GET /certificates/{companyId}/{certId}` — metadata
+- `PUT /certificates/{companyId}/{certId}/activate` — set active
+- `DELETE /certificates/{companyId}/{certId}` — delete
+
+### Series
+- `GET /series/{companyId}`
+- `POST /series/{companyId}` — create (unique on docType+series)
+- `PUT /series/{companyId}/{seriesId}`
+- `DELETE /series/{companyId}/{seriesId}` — refuses if docs exist
+
+### Documents
+- `GET /documents/{companyId}` — paginated, filterable
+- `POST /documents/{companyId}` — create draft (quota check + atomic correlative)
+- `GET /documents/{companyId}/{docId}` — with line items
+- `PUT /documents/{companyId}/{docId}` — update draft
+- `DELETE /documents/{companyId}/{docId}` — delete draft
+- `POST /documents/{companyId}/{docId}/issue` — run full pipeline against draft
+- `GET /documents/{companyId}/{docId}/files/{fileType}` — presigned R2 URL (`xml|signed_xml|zip|cdr|pdf`)
+
+### Summaries
+- `GET /summaries/{companyId}`
+- `POST /summaries/{companyId}` — create daily summary from unlinked accepted boletas
+- `GET /summaries/{companyId}/{summaryId}` — with linked items
+- `POST /summaries/{companyId}/{summaryId}/issue` — sign + send RC, store ticket
+- `POST /summaries/{companyId}/{summaryId}/poll` — poll by ticket, write CDR outcome
+
+### Voids
+- `GET /voids/{companyId}`
+- `POST /voids/{companyId}` — create void (enforces 7-day window)
+- `GET /voids/{companyId}/{voidId}` — with linked items
+- `POST /voids/{companyId}/{voidId}/issue` — sign + send RA, store ticket
+- `POST /voids/{companyId}/{voidId}/poll` — poll by ticket, write CDR outcome
+
+### Other
+- `GET /usage` — current month's document usage + tier limit
+- `GET /health` — unauthenticated health check
 
 ## Environment Variables
 
 ```
-PORT=8080                    # HTTP port
-API_KEY=                     # Shared secret with backend (required)
-ENCRYPTION_KEY=              # 64-char hex, same as backend's ENCRYPTION_KEY (required)
-SUNAT_BETA_URL=              # Override beta endpoint
-SUNAT_PRODUCTION_URL=        # Override production endpoint
-SUNAT_CONSULT_URL=           # Override consultation endpoint
+PORT=8080                        # HTTP port
+DATABASE_URL=                    # Shared PostgreSQL (required)
+
+# AWS Secrets Manager (source of truth for JWT + encryption keys)
+AWS_SECRET_NAME=                 # Empty -> falls back to JWT_SECRET / ENCRYPTION_KEY env vars (dev)
+AWS_REGION=
+
+# Cloudflare R2 (required)
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_CERTIFICATES_BUCKET=perunio-certificates
+R2_DOCUMENTS_BUCKET=perunio-facturador
+
+# SUNAT endpoints (defaults baked in)
+SUNAT_BETA_URL=
+SUNAT_PRODUCTION_URL=
+SUNAT_CONSULT_URL=
 ```
 
 ## Critical SUNAT Gotchas

@@ -1,16 +1,36 @@
 package config
 
 import (
-	"encoding/hex"
 	"fmt"
 	"os"
 )
 
-// Config holds all configuration for the facturador service.
+// Config holds all configuration for the facturador service. Secret material
+// (JWT key, encryption keys) is sourced from awssecrets.Service, not from this
+// struct.
 type Config struct {
-	Port          string
-	APIKey        string
-	EncryptionKey []byte // 32 bytes, decoded from 64-char hex
+	Port string
+
+	// EncryptionKey is the AES-256 key (32 raw bytes) shared with the Node.js
+	// backend for cert-password encryption. Populated by main.go from
+	// awssecrets.Service.EncryptionKey() after Initialize, NOT loaded from env.
+	EncryptionKey []byte
+
+	// DatabaseURL is the PostgreSQL connection string for the shared DB.
+	DatabaseURL string
+
+	// AWS secrets bootstrap. AWSSecretName empty -> awssecrets falls back to
+	// individual env vars (dev/CI mode).
+	AWSSecretName string
+	AWSRegion     string
+
+	// Cloudflare R2 (S3-compatible) credentials and bucket names. Both buckets
+	// are shared with the Node.js backend.
+	R2AccountID          string
+	R2AccessKeyID        string
+	R2SecretAccessKey    string
+	R2CertificatesBucket string
+	R2DocumentsBucket    string
 
 	SunatBetaURL       string
 	SunatProductionURL string
@@ -19,34 +39,34 @@ type Config struct {
 	SunatTimeoutSeconds int
 }
 
-// Load reads configuration from environment variables and validates required fields.
+// Load reads configuration from environment variables and validates required
+// fields. Secret values are NOT read here — see awssecrets.Service.
 func Load() (Config, error) {
 	c := Config{
 		Port:                env("PORT", "8080"),
-		APIKey:              env("API_KEY", ""),
-		SunatBetaURL:       env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
-		SunatProductionURL: env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
-		SunatConsultURL:    env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
+		DatabaseURL:         env("DATABASE_URL", ""),
+		AWSSecretName:       env("AWS_SECRET_NAME", ""),
+		AWSRegion:           env("AWS_REGION", ""),
+		R2AccountID:         env("R2_ACCOUNT_ID", ""),
+		R2AccessKeyID:       env("R2_ACCESS_KEY_ID", ""),
+		R2SecretAccessKey:   env("R2_SECRET_ACCESS_KEY", ""),
+		R2CertificatesBucket: env("R2_CERTIFICATES_BUCKET", "perunio-certificates"),
+		R2DocumentsBucket:    env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
+		SunatBetaURL:        env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
+		SunatProductionURL:  env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
+		SunatConsultURL:     env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
 		SunatTimeoutSeconds: 30,
 	}
 
-	if c.APIKey == "" {
-		return Config{}, fmt.Errorf("API_KEY is required")
+	if c.DatabaseURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
-
-	encKeyHex := env("ENCRYPTION_KEY", "")
-	if encKeyHex == "" {
-		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required")
+	if c.R2AccountID == "" {
+		return Config{}, fmt.Errorf("R2_ACCOUNT_ID is required")
 	}
-
-	keyBytes, err := hex.DecodeString(encKeyHex)
-	if err != nil {
-		return Config{}, fmt.Errorf("ENCRYPTION_KEY must be valid hex: %w", err)
+	if c.R2AccessKeyID == "" || c.R2SecretAccessKey == "" {
+		return Config{}, fmt.Errorf("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required")
 	}
-	if len(keyBytes) != 32 {
-		return Config{}, fmt.Errorf("ENCRYPTION_KEY must be 64 hex chars (32 bytes), got %d bytes", len(keyBytes))
-	}
-	c.EncryptionKey = keyBytes
 
 	return c, nil
 }
