@@ -10,14 +10,22 @@ import (
 // Company is the view of the companies row used by the issue pipeline. The
 // username/encryptedPassword fields hold SUNAT SOL credentials (AES-GCM
 // encrypted by the backend with the same key the facturador uses).
+//
+// EncryptedClientID and EncryptedClientSecret are the GRE API credentials
+// (scope https://api-cpe.sunat.gob.pe), scraped by perunio-backend during
+// company creation and used by the GRE REST pipeline for OAuth2 token
+// exchange against api-seguridad.sunat.gob.pe. They are encrypted with the
+// same AES-GCM key as the SOL password.
 type Company struct {
-	ID                string
-	TenantID          string
-	RUC               string
-	CompanyName       string
-	Username          *string
-	EncryptedPassword *string
-	IsActive          bool
+	ID                    string
+	TenantID              string
+	RUC                   string
+	CompanyName           string
+	Username              *string
+	EncryptedPassword     *string
+	EncryptedClientID     *string
+	EncryptedClientSecret *string
+	IsActive              bool
 }
 
 // GetCompany loads the company + SUNAT credentials for the issue pipeline,
@@ -27,6 +35,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, `
 			SELECT id, tenant_id, ruc, COALESCE(company_name, ''), username, password,
+			       client_id, client_secret,
 			       COALESCE(is_active, true)
 			FROM companies
 			WHERE id = $1
@@ -34,7 +43,9 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 		`, companyID)
 		var got Company
 		if err := row.Scan(&got.ID, &got.TenantID, &got.RUC, &got.CompanyName,
-			&got.Username, &got.EncryptedPassword, &got.IsActive); err != nil {
+			&got.Username, &got.EncryptedPassword,
+			&got.EncryptedClientID, &got.EncryptedClientSecret,
+			&got.IsActive); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}

@@ -13,6 +13,7 @@ import (
 	"github.com/perunio/perunio-facturador/internal/awssecrets"
 	"github.com/perunio/perunio-facturador/internal/config"
 	"github.com/perunio/perunio-facturador/internal/db"
+	"github.com/perunio/perunio-facturador/internal/greclient"
 	"github.com/perunio/perunio-facturador/internal/r2"
 )
 
@@ -28,13 +29,14 @@ type Deps struct {
 
 // server is the HTTP server for the facturador service.
 type server struct {
-	mux     *chi.Mux
-	cfg     config.Config
-	log     *slog.Logger
-	secrets *awssecrets.Service
-	pool    *db.Pool
-	r2      *r2.Client
-	authMW  *auth.Middleware
+	mux       *chi.Mux
+	cfg       config.Config
+	log       *slog.Logger
+	secrets   *awssecrets.Service
+	pool      *db.Pool
+	r2        *r2.Client
+	greClient *greclient.Client
+	authMW    *auth.Middleware
 }
 
 // NewServer creates a new HTTP handler with routes configured.
@@ -46,7 +48,13 @@ func NewServer(deps Deps) http.Handler {
 		secrets: deps.Secrets,
 		pool:    deps.Pool,
 		r2:      deps.R2,
-		authMW:  auth.NewMiddleware(deps.Secrets.JWTSecret(), deps.Pool),
+		greClient: greclient.NewClient(
+			deps.Config.SunatGRESecurityURL,
+			deps.Config.SunatGREBetaURL,
+			deps.Config.SunatGREProductionURL,
+			deps.Config.SunatTimeoutSeconds,
+		),
+		authMW: auth.NewMiddleware(deps.Secrets.JWTSecret(), deps.Pool),
 	}
 
 	s.mux.Use(middleware.RequestID)
@@ -101,6 +109,16 @@ func NewServer(deps Deps) http.Handler {
 		r.Get("/voids/{companyId}/{voidId}", s.getVoidHandler)
 		r.Post("/voids/{companyId}/{voidId}/issue", s.issueVoidPipelineHandler)
 		r.Post("/voids/{companyId}/{voidId}/poll", s.pollVoidPipelineHandler)
+
+		// Guías de Remisión Electrónica (GRE REST API).
+		r.Get("/gre/{companyId}", s.listDespatchesHandler)
+		r.Post("/gre/{companyId}", s.createDespatchHandler)
+		r.Get("/gre/{companyId}/{despatchId}", s.getDespatchHandler)
+		r.Put("/gre/{companyId}/{despatchId}", s.updateDespatchHandler)
+		r.Delete("/gre/{companyId}/{despatchId}", s.deleteDespatchHandler)
+		r.Post("/gre/{companyId}/{despatchId}/issue", s.issueDespatchHandler)
+		r.Post("/gre/{companyId}/{despatchId}/poll", s.pollDespatchHandler)
+		r.Get("/gre/{companyId}/{despatchId}/files/{fileType}", s.despatchFileHandler)
 	})
 
 	return s.mux

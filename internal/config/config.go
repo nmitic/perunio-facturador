@@ -36,6 +36,16 @@ type Config struct {
 	SunatProductionURL string
 	SunatConsultURL    string
 
+	// GRE (Guía de Remisión Electrónica) REST API endpoints. Unlike the
+	// SOAP billService used for Factura/Boleta/NC/ND, GRE uses OAuth2 +
+	// REST under the "Plataforma Nueva GRE" (see
+	// cpe.sunat.gob.pe/sites/default/files/inline-files/Manual_Servicios_GRE.pdf).
+	// SunatGRESecurityURL issues tokens; SunatGREBetaURL / SunatGREProductionURL
+	// host the /v1/contribuyente/gem/comprobantes/... endpoints.
+	SunatGRESecurityURL   string
+	SunatGREBetaURL       string
+	SunatGREProductionURL string
+
 	SunatTimeoutSeconds int
 }
 
@@ -52,10 +62,13 @@ func Load() (Config, error) {
 		R2SecretAccessKey:   env("R2_SECRET_ACCESS_KEY", ""),
 		R2CertificatesBucket: env("R2_CERTIFICATES_BUCKET", "perunio-certificates"),
 		R2DocumentsBucket:    env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
-		SunatBetaURL:        env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
-		SunatProductionURL:  env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
-		SunatConsultURL:     env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
-		SunatTimeoutSeconds: 30,
+		SunatBetaURL:          env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
+		SunatProductionURL:    env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
+		SunatConsultURL:       env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
+		SunatGRESecurityURL:   env("SUNAT_GRE_SECURITY_URL", "https://api-seguridad.sunat.gob.pe"),
+		SunatGREBetaURL:       env("SUNAT_GRE_BETA_URL", "https://api-cpe.sunat.gob.pe"),
+		SunatGREProductionURL: env("SUNAT_GRE_PRODUCTION_URL", "https://api-cpe.sunat.gob.pe"),
+		SunatTimeoutSeconds:   30,
 	}
 
 	if c.DatabaseURL == "" {
