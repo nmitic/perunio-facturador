@@ -27,17 +27,18 @@ go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
 cmd/app/main.go              # Entry point: awssecrets -> db pool -> r2 client -> http server
 internal/
   awssecrets/                # AWS Secrets Manager client (JWT + encryption keys)
-  config/                    # Environment config (R2, DB, SUNAT URLs)
+  config/                    # Environment config (R2, DB, SUNAT URLs + GRE URLs)
   auth/                      # JWT middleware + tenant-id context helpers
   db/                        # pgxpool + WithTenant (RLS) + table helpers
   r2/                        # Cloudflare R2 (S3-compatible) certificates + documents
-  model/                     # Domain types shared across the pipeline
-  xmlbuilder/                # UBL 2.1 (Invoice/NC/ND) and 2.0 (RC/RA) XML builders
+  model/                     # Domain types shared across the pipeline (incl. Despatch)
+  xmlbuilder/                # UBL 2.1 (Invoice/NC/ND), 2.0 (RC/RA), and GRE (Despatch) XML builders
   signature/                 # PFX loading, XMLDSig RSA-SHA1 signing
   soap/                      # SUNAT SOAP client (sendBill, sendSummary, getStatus)
+  greclient/                 # SUNAT GRE REST client: OAuth2 token cache, Send, Poll
   cdr/                       # CDR ZIP extraction and ApplicationResponse parsing
   zipper/                    # ZIP creation for SUNAT submission
-  validation/                # Pre-submission validation with SUNAT error codes
+  validation/                # Pre-submission validation with SUNAT error codes (incl. Despatch)
   pdf/                       # Invoice PDF generation with QR code
   crypto/                    # AES-256-GCM en/decryption (shared format with Node.js)
   http/                      # Chi router, JWT middleware, route handlers
@@ -83,6 +84,20 @@ All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS
 - `POST /voids/{companyId}/{voidId}/issue` — sign + send RA, store ticket
 - `POST /voids/{companyId}/{voidId}/poll` — poll by ticket, write CDR outcome
 
+### GRE (Guías de Remisión Electrónica) — REST API via `greclient`
+- `GET /gre/{companyId}` — list despatches (paginated, filterable by docType/status)
+- `POST /gre/{companyId}` — create draft despatch (quota check + atomic correlative)
+- `GET /gre/{companyId}/{despatchId}` — with line items
+- `PUT /gre/{companyId}/{despatchId}` — update draft
+- `DELETE /gre/{companyId}/{despatchId}` — delete draft
+- `POST /gre/{companyId}/{despatchId}/issue` — validate → build XML → sign → zip → send via GRE OAuth2 REST, store ticket
+- `POST /gre/{companyId}/{despatchId}/poll` — poll SUNAT ticket, decode base64 CDR, persist outcome
+- `GET /gre/{companyId}/{despatchId}/files/{fileType}` — presigned R2 URL (`xml|signed_xml|zip|cdr`)
+
+GRE credentials (OAuth2 `client_id` + `client_secret`) are stored AES-encrypted on the `companies` row (`encrypted_client_id`, `encrypted_client_secret`). The token cache in `greclient` is keyed by `(companyID, environment)`.
+
+Despatch doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). Statuses: `draft → signed → sent → accepted / rejected / error`.
+
 ### Other
 - `GET /usage` — current month's document usage + tier limit
 - `GET /health` — unauthenticated health check
@@ -104,10 +119,15 @@ R2_SECRET_ACCESS_KEY=
 R2_CERTIFICATES_BUCKET=perunio-certificates
 R2_DOCUMENTS_BUCKET=perunio-facturador
 
-# SUNAT endpoints (defaults baked in)
+# SUNAT SOAP endpoints (defaults baked in)
 SUNAT_BETA_URL=
 SUNAT_PRODUCTION_URL=
 SUNAT_CONSULT_URL=
+
+# SUNAT GRE REST endpoints (defaults baked in)
+SUNAT_GRE_SECURITY_URL=     # default: https://api-seguridad.sunat.gob.pe
+SUNAT_GRE_BETA_URL=         # default: https://api-cpe.sunat.gob.pe
+SUNAT_GRE_PRODUCTION_URL=   # default: https://api-cpe.sunat.gob.pe
 ```
 
 ## Critical SUNAT Gotchas
