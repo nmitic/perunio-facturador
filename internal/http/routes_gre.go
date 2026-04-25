@@ -488,7 +488,7 @@ func (s *server) deleteDespatchHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	d, err := s.pool.GetDespatch(r.Context(), companyID, despatchID)
 	if err != nil {
@@ -528,6 +528,7 @@ func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	address, _ := s.pool.GetFiscalAddressByRUC(r.Context(), deps.company.RUC)
 	if address == "" {
@@ -634,7 +635,7 @@ func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	d, err := s.pool.GetDespatch(r.Context(), companyID, despatchID)
 	if err != nil {
@@ -656,6 +657,7 @@ func (s *server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	status, err := s.greClient.Poll(r.Context(), companyID, env, deps.greCredentials, *d.SunatTicket)
 	if err != nil {

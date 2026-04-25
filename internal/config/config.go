@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the facturador service. Secret material
@@ -47,13 +50,20 @@ type Config struct {
 	SunatGREProductionURL string
 
 	SunatTimeoutSeconds int
+
+	// AllowedOrigins are the browser origins allowed to hit /api/facturador/*
+	// with credentials. Loaded from ALLOWED_ORIGINS (comma-separated) with a
+	// localhost-only dev default.
+	AllowedOrigins []string
 }
 
 // Load reads configuration from environment variables and validates required
 // fields. Secret values are NOT read here — see awssecrets.Service.
 func Load() (Config, error) {
+	_ = godotenv.Load() // dev only; no-ops when .env is absent or vars already set
+
 	c := Config{
-		Port:                env("PORT", "8080"),
+		Port:                env("PORT", "3002"),
 		DatabaseURL:         env("DATABASE_URL", ""),
 		AWSSecretName:       env("AWS_SECRET_NAME", ""),
 		AWSRegion:           env("AWS_REGION", ""),
@@ -69,6 +79,7 @@ func Load() (Config, error) {
 		SunatGREBetaURL:       env("SUNAT_GRE_BETA_URL", "https://api-cpe.sunat.gob.pe"),
 		SunatGREProductionURL: env("SUNAT_GRE_PRODUCTION_URL", "https://api-cpe.sunat.gob.pe"),
 		SunatTimeoutSeconds:   30,
+		AllowedOrigins:        parseAllowedOrigins(env("ALLOWED_ORIGINS", "http://localhost:5173")),
 	}
 
 	if c.DatabaseURL == "" {
@@ -89,4 +100,16 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func parseAllowedOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

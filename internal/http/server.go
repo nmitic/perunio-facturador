@@ -62,6 +62,7 @@ func NewServer(deps Deps) http.Handler {
 	s.mux.Use(middleware.Recoverer)
 	s.mux.Use(middleware.Timeout(120 * time.Second))
 	s.mux.Use(s.requestLogger)
+	s.mux.Use(s.cors(deps.Config.AllowedOrigins))
 
 	s.mux.Get("/health", s.healthHandler)
 

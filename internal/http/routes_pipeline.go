@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -30,20 +31,35 @@ type pipelineBody struct {
 }
 
 // readPipelineEnv decodes the optional {environment} body without failing on
-// empty request bodies.
+// empty request bodies. When no body (or an unrecognized value) is provided
+// this returns "", letting callers fall back to the per-company default via
+// resolvePipelineEnv.
 func readPipelineEnv(r *http.Request) string {
-	env := "beta"
-	if r.Body != nil {
-		var body pipelineBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
-			if body.Environment == "production" {
-				env = "production"
-			}
-		} else if err != io.EOF {
-			// ignore — empty body is fine
-		}
+	if r.Body == nil {
+		return ""
 	}
-	return env
+	var body pipelineBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+		return ""
+	}
+	switch body.Environment {
+	case "beta", "production":
+		return body.Environment
+	}
+	return ""
+}
+
+// resolvePipelineEnv picks the SUNAT environment for this pipeline run. An
+// explicit override from the request body wins; otherwise the per-company
+// default wins; otherwise we fall back to "beta".
+func resolvePipelineEnv(override, companyDefault string) string {
+	if override == "beta" || override == "production" {
+		return override
+	}
+	if companyDefault == "beta" || companyDefault == "production" {
+		return companyDefault
+	}
+	return "beta"
 }
 
 // trailingDigits pulls the trailing integer from a string like "RC-20240115-001".
@@ -248,7 +264,7 @@ func derefString(s *string, fallback string) string {
 func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	docID := chi.URLParam(r, "docId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	// 1. Load the draft document + items.
 	doc, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
@@ -283,6 +299,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	// 3. Fiscal address from the public SSCO table, falling back to a
 	// placeholder so SUNAT doesn't reject the invoice during onboarding.
@@ -319,9 +336,19 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
+	sendStart := time.Now()
 	sendResult, err := soapClient.SendBill(deps.sunatUsername, deps.sunatPassword, filename, zipBytes)
+	sendDurationMs := int(time.Since(sendStart).Milliseconds())
 	if err != nil {
 		s.log.Error("send bill", "error", err, "docId", docID)
+		docRef := docID
+		errDesc := err.Error()
+		if logErr := s.pool.InsertSubmissionLog(r.Context(), db.SubmissionLogEntry{
+			CompanyID: companyID, DocumentID: &docRef, Action: "sendBill",
+			ResponseDescription: &errDesc, DurationMs: &sendDurationMs,
+		}); logErr != nil {
+			s.log.Warn("write submission log", "error", logErr, "docId", docID)
+		}
 		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 		return
 	}
@@ -331,6 +358,22 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		s.log.Error("parse cdr", "error", err, "docId", docID)
 		writeError(w, http.StatusInternalServerError, "CDR_PARSE_ERROR", err.Error())
 		return
+	}
+
+	{
+		docRef := docID
+		resCode := parsedCDR.ResponseCode
+		resDesc := parsedCDR.Description
+		if logErr := s.pool.InsertSubmissionLog(r.Context(), db.SubmissionLogEntry{
+			CompanyID:           companyID,
+			DocumentID:          &docRef,
+			Action:              "sendBill",
+			ResponseCode:        &resCode,
+			ResponseDescription: &resDesc,
+			DurationMs:          &sendDurationMs,
+		}); logErr != nil {
+			s.log.Warn("write submission log", "error", logErr, "docId", docID)
+		}
 	}
 
 	// Build QR data (same format the legacy handler used).
@@ -415,7 +458,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	summaryID := chi.URLParam(r, "summaryId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	summary, err := s.pool.GetDailySummary(r.Context(), companyID, summaryID)
 	if err != nil {
@@ -448,6 +491,7 @@ func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	correlative := trailingDigits(summary.SummaryID)
 	issueDate := summary.ReferenceDate.Format("2006-01-02")
@@ -538,7 +582,7 @@ func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 func (s *server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	summaryID := chi.URLParam(r, "summaryId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	summary, err := s.pool.GetDailySummary(r.Context(), companyID, summaryID)
 	if err != nil {
@@ -560,6 +604,7 @@ func (s *server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	result, err := soapClient.GetStatus(deps.sunatUsername, deps.sunatPassword, *summary.SunatTicket)
@@ -618,7 +663,7 @@ func (s *server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Reque
 func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	voidID := chi.URLParam(r, "voidId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	voidDoc, err := s.pool.GetVoidedDocument(r.Context(), companyID, voidID)
 	if err != nil {
@@ -652,6 +697,7 @@ func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	correlative := trailingDigits(voidDoc.VoidID)
 	voidReq := model.VoidRequest{
@@ -728,7 +774,7 @@ func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 func (s *server) pollVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	voidID := chi.URLParam(r, "voidId")
-	env := readPipelineEnv(r)
+	envOverride := readPipelineEnv(r)
 
 	voidDoc, err := s.pool.GetVoidedDocument(r.Context(), companyID, voidID)
 	if err != nil {
@@ -750,6 +796,7 @@ func (s *server) pollVoidPipelineHandler(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	result, err := soapClient.GetStatus(deps.sunatUsername, deps.sunatPassword, *voidDoc.SunatTicket)

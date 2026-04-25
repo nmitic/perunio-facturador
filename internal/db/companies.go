@@ -26,6 +26,10 @@ type Company struct {
 	EncryptedClientID     *string
 	EncryptedClientSecret *string
 	IsActive              bool
+	// SunatEnvironment is the per-company default ("beta" | "production") the
+	// issue pipeline uses when the request body omits it. Mirrors the
+	// `companies.sunat_environment` column on the shared Postgres DB.
+	SunatEnvironment string
 }
 
 // GetCompany loads the company + SUNAT credentials for the issue pipeline,
@@ -36,7 +40,8 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 		row := tx.QueryRow(ctx, `
 			SELECT id, tenant_id, ruc, COALESCE(company_name, ''), username, password,
 			       client_id, client_secret,
-			       COALESCE(is_active, true)
+			       COALESCE(is_active, true),
+			       COALESCE(sunat_environment::text, 'beta')
 			FROM companies
 			WHERE id = $1
 			LIMIT 1
@@ -45,7 +50,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 		if err := row.Scan(&got.ID, &got.TenantID, &got.RUC, &got.CompanyName,
 			&got.Username, &got.EncryptedPassword,
 			&got.EncryptedClientID, &got.EncryptedClientSecret,
-			&got.IsActive); err != nil {
+			&got.IsActive, &got.SunatEnvironment); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
