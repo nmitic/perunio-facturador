@@ -60,17 +60,15 @@ func run(log *slog.Logger) error {
 	log.Info("database connected")
 
 	r2Client, err := r2.New(ctx, r2.Config{
-		AccountID:          cfg.R2AccountID,
-		AccessKeyID:        cfg.R2AccessKeyID,
-		SecretAccessKey:    cfg.R2SecretAccessKey,
-		CertificatesBucket: cfg.R2CertificatesBucket,
-		DocumentsBucket:    cfg.R2DocumentsBucket,
+		AccountID:       cfg.R2AccountID,
+		AccessKeyID:     cfg.R2AccessKeyID,
+		SecretAccessKey: cfg.R2SecretAccessKey,
+		DocumentsBucket: cfg.R2DocumentsBucket,
 	})
 	if err != nil {
 		return fmt.Errorf("init R2 client: %w", err)
 	}
 	log.Info("r2 client ready",
-		"certs_bucket", cfg.R2CertificatesBucket,
 		"docs_bucket", cfg.R2DocumentsBucket,
 	)
 

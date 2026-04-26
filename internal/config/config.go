@@ -27,13 +27,13 @@ type Config struct {
 	AWSSecretName string
 	AWSRegion     string
 
-	// Cloudflare R2 (S3-compatible) credentials and bucket names. Both buckets
-	// are shared with the Node.js backend.
-	R2AccountID          string
-	R2AccessKeyID        string
-	R2SecretAccessKey    string
-	R2CertificatesBucket string
-	R2DocumentsBucket    string
+	// Cloudflare R2 (S3-compatible) credentials and the documents bucket name.
+	// Certificates are owned by perunio-backend (stored in the DB), so this
+	// service only writes generated SUNAT artifacts to the documents bucket.
+	R2AccountID       string
+	R2AccessKeyID     string
+	R2SecretAccessKey string
+	R2DocumentsBucket string
 
 	SunatBetaURL       string
 	SunatProductionURL string
@@ -67,11 +67,10 @@ func Load() (Config, error) {
 		DatabaseURL:         env("DATABASE_URL", ""),
 		AWSSecretName:       env("AWS_SECRET_NAME", ""),
 		AWSRegion:           env("AWS_REGION", ""),
-		R2AccountID:         env("R2_ACCOUNT_ID", ""),
-		R2AccessKeyID:       env("R2_ACCESS_KEY_ID", ""),
-		R2SecretAccessKey:   env("R2_SECRET_ACCESS_KEY", ""),
-		R2CertificatesBucket: env("R2_CERTIFICATES_BUCKET", "perunio-certificates"),
-		R2DocumentsBucket:    env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
+		R2AccountID:       env("R2_ACCOUNT_ID", ""),
+		R2AccessKeyID:     env("R2_ACCESS_KEY_ID", ""),
+		R2SecretAccessKey: env("R2_SECRET_ACCESS_KEY", ""),
+		R2DocumentsBucket: env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
 		SunatBetaURL:          env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
 		SunatProductionURL:    env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
 		SunatConsultURL:       env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),

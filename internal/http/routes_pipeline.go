@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -120,45 +121,36 @@ func (s *server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, compan
 
 	sunatPassword, err := facturadorCrypto.DecryptAES256GCM(*company.EncryptedPassword, s.cfg.EncryptionKey)
 	if err != nil {
-		s.log.Error("decrypt sunat password", "error", err, "companyId", companyID)
+		ivHex := strings.SplitN(*company.EncryptedPassword, ":", 2)[0]
+		s.log.Error("decrypt sunat password", "error", err, "companyId", companyID, "ivHexLen", len(ivHex))
 		writeError(w, http.StatusInternalServerError, "SUNAT_DECRYPT_ERROR",
 			"No se pudo descifrar la contraseña SOL")
 		return nil, false
 	}
 
-	cert, certKey, encCertPassword, err := s.pool.GetActiveCertificateWithSecret(r.Context(), companyID)
+	activeCert, err := s.pool.GetActiveCertificateForSigning(r.Context(), companyID)
 	if err != nil {
 		s.log.Error("get active certificate", "error", err, "companyId", companyID)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		return nil, false
 	}
-	if cert == nil {
+	if activeCert == nil {
 		writeError(w, http.StatusBadRequest, "CERTIFICATE_MISSING",
 			"No hay un certificado activo para esta empresa")
 		return nil, false
 	}
 
-	pfxBytes, err := s.r2.GetCertificate(r.Context(), certKey)
+	parsed, err := s.certCache.GetOrLoad(activeCert.CertID, func() (*signature.ParsedCertificate, error) {
+		privateKeyPEM, decryptErr := facturadorCrypto.DecryptAES256GCM(activeCert.EncryptedPrivateKeyPEM, s.cfg.EncryptionKey)
+		if decryptErr != nil {
+			return nil, fmt.Errorf("decrypt private key: %w", decryptErr)
+		}
+		return signature.ParsePEMKeyAndCert([]byte(privateKeyPEM), []byte(activeCert.CertificatePEM))
+	})
 	if err != nil {
-		s.log.Error("fetch certificate from r2", "error", err, "key", certKey)
-		writeError(w, http.StatusInternalServerError, "CERTIFICATE_FETCH_ERROR",
-			"No se pudo descargar el certificado")
-		return nil, false
-	}
-
-	certPassword, err := facturadorCrypto.DecryptAES256GCM(encCertPassword, s.cfg.EncryptionKey)
-	if err != nil {
-		s.log.Error("decrypt certificate password", "error", err, "companyId", companyID)
-		writeError(w, http.StatusInternalServerError, "CERT_DECRYPT_ERROR",
-			"No se pudo descifrar la contraseña del certificado")
-		return nil, false
-	}
-
-	parsed, err := signature.ParsePFX(pfxBytes, certPassword)
-	if err != nil {
-		s.log.Error("parse pfx", "error", err, "companyId", companyID)
-		writeError(w, http.StatusBadRequest, "CERT_PARSE_ERROR",
-			"No se pudo leer el certificado PFX")
+		s.log.Error("load active certificate", "error", err, "companyId", companyID, "certId", activeCert.CertID)
+		writeError(w, http.StatusInternalServerError, "CERT_LOAD_ERROR",
+			"No se pudo cargar el certificado activo")
 		return nil, false
 	}
 

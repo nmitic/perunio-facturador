@@ -5,22 +5,21 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"math/big"
 	"strings"
 	"testing"
 	"time"
 
 	"maragu.dev/is"
-	"software.sslmate.com/src/go-pkcs12"
 
 	"github.com/perunio/perunio-facturador/internal/model"
 	"github.com/perunio/perunio-facturador/internal/signature"
 	"github.com/perunio/perunio-facturador/internal/xmlbuilder"
 )
 
-func generateTestPFX(t *testing.T) ([]byte, string) {
+func generateTestKeyAndCertPEM(t *testing.T) (privateKeyPEM, certPEM []byte) {
 	t.Helper()
-	password := "test123"
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	is.NotError(t, err)
@@ -40,13 +39,12 @@ func generateTestPFX(t *testing.T) ([]byte, string) {
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	is.NotError(t, err)
 
-	cert, err := x509.ParseCertificate(certDER)
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
 	is.NotError(t, err)
 
-	pfxData, err := pkcs12.Encode(rand.Reader, key, cert, nil, password)
-	is.NotError(t, err)
-
-	return pfxData, password
+	privateKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	return privateKeyPEM, certPEM
 }
 
 func TestSignXML(t *testing.T) {
@@ -83,8 +81,8 @@ func TestSignXML(t *testing.T) {
 		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
 		is.NotError(t, err)
 
-		pfxData, password := generateTestPFX(t)
-		parsed, err := signature.ParsePFX(pfxData, password)
+		keyPEM, certPEM := generateTestKeyAndCertPEM(t)
+		parsed, err := signature.ParsePEMKeyAndCert(keyPEM, certPEM)
 		is.NotError(t, err)
 
 		signed, err := signature.SignXML(xmlBytes, parsed.Certificate, parsed.PrivateKey)
@@ -119,8 +117,8 @@ func TestDigestValue(t *testing.T) {
 		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
 		is.NotError(t, err)
 
-		pfxData, password := generateTestPFX(t)
-		parsed, err := signature.ParsePFX(pfxData, password)
+		keyPEM, certPEM := generateTestKeyAndCertPEM(t)
+		parsed, err := signature.ParsePEMKeyAndCert(keyPEM, certPEM)
 		is.NotError(t, err)
 
 		signed, err := signature.SignXML(xmlBytes, parsed.Certificate, parsed.PrivateKey)
@@ -129,17 +127,5 @@ func TestDigestValue(t *testing.T) {
 		digest, err := signature.DigestValue(signed)
 		is.NotError(t, err)
 		is.True(t, len(digest) > 0, "digest should not be empty")
-	})
-}
-
-func TestCertificateMetadata(t *testing.T) {
-	t.Run("should extract certificate metadata from PFX", func(t *testing.T) {
-		pfxData, password := generateTestPFX(t)
-
-		info, err := signature.CertificateMetadata(pfxData, password)
-		is.NotError(t, err)
-		is.True(t, !info.IsExpired, "test cert should not be expired")
-		is.True(t, info.DaysUntilExp > 300, "should have >300 days until expiry")
-		is.True(t, strings.Contains(info.Subject, "20100113612"), "subject should contain RUC")
 	})
 }

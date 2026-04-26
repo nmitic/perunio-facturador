@@ -18,26 +18,6 @@ type Series struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
-// Certificate represents a row in company_certificates. The encrypted password
-// is intentionally NOT exposed via JSON — only the metadata fields are.
-type Certificate struct {
-	ID                string     `json:"id"`
-	TenantID          string     `json:"tenantId"`
-	CompanyID         string     `json:"companyId"`
-	Label             string     `json:"label"`
-	R2CertificateKey  string     `json:"r2CertificateKey"`
-	SerialNumber      *string    `json:"serialNumber"`
-	Issuer            *string    `json:"issuer"`
-	Subject           *string    `json:"subject"`
-	ValidFrom         *time.Time `json:"validFrom"`
-	ValidTo           *time.Time `json:"validTo"`
-	IsActive          bool       `json:"isActive"`
-	FingerprintSha256 *string    `json:"fingerprintSha256"`
-	FileSizeBytes     *int       `json:"fileSizeBytes"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
-}
-
 // IssuedDocument is a row in issued_documents (without items).
 type IssuedDocument struct {
 	ID       string `json:"id"`

@@ -15,7 +15,13 @@ import (
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/greclient"
 	"github.com/perunio/perunio-facturador/internal/r2"
+	"github.com/perunio/perunio-facturador/internal/signature"
 )
+
+// certCacheTTL is the lifetime of a parsed certificate in the in-process cache.
+// Activation rotates the cert ID, so a stale entry never returns the wrong
+// cert; the TTL only bounds how long an out-of-band DB edit goes unnoticed.
+const certCacheTTL = 10 * time.Minute
 
 // Deps bundles every dependency the HTTP server needs. Constructed in
 // cmd/app/main.go and passed to NewServer.
@@ -37,6 +43,7 @@ type server struct {
 	r2        *r2.Client
 	greClient *greclient.Client
 	authMW    *auth.Middleware
+	certCache *signature.Cache
 }
 
 // NewServer creates a new HTTP handler with routes configured.
@@ -54,7 +61,8 @@ func NewServer(deps Deps) http.Handler {
 			deps.Config.SunatGREProductionURL,
 			deps.Config.SunatTimeoutSeconds,
 		),
-		authMW: auth.NewMiddleware(deps.Secrets.JWTSecret(), deps.Pool),
+		authMW:    auth.NewMiddleware(deps.Secrets.JWTSecret(), deps.Pool),
+		certCache: signature.NewCache(certCacheTTL),
 	}
 
 	s.mux.Use(middleware.RequestID)
@@ -75,12 +83,8 @@ func NewServer(deps Deps) http.Handler {
 
 		r.Get("/usage", s.usageHandler)
 
-		// Certificates.
-		r.Get("/certificates/{companyId}", s.listCertificatesHandler)
-		r.Post("/certificates/{companyId}", s.uploadCertificateHandler)
-		r.Get("/certificates/{companyId}/{certId}", s.getCertificateHandler)
-		r.Put("/certificates/{companyId}/{certId}/activate", s.activateCertificateHandler)
-		r.Delete("/certificates/{companyId}/{certId}", s.deleteCertificateHandler)
+		// Certificate management lives in perunio-backend now. The signing
+		// pipeline reads the active cert from the DB on its own.
 
 		// Series.
 		r.Get("/series/{companyId}", s.listSeriesHandler)

@@ -51,9 +51,14 @@ func DecryptAES256GCM(encrypted string, key []byte) (string, error) {
 		return "", fmt.Errorf("create AES cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
+	// Node.js uses a 16-byte IV; NewGCM defaults to 12, so use the explicit variant.
+	gcm, err := cipher.NewGCMWithNonceSize(block, 16)
 	if err != nil {
 		return "", fmt.Errorf("create GCM: %w", err)
+	}
+
+	if len(iv) != gcm.NonceSize() {
+		return "", fmt.Errorf("IV is %d bytes, GCM expects %d", len(iv), gcm.NonceSize())
 	}
 
 	// GCM expects ciphertext + authTag concatenated
@@ -80,7 +85,7 @@ func EncryptAES256GCM(plaintext string, key []byte) (string, error) {
 		return "", fmt.Errorf("create AES cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := cipher.NewGCMWithNonceSize(block, 16)
 	if err != nil {
 		return "", fmt.Errorf("create GCM: %w", err)
 	}

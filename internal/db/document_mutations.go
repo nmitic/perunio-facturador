@@ -343,26 +343,24 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 	if len(items) == 0 {
 		return nil
 	}
-	rows := make([][]any, 0, len(items))
+	const insertSQL = `
+		INSERT INTO issued_document_items (
+			document_id, line_number, description, quantity, unit_code,
+			unit_price, unit_price_with_tax, tax_exemption_reason_code,
+			igv_amount, isc_amount, discount_amount, line_total, price_type_code
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+
+	batch := &pgx.Batch{}
 	for i, it := range items {
 		line := it.LineNumber
 		if line == 0 {
 			line = i + 1
 		}
-		rows = append(rows, []any{
+		batch.Queue(insertSQL,
 			docID, line, it.Description, it.Quantity, it.UnitCode,
 			it.UnitPrice, it.UnitPriceWithTax, it.TaxExemptionReasonCode,
 			it.IgvAmount, it.IscAmount, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
-		})
+		)
 	}
-	_, err := tx.CopyFrom(ctx,
-		pgx.Identifier{"issued_document_items"},
-		[]string{
-			"document_id", "line_number", "description", "quantity", "unit_code",
-			"unit_price", "unit_price_with_tax", "tax_exemption_reason_code",
-			"igv_amount", "isc_amount", "discount_amount", "line_total", "price_type_code",
-		},
-		pgx.CopyFromRows(rows),
-	)
-	return err
+	return tx.SendBatch(ctx, batch).Close()
 }

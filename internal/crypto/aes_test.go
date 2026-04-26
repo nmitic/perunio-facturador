@@ -18,7 +18,7 @@ func encryptForTest(t *testing.T, plaintext string, key []byte) string {
 	block, err := aes.NewCipher(key)
 	is.NotError(t, err)
 
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := cipher.NewGCMWithNonceSize(block, 16)
 	is.NotError(t, err)
 
 	iv := make([]byte, gcm.NonceSize())
