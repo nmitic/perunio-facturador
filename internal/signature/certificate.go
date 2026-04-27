@@ -12,8 +12,10 @@ import (
 // stores them as PEM in the DB; we parse them on first use and cache the
 // result (see cache.go).
 type ParsedCertificate struct {
-	PrivateKey  *rsa.PrivateKey
-	Certificate *x509.Certificate
+	PrivateKey    *rsa.PrivateKey
+	Certificate   *x509.Certificate
+	PrivateKeyPEM []byte
+	CertPEM       []byte
 }
 
 // ParsePEMKeyAndCert parses a PKCS#8 private key PEM and an X.509 certificate
@@ -43,7 +45,9 @@ func ParsePEMKeyAndCert(privateKeyPEM, certPEM []byte) (*ParsedCertificate, erro
 	}
 
 	return &ParsedCertificate{
-		PrivateKey:  rsaKey,
-		Certificate: cert,
+		PrivateKey:    rsaKey,
+		Certificate:   cert,
+		PrivateKeyPEM: privateKeyPEM,
+		CertPEM:       certPEM,
 	}, nil
 }

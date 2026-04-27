@@ -433,7 +433,7 @@ func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, 
 		XMLNSSAC: NSSAC,
 
 		UBLExtensions: ublExtensions{
-			Extension: []ublExtension{{ExtensionContent: extensionContent{}}},
+			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
 		UBLVersionID:    UBLVersion21,

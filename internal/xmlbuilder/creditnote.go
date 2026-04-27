@@ -46,7 +46,7 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 		XMLNSDS:  NSDS,
 
 		UBLExtensions: ublExtensions{
-			Extension: []ublExtension{{ExtensionContent: extensionContent{}}},
+			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
 		UBLVersionID:    UBLVersion21,

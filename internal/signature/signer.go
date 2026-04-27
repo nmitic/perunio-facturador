@@ -1,84 +1,72 @@
 package signature
 
 import (
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha1"
-	"crypto/x509"
-	"encoding/base64"
+	"bytes"
 	"fmt"
+	"os"
+	"os/exec"
 
 	"github.com/beevik/etree"
 )
 
-const (
-	nsDS              = "http://www.w3.org/2000/09/xmldsig#"
-	algC14N           = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
-	algC14NWithComments = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"
-	algRSASHA1        = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
-	algSHA1           = "http://www.w3.org/2000/09/xmldsig#sha1"
-	algEnvelopedSig   = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
-	signatureID       = "signatureKG"
-)
+// SignXML takes unsigned ISO-8859-1 XML bytes and signs it using xmlsec1.
+// It returns signed XML bytes with ds:Signature filled in.
+func SignXML(xmlBytes, privateKeyPEM, certPEM []byte) ([]byte, error) {
+	dir := shmDir()
 
-// SignXML takes unsigned ISO-8859-1 XML bytes (with empty ext:ExtensionContent)
-// and returns signed XML bytes with the ds:Signature injected.
-func SignXML(xmlBytes []byte, cert *x509.Certificate, key *rsa.PrivateKey) ([]byte, error) {
-	doc := etree.NewDocument()
-	doc.ReadSettings.CharsetReader = nil // accept ISO-8859-1
-	if err := doc.ReadFromBytes(xmlBytes); err != nil {
-		return nil, fmt.Errorf("parse XML for signing: %w", err)
-	}
-
-	// Find ext:ExtensionContent element to inject signature
-	extContent := doc.FindElement("//ext:ExtensionContent")
-	if extContent == nil {
-		return nil, fmt.Errorf("ext:ExtensionContent not found in XML")
-	}
-
-	// Step 1: Compute digest of the document (before adding signature)
-	// We need to serialize the document as-is for the digest
-	canonicalBytes, err := canonicalize(doc)
+	keyFile, err := writeTmp(dir, "key-*.pem", privateKeyPEM)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize for digest: %w", err)
+		return nil, fmt.Errorf("write key tmp: %w", err)
 	}
+	defer os.Remove(keyFile)
 
-	digestHash := sha1.Sum(canonicalBytes)
-	digestValue := base64.StdEncoding.EncodeToString(digestHash[:])
-
-	// Step 2: Build SignedInfo
-	signedInfo := buildSignedInfo(digestValue)
-
-	// Step 3: Canonicalize SignedInfo and sign it
-	siDoc := etree.NewDocument()
-	siDoc.SetRoot(signedInfo.Copy())
-	siBytes, err := canonicalizeElement(siDoc)
+	certFile, err := writeTmp(dir, "cert-*.pem", certPEM)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize SignedInfo: %w", err)
+		return nil, fmt.Errorf("write cert tmp: %w", err)
 	}
+	defer os.Remove(certFile)
 
-	siHash := sha1.Sum(siBytes)
-	sigBytes, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA1, siHash[:])
+	xmlFile, err := writeTmp(dir, "doc-*.xml", xmlBytes)
 	if err != nil {
-		return nil, fmt.Errorf("RSA sign: %w", err)
+		return nil, fmt.Errorf("write xml tmp: %w", err)
 	}
-	signatureValue := base64.StdEncoding.EncodeToString(sigBytes)
+	defer os.Remove(xmlFile)
 
-	// Step 4: Build complete ds:Signature element
-	dsSignature := buildDSSignature(signedInfo, signatureValue, cert)
-
-	// Step 5: Inject into ext:ExtensionContent
-	extContent.AddChild(dsSignature)
-
-	// Step 6: Serialize back
-	doc.Indent(0)
-	result, err := doc.WriteToBytes()
+	var stderr bytes.Buffer
+	cmd := exec.Command("xmlsec1", "sign",
+		"--privkey-pem", keyFile+","+certFile,
+		xmlFile,
+	)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("serialize signed XML: %w", err)
+		return nil, fmt.Errorf("xmlsec1 sign: %w; stderr: %s", err, stderr.String())
 	}
+	return out, nil
+}
 
-	return result, nil
+// shmDir returns /dev/shm when available, otherwise os.TempDir().
+func shmDir() string {
+	if _, err := os.Stat("/dev/shm"); err == nil {
+		return "/dev/shm"
+	}
+	return os.TempDir()
+}
+
+// writeTmp writes data to a temp file with 0600 perms and returns the path.
+func writeTmp(dir, pattern string, data []byte) (string, error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if err := f.Chmod(0600); err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // DigestValue extracts the ds:DigestValue from a signed XML document (for QR code).
@@ -93,61 +81,4 @@ func DigestValue(signedXML []byte) (string, error) {
 		return "", fmt.Errorf("ds:DigestValue not found")
 	}
 	return el.Text(), nil
-}
-
-func buildSignedInfo(digestValue string) *etree.Element {
-	si := etree.NewElement("ds:SignedInfo")
-
-	cm := si.CreateElement("ds:CanonicalizationMethod")
-	cm.CreateAttr("Algorithm", algC14NWithComments)
-
-	sm := si.CreateElement("ds:SignatureMethod")
-	sm.CreateAttr("Algorithm", algRSASHA1)
-
-	ref := si.CreateElement("ds:Reference")
-	ref.CreateAttr("URI", "")
-
-	transforms := ref.CreateElement("ds:Transforms")
-	transform := transforms.CreateElement("ds:Transform")
-	transform.CreateAttr("Algorithm", algEnvelopedSig)
-
-	dm := ref.CreateElement("ds:DigestMethod")
-	dm.CreateAttr("Algorithm", algSHA1)
-
-	dv := ref.CreateElement("ds:DigestValue")
-	dv.SetText(digestValue)
-
-	return si
-}
-
-func buildDSSignature(signedInfo *etree.Element, signatureValue string, cert *x509.Certificate) *etree.Element {
-	sig := etree.NewElement("ds:Signature")
-	sig.CreateAttr("xmlns:ds", nsDS)
-	sig.CreateAttr("Id", signatureID)
-
-	sig.AddChild(signedInfo)
-
-	sv := sig.CreateElement("ds:SignatureValue")
-	sv.SetText(signatureValue)
-
-	ki := sig.CreateElement("ds:KeyInfo")
-	x509Data := ki.CreateElement("ds:X509Data")
-	x509Cert := x509Data.CreateElement("ds:X509Certificate")
-	x509Cert.SetText(base64.StdEncoding.EncodeToString(cert.Raw))
-
-	return sig
-}
-
-func canonicalize(doc *etree.Document) ([]byte, error) {
-	doc.WriteSettings.CanonicalEndTags = true
-	doc.WriteSettings.CanonicalText = true
-	doc.WriteSettings.CanonicalAttrVal = true
-	return doc.WriteToBytes()
-}
-
-func canonicalizeElement(doc *etree.Document) ([]byte, error) {
-	doc.WriteSettings.CanonicalEndTags = true
-	doc.WriteSettings.CanonicalText = true
-	doc.WriteSettings.CanonicalAttrVal = true
-	return doc.WriteToBytes()
 }

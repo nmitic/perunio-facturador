@@ -91,7 +91,7 @@ func BuildSummaryXML(req model.SummaryRequest) ([]byte, error) {
 		XMLNSSAC: NSSAC,
 
 		UBLExtensions: ublExtensions{
-			Extension: []ublExtension{{ExtensionContent: extensionContent{}}},
+			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
 		UBLVersionID:    UBLVersion20,

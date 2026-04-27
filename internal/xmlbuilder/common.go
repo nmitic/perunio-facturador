@@ -2,6 +2,14 @@ package xmlbuilder
 
 import "encoding/xml"
 
+const (
+	nsDS       = "http://www.w3.org/2000/09/xmldsig#"
+	algC14NWC  = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"
+	algRSASHA1 = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+	algSHA1    = "http://www.w3.org/2000/09/xmldsig#sha1"
+	algEnvSig  = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+)
+
 // ublExtensions wraps the signature extension placeholder.
 type ublExtensions struct {
 	XMLName   xml.Name       `xml:"ext:UBLExtensions"`
@@ -12,8 +20,67 @@ type ublExtension struct {
 	ExtensionContent extensionContent `xml:"ext:ExtensionContent"`
 }
 
-// extensionContent is left empty — ds:Signature is injected post-marshal by the signer.
-type extensionContent struct{}
+// extensionContent holds the XMLDSig template that xmlsec1 will fill.
+type extensionContent struct {
+	Signature dsSignatureTemplate `xml:"ds:Signature"`
+}
+
+type dsSignatureTemplate struct {
+	XMLNS_DS       string           `xml:"xmlns:ds,attr"`
+	Id             string           `xml:"Id,attr"`
+	SignedInfo     dsSignedInfo     `xml:"ds:SignedInfo"`
+	SignatureValue string           `xml:"ds:SignatureValue"`
+	KeyInfo        dsKeyInfo        `xml:"ds:KeyInfo"`
+}
+
+type dsSignedInfo struct {
+	CanonicalizationMethod dsAlgorithm `xml:"ds:CanonicalizationMethod"`
+	SignatureMethod        dsAlgorithm `xml:"ds:SignatureMethod"`
+	Reference              dsReference `xml:"ds:Reference"`
+}
+
+type dsAlgorithm struct {
+	Algorithm string `xml:"Algorithm,attr"`
+}
+
+type dsReference struct {
+	URI          string       `xml:"URI,attr"`
+	Transforms   dsTransforms `xml:"ds:Transforms"`
+	DigestMethod dsAlgorithm  `xml:"ds:DigestMethod"`
+	DigestValue  string       `xml:"ds:DigestValue"`
+}
+
+type dsTransforms struct {
+	Transform dsAlgorithm `xml:"ds:Transform"`
+}
+
+type dsKeyInfo struct {
+	X509Data dsX509Data `xml:"ds:X509Data"`
+}
+
+type dsX509Data struct {
+	X509Certificate string `xml:"ds:X509Certificate"`
+}
+
+func newExtensionContent() extensionContent {
+	return extensionContent{
+		Signature: dsSignatureTemplate{
+			XMLNS_DS: nsDS,
+			Id:       "signatureKG",
+			SignedInfo: dsSignedInfo{
+				CanonicalizationMethod: dsAlgorithm{Algorithm: algC14NWC},
+				SignatureMethod:        dsAlgorithm{Algorithm: algRSASHA1},
+				Reference: dsReference{
+					URI: "",
+					Transforms: dsTransforms{
+						Transform: dsAlgorithm{Algorithm: algEnvSig},
+					},
+					DigestMethod: dsAlgorithm{Algorithm: algSHA1},
+				},
+			},
+		},
+	}
+}
 
 // cacSignature is the cac:Signature reference element (metadata, not actual XMLDSig).
 type cacSignature struct {

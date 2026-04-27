@@ -51,7 +51,7 @@ func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
 		XMLNSSAC: NSSAC,
 
 		UBLExtensions: ublExtensions{
-			Extension: []ublExtension{{ExtensionContent: extensionContent{}}},
+			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
 		UBLVersionID:    UBLVersion20,

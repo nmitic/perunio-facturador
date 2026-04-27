@@ -557,7 +557,7 @@ func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.Certificate, deps.parsedCert.PrivateKey)
+	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.PrivateKeyPEM, deps.parsedCert.CertPEM)
 	if err != nil {
 		s.log.Error("sign despatch xml", "error", err, "despatchId", despatchID)
 		writeError(w, http.StatusInternalServerError, "SIGN_ERROR", err.Error())

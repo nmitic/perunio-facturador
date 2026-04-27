@@ -312,7 +312,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.Certificate, deps.parsedCert.PrivateKey)
+	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.PrivateKeyPEM, deps.parsedCert.CertPEM)
 	if err != nil {
 		s.log.Error("sign document xml", "error", err, "docId", docID)
 		writeError(w, http.StatusInternalServerError, "SIGN_ERROR", err.Error())
@@ -522,7 +522,7 @@ func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.Certificate, deps.parsedCert.PrivateKey)
+	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.PrivateKeyPEM, deps.parsedCert.CertPEM)
 	if err != nil {
 		s.log.Error("sign summary xml", "error", err, "summaryId", summaryID)
 		writeError(w, http.StatusInternalServerError, "SIGN_ERROR", err.Error())
@@ -716,7 +716,7 @@ func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.Certificate, deps.parsedCert.PrivateKey)
+	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.PrivateKeyPEM, deps.parsedCert.CertPEM)
 	if err != nil {
 		s.log.Error("sign voided xml", "error", err, "voidId", voidID)
 		writeError(w, http.StatusInternalServerError, "SIGN_ERROR", err.Error())

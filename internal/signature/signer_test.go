@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,9 @@ func generateTestKeyAndCertPEM(t *testing.T) (privateKeyPEM, certPEM []byte) {
 
 func TestSignXML(t *testing.T) {
 	t.Run("should inject ds:Signature into ext:ExtensionContent", func(t *testing.T) {
+		if _, err := exec.LookPath("xmlsec1"); err != nil {
+			t.Skip("xmlsec1 not in PATH")
+		}
 		req := model.IssueRequest{
 			SupplierRUC:       "20100113612",
 			SupplierName:      "TEST COMPANY SAC",
@@ -85,7 +89,7 @@ func TestSignXML(t *testing.T) {
 		parsed, err := signature.ParsePEMKeyAndCert(keyPEM, certPEM)
 		is.NotError(t, err)
 
-		signed, err := signature.SignXML(xmlBytes, parsed.Certificate, parsed.PrivateKey)
+		signed, err := signature.SignXML(xmlBytes, parsed.PrivateKeyPEM, parsed.CertPEM)
 		is.NotError(t, err)
 
 		xml := string(signed)
@@ -101,6 +105,9 @@ func TestSignXML(t *testing.T) {
 
 func TestDigestValue(t *testing.T) {
 	t.Run("should extract ds:DigestValue from signed XML", func(t *testing.T) {
+		if _, err := exec.LookPath("xmlsec1"); err != nil {
+			t.Skip("xmlsec1 not in PATH")
+		}
 		req := model.IssueRequest{
 			SupplierRUC: "20100113612", SupplierName: "TEST", DocType: "01",
 			Series: "F001", Correlative: 1, IssueDate: "2024-01-15",
@@ -121,7 +128,7 @@ func TestDigestValue(t *testing.T) {
 		parsed, err := signature.ParsePEMKeyAndCert(keyPEM, certPEM)
 		is.NotError(t, err)
 
-		signed, err := signature.SignXML(xmlBytes, parsed.Certificate, parsed.PrivateKey)
+		signed, err := signature.SignXML(xmlBytes, parsed.PrivateKeyPEM, parsed.CertPEM)
 		is.NotError(t, err)
 
 		digest, err := signature.DigestValue(signed)
