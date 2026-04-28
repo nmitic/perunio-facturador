@@ -131,6 +131,7 @@ type createDocumentItemBody struct {
 	TaxExemptionReasonCode *string `json:"taxExemptionReasonCode,omitempty"`
 	IgvAmount              string  `json:"igvAmount"`
 	IscAmount              *string `json:"iscAmount,omitempty"`
+	IscTierRange           *string `json:"iscTierRange,omitempty"`
 	DiscountAmount         *string `json:"discountAmount,omitempty"`
 	LineTotal              string  `json:"lineTotal"`
 	PriceTypeCode          *string `json:"priceTypeCode,omitempty"`
@@ -244,6 +245,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 			TaxExemptionReasonCode: it.TaxExemptionReasonCode,
 			IgvAmount:              it.IgvAmount,
 			IscAmount:              it.IscAmount,
+			IscTierRange:           it.IscTierRange,
 			DiscountAmount:         it.DiscountAmount,
 			LineTotal:              it.LineTotal,
 			PriceTypeCode:          it.PriceTypeCode,

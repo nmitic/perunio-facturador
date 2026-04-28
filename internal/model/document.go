@@ -76,6 +76,7 @@ type LineItem struct {
 	TaxExemptionReasonCode string `json:"taxExemptionReasonCode"` // Cat.07
 	IGVAmount              string `json:"igvAmount"`
 	ISCAmount              string `json:"iscAmount"`
+	ISCTierRange           string `json:"iscTierRange"` // Cat.08: 01/02/03
 	DiscountAmount         string `json:"discountAmount"`
 	LineTotal              string `json:"lineTotal"`
 	PriceTypeCode          string `json:"priceTypeCode"` // "01" or "02"

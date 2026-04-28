@@ -61,6 +61,7 @@ type CreateDocumentItemInput struct {
 	TaxExemptionReasonCode *string
 	IgvAmount              string
 	IscAmount              *string
+	IscTierRange           *string // Cat.08: 01=al Valor, 02=Específico, 03=al Valor s/PVP
 	DiscountAmount         *string
 	LineTotal              string
 	PriceTypeCode          *string
@@ -347,8 +348,8 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 		INSERT INTO issued_document_items (
 			document_id, line_number, description, quantity, unit_code,
 			unit_price, unit_price_with_tax, tax_exemption_reason_code,
-			igv_amount, isc_amount, discount_amount, line_total, price_type_code
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 
 	batch := &pgx.Batch{}
 	for i, it := range items {
@@ -359,7 +360,7 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 		batch.Queue(insertSQL,
 			docID, line, it.Description, it.Quantity, it.UnitCode,
 			it.UnitPrice, it.UnitPriceWithTax, it.TaxExemptionReasonCode,
-			it.IgvAmount, it.IscAmount, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
+			it.IgvAmount, it.IscAmount, it.IscTierRange, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
 		)
 	}
 	return tx.SendBatch(ctx, batch).Close()

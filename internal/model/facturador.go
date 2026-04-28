@@ -87,6 +87,7 @@ type IssuedDocumentItem struct {
 	TaxExemptionReasonCode *string   `json:"taxExemptionReasonCode"`
 	IgvAmount              string    `json:"igvAmount"`
 	IscAmount              *string   `json:"iscAmount"`
+	IscTierRange           *string   `json:"iscTierRange"`
 	DiscountAmount         *string   `json:"discountAmount"`
 	LineTotal              string    `json:"lineTotal"`
 	PriceTypeCode          *string   `json:"priceTypeCode"`

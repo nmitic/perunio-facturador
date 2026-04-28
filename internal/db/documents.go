@@ -224,7 +224,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 		rows, err := tx.Query(ctx, `
 			SELECT id, document_id, line_number, description, quantity, unit_code,
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
-			       igv_amount, isc_amount, discount_amount, line_total, price_type_code,
+			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       created_at
 			FROM issued_document_items
 			WHERE document_id = $1
@@ -239,7 +239,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 			var it model.IssuedDocumentItem
 			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
-				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount,
+				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode, &it.CreatedAt); err != nil {
 				return err
 			}

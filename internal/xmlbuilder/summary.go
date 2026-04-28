@@ -138,25 +138,25 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	}
 
 	// Billing payments (tax breakdowns)
-	if item.TotalIGV != "" && item.TotalIGV != "0.00" {
+	if !isZeroAmount(item.TotalIGV) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalIGV, "PEN"),
 			InstructionID: "01", // Gravado
 		})
 	}
-	if item.TotalExonerated != "" && item.TotalExonerated != "0.00" {
+	if !isZeroAmount(item.TotalExonerated) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalExonerated, "PEN"),
 			InstructionID: "02", // Exonerado
 		})
 	}
-	if item.TotalUnaffected != "" && item.TotalUnaffected != "0.00" {
+	if !isZeroAmount(item.TotalUnaffected) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalUnaffected, "PEN"),
 			InstructionID: "03", // Inafecto
 		})
 	}
-	if item.TotalFree != "" && item.TotalFree != "0.00" {
+	if !isZeroAmount(item.TotalFree) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalFree, "PEN"),
 			InstructionID: "05", // Gratuito

@@ -206,6 +206,7 @@ type taxSubtotal struct {
 type taxCategory struct {
 	ID        taxCategoryID `xml:"cbc:ID"`
 	Percent   string        `xml:"cbc:Percent,omitempty"`
+	TierRange string        `xml:"cbc:TierRange,omitempty"` // ISC calculation system (Cat.08)
 	TaxExemptionReasonCode *taxExemptionCode `xml:"cbc:TaxExemptionReasonCode,omitempty"`
 	TaxScheme taxSchemeXML  `xml:"cac:TaxScheme"`
 }
@@ -224,8 +225,9 @@ type taxExemptionCode struct {
 }
 
 type taxSchemeXML struct {
-	ID   taxSchemeID `xml:"cbc:ID"`
-	Name string      `xml:"cbc:Name,omitempty"`
+	ID          taxSchemeID `xml:"cbc:ID"`
+	Name        string      `xml:"cbc:Name,omitempty"`
+	TaxTypeCode string      `xml:"cbc:TaxTypeCode,omitempty"`
 }
 
 type taxSchemeID struct {

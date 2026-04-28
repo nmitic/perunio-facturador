@@ -3,9 +3,19 @@ package xmlbuilder
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 
 	"github.com/perunio/perunio-facturador/internal/model"
 )
+
+// isZeroAmount returns true for any decimal string that represents zero
+// (e.g. "0", "0.0", "0.00") or is empty.
+func isZeroAmount(s string) bool {
+	s = strings.TrimLeft(s, "0")
+	s = strings.TrimPrefix(s, ".")
+	s = strings.TrimRight(s, "0")
+	return s == "" || s == "."
+}
 
 // invoice is the UBL 2.1 Invoice XML root element.
 type invoice struct {
@@ -89,7 +99,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	}
 
 	// IGV subtotal (always present)
-	if req.TotalIGV != "" && req.TotalIGV != "0.00" {
+	if !isZeroAmount(req.TotalIGV) {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount(req.TotalIGV, cur),
@@ -98,7 +108,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	}
 
 	// ISC subtotal (if present)
-	if req.TotalISC != "" && req.TotalISC != "0.00" {
+	if !isZeroAmount(req.TotalISC) {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount(req.TotalISC, cur),
@@ -107,7 +117,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	}
 
 	// Other taxes subtotal (if present)
-	if req.TotalOtherTaxes != "" && req.TotalOtherTaxes != "0.00" {
+	if !isZeroAmount(req.TotalOtherTaxes) {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount(req.TotalOtherTaxes, cur),
@@ -188,11 +198,13 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	}
 
 	// ISC subtotal if present
-	if li.ISCAmount != "" && li.ISCAmount != "0.00" {
+	if !isZeroAmount(li.ISCAmount) {
+		iscCat := newTaxCategory("S", "", model.TaxISC)
+		iscCat.TierRange = li.ISCTierRange
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(li.LineTotal, cur),
 			TaxAmount:     newCurrencyAmount(li.ISCAmount, cur),
-			TaxCategory:   newTaxCategory("S", "", model.TaxISC),
+			TaxCategory:   iscCat,
 		})
 	}
 
@@ -212,7 +224,8 @@ func newTaxCategory(categoryID, percent string, ts model.TaxSchemeType) taxCateg
 				SchemeID:       "UN/ECE 5153",
 				SchemeAgencyID: "6",
 			},
-			Name: ts.Name,
+			Name:        ts.Name,
+			TaxTypeCode: ts.TaxTypeCode,
 		},
 	}
 	if percent != "" {

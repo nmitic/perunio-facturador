@@ -235,6 +235,7 @@ func buildIssueRequestFromDoc(
 			TaxExemptionReasonCode: derefString(it.TaxExemptionReasonCode, "10"),
 			IGVAmount:              it.IgvAmount,
 			ISCAmount:              derefString(it.IscAmount, "0.00"),
+			ISCTierRange:           derefString(it.IscTierRange, ""),
 			DiscountAmount:         derefString(it.DiscountAmount, "0.00"),
 			LineTotal:              it.LineTotal,
 			PriceTypeCode:          derefString(it.PriceTypeCode, "01"),
