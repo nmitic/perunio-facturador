@@ -259,6 +259,7 @@ func validatePaymentTerms(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 3244, Message: "debe consignar al menos una cuota cuando formaPago es 'credito'", Field: "cuotas"})
 		return errs
 	}
+	issueDate, _ := time.Parse("2006-01-02", req.IssueDate)
 	var sum float64
 	for i, c := range req.Cuotas {
 		if c.Numero <= 0 {
@@ -266,8 +267,10 @@ func validatePaymentTerms(req model.IssueRequest) []model.ValidationError {
 		}
 		if !isoDateRegex.MatchString(c.FechaVencimiento) {
 			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: fechaVencimiento debe ser YYYY-MM-DD", i+1), Field: fmt.Sprintf("cuotas[%d].fechaVencimiento", i)})
-		} else if _, err := time.Parse("2006-01-02", c.FechaVencimiento); err != nil {
+		} else if due, err := time.Parse("2006-01-02", c.FechaVencimiento); err != nil {
 			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: fechaVencimiento inválida", i+1), Field: fmt.Sprintf("cuotas[%d].fechaVencimiento", i)})
+		} else if !issueDate.IsZero() && !due.After(issueDate) {
+			errs = append(errs, model.ValidationError{Code: 3267, Message: fmt.Sprintf("cuota %d: fechaVencimiento (%s) debe ser posterior a la fecha de emisión (%s)", i+1, c.FechaVencimiento, req.IssueDate), Field: fmt.Sprintf("cuotas[%d].fechaVencimiento", i)})
 		}
 		amt, err := strconv.ParseFloat(c.Monto, 64)
 		if err != nil || amt <= 0 {

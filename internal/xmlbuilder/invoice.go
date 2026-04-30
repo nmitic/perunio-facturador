@@ -104,7 +104,9 @@ func buildPaymentTerms(req model.IssueRequest) []paymentTerms {
 		return []paymentTerms{{ID: "FormaPago", PaymentMeansID: "Contado"}}
 	}
 	out := make([]paymentTerms, 0, len(req.Cuotas)+1)
-	out = append(out, paymentTerms{ID: "FormaPago", PaymentMeansID: "Credito"})
+	// SUNAT err 3251: leading Credito entry must carry the net pending amount.
+	netPending := newCurrencyAmount(req.TotalAmount, req.CurrencyCode)
+	out = append(out, paymentTerms{ID: "FormaPago", PaymentMeansID: "Credito", Amount: &netPending})
 	for _, c := range req.Cuotas {
 		amt := newCurrencyAmount(c.Monto, req.CurrencyCode)
 		out = append(out, paymentTerms{

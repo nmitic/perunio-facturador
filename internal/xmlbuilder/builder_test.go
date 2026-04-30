@@ -134,6 +134,8 @@ func TestBuildDocumentXML_PaymentTerms(t *testing.T) {
 		is.NotError(t, err)
 		xml := string(xmlBytes)
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>`), "should have Credito entry")
+		// SUNAT err 3251: leading Credito entry must carry net pending amount = TotalAmount.
+		is.True(t, strings.Contains(xml, `<cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">1180.00</cbc:Amount></cac:PaymentTerms>`), "Credito entry should include net pending Amount")
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>`), "should have Cuota001")
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota002</cbc:PaymentMeansID>`), "should have Cuota002")
 		is.True(t, strings.Contains(xml, `<cbc:PaymentDueDate>2024-02-15</cbc:PaymentDueDate>`), "should have due date")
