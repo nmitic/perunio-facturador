@@ -21,6 +21,7 @@ import (
 	"github.com/perunio/perunio-facturador/internal/r2"
 	"github.com/perunio/perunio-facturador/internal/signature"
 	"github.com/perunio/perunio-facturador/internal/soap"
+	"github.com/perunio/perunio-facturador/internal/validation"
 	"github.com/perunio/perunio-facturador/internal/xmlbuilder"
 	"github.com/perunio/perunio-facturador/internal/zipper"
 )
@@ -308,6 +309,17 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	// the same pure functions the old stateless handler used.
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address)
 	issueReq.Environment = env
+
+	// Pre-submission validation — fail fast before calling SUNAT.
+	if vErrs := validation.Validate(issueReq); len(vErrs) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"success":          false,
+			"code":             "VALIDATION_ERROR",
+			"error":            "Documento no pasa validación pre-SUNAT",
+			"validationErrors": vErrs,
+		})
+		return
+	}
 
 	xmlBytes, err := xmlbuilder.BuildDocumentXML(issueReq)
 	if err != nil {
