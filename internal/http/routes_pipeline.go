@@ -202,6 +202,9 @@ func buildIssueRequestFromDoc(
 		TotalDiscount:      derefString(doc.TotalDiscount, "0.00"),
 		TotalAmount:        doc.TotalAmount,
 		TaxInclusiveAmount: derefString(doc.TaxInclusiveAmount, doc.TotalAmount),
+
+		FormaPago: derefString(doc.FormaPago, "contado"),
+		Cuotas:    doc.Cuotas,
 	}
 
 	if doc.Notes != nil && *doc.Notes != "" {

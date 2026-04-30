@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -40,6 +41,9 @@ type CreateDocumentInput struct {
 	TotalAmount        string
 	TaxInclusiveAmount *string
 	Notes              *string
+
+	FormaPago *string
+	Cuotas    []model.CuotaCredito
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -92,6 +96,10 @@ type UpdateDocumentInput struct {
 	TaxInclusiveAmount *string
 	Notes              *string
 
+	FormaPago    *string
+	Cuotas       []model.CuotaCredito
+	CuotasIsSet  bool // true to overwrite (including with nil/empty); false leaves column untouched
+
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
 	ReferenceDocCorrelative *int
@@ -129,7 +137,15 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		}
 
 		// 2. Insert the document.
-		err = tx.QueryRow(ctx, `
+		var cuotasJSON any
+		if in.Cuotas != nil {
+			b, err := json.Marshal(in.Cuotas)
+			if err != nil {
+				return fmt.Errorf("marshal cuotas: %w", err)
+			}
+			cuotasJSON = b
+		}
+		row := tx.QueryRow(ctx, `
 			INSERT INTO issued_documents (
 				tenant_id, company_id, series_id, doc_type, series, correlative, status,
 				issue_date, issue_time, due_date,
@@ -137,6 +153,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				customer_doc_type, customer_doc_number, customer_name, customer_address,
 				subtotal, total_igv, total_isc, total_other_taxes, total_discount, total_amount,
 				tax_inclusive_amount, notes,
+				forma_pago, cuotas,
 				reference_doc_type, reference_doc_series, reference_doc_correlative,
 				credit_debit_reason_code, credit_debit_reason_desc
 			) VALUES (
@@ -146,8 +163,9 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$12, $13, $14, $15,
 				$16, $17, $18, $19, $20, $21,
 				$22, $23,
-				$24, $25, $26,
-				$27, $28
+				$24, $25,
+				$26, $27, $28,
+				$29, $30
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -156,23 +174,11 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.CustomerDocType, in.CustomerDocNumber, in.CustomerName, in.CustomerAddress,
 			in.Subtotal, in.TotalIgv, in.TotalIsc, in.TotalOtherTaxes, in.TotalDiscount, in.TotalAmount,
 			in.TaxInclusiveAmount, in.Notes,
+			in.FormaPago, cuotasJSON,
 			in.ReferenceDocType, in.ReferenceDocSeries, in.ReferenceDocCorrelative,
 			in.CreditDebitReasonCode, in.CreditDebitReasonDesc,
-		).Scan(
-			&doc.ID, &doc.TenantID, &doc.CompanyID, &doc.SeriesID, &doc.DocType, &doc.Series, &doc.Correlative, &doc.Status,
-			&doc.IssueDate, &doc.IssueTime, &doc.DueDate,
-			&doc.CurrencyCode, &doc.OperationType,
-			&doc.CustomerDocType, &doc.CustomerDocNumber, &doc.CustomerName, &doc.CustomerAddress,
-			&doc.Subtotal, &doc.TotalIgv, &doc.TotalIsc, &doc.TotalOtherTaxes, &doc.TotalDiscount, &doc.TotalAmount,
-			&doc.TaxInclusiveAmount, &doc.Notes,
-			&doc.ReferenceDocType, &doc.ReferenceDocSeries, &doc.ReferenceDocCorrelative,
-			&doc.CreditDebitReasonCode, &doc.CreditDebitReasonDesc,
-			&doc.SunatResponseCode, &doc.SunatResponseDescription, &doc.SunatTicket,
-			&doc.R2XmlKey, &doc.R2SignedXmlKey, &doc.R2ZipKey, &doc.R2CdrKey, &doc.R2PdfKey,
-			&doc.QrData,
-			&doc.SentAt, &doc.AcceptedAt, &doc.CreatedAt, &doc.UpdatedAt,
 		)
-		if err != nil {
+		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 				return ErrDuplicate
@@ -321,6 +327,17 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 	}
 	if in.Notes != nil {
 		add("notes", *in.Notes)
+	}
+	if in.FormaPago != nil {
+		add("forma_pago", *in.FormaPago)
+	}
+	if in.CuotasIsSet {
+		if in.Cuotas == nil {
+			add("cuotas", nil)
+		} else {
+			b, _ := json.Marshal(in.Cuotas)
+			add("cuotas", b)
+		}
 	}
 	if in.ReferenceDocType != nil {
 		add("reference_doc_type", *in.ReferenceDocType)

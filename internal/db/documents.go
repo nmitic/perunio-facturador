@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,6 +35,7 @@ const issuedDocumentColumns = `
 	customer_doc_type, customer_doc_number, customer_name, customer_address,
 	subtotal, total_igv, total_isc, total_other_taxes, total_discount, total_amount,
 	tax_inclusive_amount, notes,
+	forma_pago, cuotas,
 	reference_doc_type, reference_doc_series, reference_doc_correlative,
 	credit_debit_reason_code, credit_debit_reason_desc,
 	sunat_response_code, sunat_response_description, sunat_ticket,
@@ -43,20 +45,30 @@ const issuedDocumentColumns = `
 `
 
 func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
-	return row.Scan(
+	var cuotasRaw []byte
+	if err := row.Scan(
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
 		&d.IssueDate, &d.IssueTime, &d.DueDate,
 		&d.CurrencyCode, &d.OperationType,
 		&d.CustomerDocType, &d.CustomerDocNumber, &d.CustomerName, &d.CustomerAddress,
 		&d.Subtotal, &d.TotalIgv, &d.TotalIsc, &d.TotalOtherTaxes, &d.TotalDiscount, &d.TotalAmount,
 		&d.TaxInclusiveAmount, &d.Notes,
+		&d.FormaPago, &cuotasRaw,
 		&d.ReferenceDocType, &d.ReferenceDocSeries, &d.ReferenceDocCorrelative,
 		&d.CreditDebitReasonCode, &d.CreditDebitReasonDesc,
 		&d.SunatResponseCode, &d.SunatResponseDescription, &d.SunatTicket,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
 		&d.QrData,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
-	)
+	); err != nil {
+		return err
+	}
+	if len(cuotasRaw) > 0 {
+		if err := json.Unmarshal(cuotasRaw, &d.Cuotas); err != nil {
+			return fmt.Errorf("unmarshal cuotas: %w", err)
+		}
+	}
+	return nil
 }
 
 // ListIssuedDocuments returns a paginated slice of issued documents for the

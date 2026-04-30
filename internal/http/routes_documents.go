@@ -156,6 +156,8 @@ type createDocumentBody struct {
 	TotalAmount             string                   `json:"totalAmount"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
+	FormaPago               *string                  `json:"formaPago,omitempty"`
+	Cuotas                  []model.CuotaCredito     `json:"cuotas,omitempty"`
 	ReferenceDocType        *string                  `json:"referenceDocType,omitempty"`
 	ReferenceDocSeries      *string                  `json:"referenceDocSeries,omitempty"`
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
@@ -270,6 +272,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,
+		FormaPago:               b.FormaPago,
+		Cuotas:                  b.Cuotas,
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
 		ReferenceDocCorrelative: b.ReferenceDocCorrelative,
@@ -358,6 +362,8 @@ type updateDocumentBody struct {
 	TotalAmount             *string                  `json:"totalAmount,omitempty"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
+	FormaPago               *string                  `json:"formaPago,omitempty"`
+	Cuotas                  *[]model.CuotaCredito    `json:"cuotas,omitempty"`
 	ReferenceDocType        *string                  `json:"referenceDocType,omitempty"`
 	ReferenceDocSeries      *string                  `json:"referenceDocSeries,omitempty"`
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
@@ -385,11 +391,16 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,
+		FormaPago:               b.FormaPago,
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
 		ReferenceDocCorrelative: b.ReferenceDocCorrelative,
 		CreditDebitReasonCode:   b.CreditDebitReasonCode,
 		CreditDebitReasonDesc:   b.CreditDebitReasonDesc,
+	}
+	if b.Cuotas != nil {
+		in.CuotasIsSet = true
+		in.Cuotas = *b.Cuotas
 	}
 	if b.Items != nil {
 		items := make([]db.CreateDocumentItemInput, 0, len(b.Items))

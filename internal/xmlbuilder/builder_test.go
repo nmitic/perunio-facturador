@@ -112,6 +112,35 @@ func TestBuildDocumentXML_Invoice(t *testing.T) {
 	})
 }
 
+func TestBuildDocumentXML_PaymentTerms(t *testing.T) {
+	t.Run("contado emits a single FormaPago/Contado entry", func(t *testing.T) {
+		req := newTestInvoice()
+		req.FormaPago = "contado"
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, strings.Contains(xml, `<cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Contado</cbc:PaymentMeansID></cac:PaymentTerms>`), "should emit single Contado entry")
+		is.True(t, !strings.Contains(xml, `Cuota001`), "should not have any Cuota entries")
+	})
+
+	t.Run("credito emits Credito + one entry per cuota", func(t *testing.T) {
+		req := newTestInvoice()
+		req.FormaPago = "credito"
+		req.Cuotas = []model.CuotaCredito{
+			{Numero: 1, Monto: "590.00", FechaVencimiento: "2024-02-15"},
+			{Numero: 2, Monto: "590.00", FechaVencimiento: "2024-03-15"},
+		}
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>`), "should have Credito entry")
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>`), "should have Cuota001")
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota002</cbc:PaymentMeansID>`), "should have Cuota002")
+		is.True(t, strings.Contains(xml, `<cbc:PaymentDueDate>2024-02-15</cbc:PaymentDueDate>`), "should have due date")
+		is.True(t, strings.Contains(xml, `<cbc:Amount currencyID="PEN">590.00</cbc:Amount>`), "should have cuota amount with currency")
+	})
+}
+
 func TestBuildDocumentXML_CreditNote(t *testing.T) {
 	t.Run("should generate valid UBL 2.1 CreditNote with discrepancy and billing reference", func(t *testing.T) {
 		req := newTestInvoice()

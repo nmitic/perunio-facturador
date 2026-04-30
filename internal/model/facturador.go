@@ -50,6 +50,9 @@ type IssuedDocument struct {
 	TaxInclusiveAmount *string `json:"taxInclusiveAmount"`
 	Notes              *string `json:"notes"`
 
+	FormaPago *string         `json:"formaPago,omitempty"`
+	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
+
 	ReferenceDocType        *string `json:"referenceDocType"`
 	ReferenceDocSeries      *string `json:"referenceDocSeries"`
 	ReferenceDocCorrelative *int    `json:"referenceDocCorrelative"`

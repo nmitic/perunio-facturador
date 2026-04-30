@@ -16,6 +16,7 @@ var (
 	dniRegex       = regexp.MustCompile(`^\d{8}$`)
 	facturaIDRegex = regexp.MustCompile(`^[F][A-Z0-9]{3}-\d{1,8}$`)
 	boletaIDRegex  = regexp.MustCompile(`^[B][A-Z0-9]{3}-\d{1,8}$`)
+	isoDateRegex   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
 
 func validateHeader(req model.IssueRequest) []model.ValidationError {
@@ -229,6 +230,60 @@ func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "reference document is required for NC", Field: "referenceDocSeries"})
 	}
 
+	return errs
+}
+
+// validatePaymentTerms enforces SUNAT rules around forma de pago.
+// SUNAT err 3244 fires when missing entirely; for credit sales the cuotas must
+// add up (within ±1 cent) to the total payable amount.
+func validatePaymentTerms(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+
+	fp := strings.ToLower(strings.TrimSpace(req.FormaPago))
+	if fp == "" {
+		fp = "contado"
+	}
+	if fp != "contado" && fp != "credito" {
+		errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("formaPago inválido: %q (use 'contado' o 'credito')", req.FormaPago), Field: "formaPago"})
+		return errs
+	}
+	if fp == "contado" {
+		if len(req.Cuotas) > 0 {
+			errs = append(errs, model.ValidationError{Code: 3244, Message: "no debe enviar cuotas cuando formaPago es 'contado'", Field: "cuotas"})
+		}
+		return errs
+	}
+
+	// Credito
+	if len(req.Cuotas) == 0 {
+		errs = append(errs, model.ValidationError{Code: 3244, Message: "debe consignar al menos una cuota cuando formaPago es 'credito'", Field: "cuotas"})
+		return errs
+	}
+	var sum float64
+	for i, c := range req.Cuotas {
+		if c.Numero <= 0 {
+			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: numero inválido", i+1), Field: fmt.Sprintf("cuotas[%d].numero", i)})
+		}
+		if !isoDateRegex.MatchString(c.FechaVencimiento) {
+			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: fechaVencimiento debe ser YYYY-MM-DD", i+1), Field: fmt.Sprintf("cuotas[%d].fechaVencimiento", i)})
+		} else if _, err := time.Parse("2006-01-02", c.FechaVencimiento); err != nil {
+			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: fechaVencimiento inválida", i+1), Field: fmt.Sprintf("cuotas[%d].fechaVencimiento", i)})
+		}
+		amt, err := strconv.ParseFloat(c.Monto, 64)
+		if err != nil || amt <= 0 {
+			errs = append(errs, model.ValidationError{Code: 3244, Message: fmt.Sprintf("cuota %d: monto inválido (%q)", i+1, c.Monto), Field: fmt.Sprintf("cuotas[%d].monto", i)})
+			continue
+		}
+		sum += amt
+	}
+	total, err := strconv.ParseFloat(req.TotalAmount, 64)
+	if err == nil && math.Abs(sum-total) > 0.01 {
+		errs = append(errs, model.ValidationError{
+			Code:    3244,
+			Message: fmt.Sprintf("la suma de cuotas (%.2f) no coincide con totalAmount (%.2f)", sum, total),
+			Field:   "cuotas",
+		})
+	}
 	return errs
 }
 

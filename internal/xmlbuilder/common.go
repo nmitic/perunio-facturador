@@ -236,6 +236,16 @@ type taxSchemeID struct {
 	SchemeAgencyID string `xml:"schemeAgencyID,attr,omitempty"`
 }
 
+// paymentTerms represents cac:PaymentTerms (forma de pago, Cat.SUNAT).
+// Required on Factura/Boleta since 2018; SUNAT error 3244 fires when missing.
+type paymentTerms struct {
+	XMLName         xml.Name        `xml:"cac:PaymentTerms"`
+	ID              string          `xml:"cbc:ID"`
+	PaymentMeansID  string          `xml:"cbc:PaymentMeansID"`
+	Amount          *currencyAmount `xml:"cbc:Amount,omitempty"`
+	PaymentDueDate  string          `xml:"cbc:PaymentDueDate,omitempty"`
+}
+
 // legalMonetaryTotal represents the totals block.
 type legalMonetaryTotal struct {
 	XMLName              xml.Name       `xml:"cac:LegalMonetaryTotal"`
@@ -322,6 +332,7 @@ type noteElement struct {
 type invoiceTypeCode struct {
 	XMLName        xml.Name `xml:"cbc:InvoiceTypeCode"`
 	Value          string   `xml:",chardata"`
+	ListID         string   `xml:"listID,attr"`
 	ListAgencyName string   `xml:"listAgencyName,attr"`
 	ListName       string   `xml:"listName,attr"`
 	ListURI        string   `xml:"listURI,attr"`
@@ -436,9 +447,13 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 	}
 }
 
-func newInvoiceTypeCode(code string) invoiceTypeCode {
+func newInvoiceTypeCode(code, operationType string) invoiceTypeCode {
+	if operationType == "" {
+		operationType = "0101"
+	}
 	return invoiceTypeCode{
 		Value:          code,
+		ListID:         operationType,
 		ListAgencyName: "PE:SUNAT",
 		ListName:       "Tipo de Documento",
 		ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",

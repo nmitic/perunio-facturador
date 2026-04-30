@@ -36,6 +36,10 @@ type IssueRequest struct {
 	TotalAmount        string `json:"totalAmount"`
 	TaxInclusiveAmount string `json:"taxInclusiveAmount"`
 
+	// Forma de pago (Cat. SUNAT). Empty defaults to "contado" downstream.
+	FormaPago string         `json:"formaPago"`
+	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
+
 	// Notes
 	Notes []Note `json:"notes"`
 
@@ -57,6 +61,13 @@ type IssueRequest struct {
 	SunatUsername string `json:"sunatUsername"`
 	SunatPassword string `json:"sunatPassword"`
 	Environment   string `json:"environment"` // "beta" or "production"
+}
+
+// CuotaCredito is one installment in a credit-sale invoice.
+type CuotaCredito struct {
+	Numero           int    `json:"numero"`
+	Monto            string `json:"monto"`             // decimal as string
+	FechaVencimiento string `json:"fechaVencimiento"` // YYYY-MM-DD
 }
 
 // Note is a legend/note attached to the document.

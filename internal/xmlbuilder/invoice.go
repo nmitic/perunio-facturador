@@ -37,6 +37,7 @@ type invoice struct {
 	Signature            cacSignature
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
+	PaymentTerms         []paymentTerms
 	TaxTotal             taxTotal
 	LegalMonetaryTotal   legalMonetaryTotal
 	InvoiceLines         []invoiceLine
@@ -62,7 +63,7 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		ID:              docID,
 		IssueDate:       req.IssueDate,
 		IssueTime:       req.IssueTime,
-		InvoiceTypeCode: newInvoiceTypeCode(req.DocType),
+		InvoiceTypeCode: newInvoiceTypeCode(req.DocType, req.OperationType),
 
 		DocumentCurrencyCode: newDocumentCurrencyCode(req.CurrencyCode),
 		Signature:            newCACSignature(req.SupplierRUC, req.SupplierName),
@@ -78,6 +79,9 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		})
 	}
 
+	// Forma de pago (SUNAT err 3244): Contado, or Credito + one entry per cuota.
+	inv.PaymentTerms = buildPaymentTerms(req)
+
 	// Tax totals
 	inv.TaxTotal = buildDocumentTaxTotal(req)
 
@@ -90,6 +94,27 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 	}
 
 	return marshalISO8859(&inv)
+}
+
+// buildPaymentTerms emits one cac:PaymentTerms entry for Contado, or
+// 1 + N entries for Credito (the leading "Credito" entry plus one per cuota).
+// Cuota PaymentMeansIDs are zero-padded 3-digit per SUNAT spec ("Cuota001"...).
+func buildPaymentTerms(req model.IssueRequest) []paymentTerms {
+	if !strings.EqualFold(strings.TrimSpace(req.FormaPago), "credito") {
+		return []paymentTerms{{ID: "FormaPago", PaymentMeansID: "Contado"}}
+	}
+	out := make([]paymentTerms, 0, len(req.Cuotas)+1)
+	out = append(out, paymentTerms{ID: "FormaPago", PaymentMeansID: "Credito"})
+	for _, c := range req.Cuotas {
+		amt := newCurrencyAmount(c.Monto, req.CurrencyCode)
+		out = append(out, paymentTerms{
+			ID:             "FormaPago",
+			PaymentMeansID: fmt.Sprintf("Cuota%03d", c.Numero),
+			Amount:         &amt,
+			PaymentDueDate: c.FechaVencimiento,
+		})
+	}
+	return out
 }
 
 func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {

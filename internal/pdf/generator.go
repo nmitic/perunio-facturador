@@ -98,6 +98,38 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 	pdf.SetFont("Helvetica", "B", 10)
 	totalRow(pdf, totalsX, "TOTAL", req.CurrencyCode, req.TotalAmount)
 
+	// Forma de pago + cuotas
+	pdf.Ln(6)
+	pdf.SetFont("Helvetica", "B", 9)
+	formaPagoLabel := "Contado"
+	if strings.EqualFold(strings.TrimSpace(req.FormaPago), "credito") {
+		formaPagoLabel = "Credito"
+	}
+	pdf.Cell(40, 5, "Forma de pago:")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.Cell(150, 5, formaPagoLabel)
+	pdf.Ln(6)
+	if formaPagoLabel == "Credito" && len(req.Cuotas) > 0 {
+		pdf.SetFont("Helvetica", "B", 8)
+		pdf.SetFillColor(50, 50, 50)
+		pdf.SetTextColor(255, 255, 255)
+		cuotaCols := []float64{20, 40, 50}
+		cuotaHdr := []string{"Cuota", "Vencimiento", "Monto"}
+		for i, h := range cuotaHdr {
+			pdf.CellFormat(cuotaCols[i], 6, h, "1", 0, "C", true, 0, "")
+		}
+		pdf.Ln(-1)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetTextColor(0, 0, 0)
+		pdf.SetFillColor(255, 255, 255)
+		for _, c := range req.Cuotas {
+			pdf.CellFormat(cuotaCols[0], 5, fmt.Sprintf("%03d", c.Numero), "1", 0, "C", false, 0, "")
+			pdf.CellFormat(cuotaCols[1], 5, c.FechaVencimiento, "1", 0, "C", false, 0, "")
+			pdf.CellFormat(cuotaCols[2], 5, fmt.Sprintf("%s %s", req.CurrencyCode, c.Monto), "1", 0, "R", false, 0, "")
+			pdf.Ln(-1)
+		}
+	}
+
 	// Notes
 	if len(req.Notes) > 0 {
 		pdf.Ln(4)

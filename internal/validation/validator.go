@@ -14,6 +14,9 @@ func Validate(req model.IssueRequest) []model.ValidationError {
 	errs = append(errs, validateAmounts(req)...)
 	errs = append(errs, validateLines(req)...)
 
+	if req.DocType == model.DocTypeFactura || req.DocType == model.DocTypeBoleta {
+		errs = append(errs, validatePaymentTerms(req)...)
+	}
 	if req.DocType == model.DocTypeNotaCredito {
 		errs = append(errs, validateCreditNote(req)...)
 	}
