@@ -6,12 +6,15 @@ import (
 	"fmt"
 )
 
-// CreateZIP creates a ZIP archive containing a single XML file.
+// CreateZIP creates a ZIP archive containing the signed XML for SUNAT submission.
+// SUNAT validators (sendBill/sendSummary) reject any extra entries — the older
+// manual reference to a dummy/ folder is obsolete and triggers error 0158
+// ("demasiados comprobantes").
 func CreateZIP(filename string, xmlContent []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	f, err := w.Create(filename + ".xml")
+	f, err := w.CreateHeader(&zip.FileHeader{Name: filename + ".xml", Method: zip.Deflate})
 	if err != nil {
 		return nil, fmt.Errorf("create ZIP entry: %w", err)
 	}

@@ -3,24 +3,26 @@ package xmlbuilder
 import (
 	"encoding/xml"
 	"fmt"
+	"strconv"
 
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
 // debitNote is the UBL 2.1 DebitNote XML root element.
 type debitNote struct {
-	XMLName              xml.Name                `xml:"DebitNote"`
-	XMLNS                string                  `xml:"xmlns,attr"`
-	XMLNSCAC             string                  `xml:"xmlns:cac,attr"`
-	XMLNSCBC             string                  `xml:"xmlns:cbc,attr"`
-	XMLNSEXT             string                  `xml:"xmlns:ext,attr"`
-	XMLNSDS              string                  `xml:"xmlns:ds,attr"`
+	XMLName              xml.Name `xml:"DebitNote"`
+	XMLNS                string   `xml:"xmlns,attr"`
+	XMLNSCAC             string   `xml:"xmlns:cac,attr"`
+	XMLNSCBC             string   `xml:"xmlns:cbc,attr"`
+	XMLNSEXT             string   `xml:"xmlns:ext,attr"`
+	XMLNSDS              string   `xml:"xmlns:ds,attr"`
 	UBLExtensions        ublExtensions
-	UBLVersionID         string                  `xml:"cbc:UBLVersionID"`
-	CustomizationID      string                  `xml:"cbc:CustomizationID"`
-	ID                   string                  `xml:"cbc:ID"`
-	IssueDate            string                  `xml:"cbc:IssueDate"`
-	IssueTime            string                  `xml:"cbc:IssueTime,omitempty"`
+	UBLVersionID         string `xml:"cbc:UBLVersionID"`
+	CustomizationID      string `xml:"cbc:CustomizationID"`
+	ProfileID            profileIDElement
+	ID                   string `xml:"cbc:ID"`
+	IssueDate            string `xml:"cbc:IssueDate"`
+	IssueTime            string `xml:"cbc:IssueTime,omitempty"`
 	Notes                []noteElement
 	DocumentCurrencyCode documentCurrencyCode
 	DiscrepancyResponse  discrepancyResponse
@@ -51,6 +53,7 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 
 		UBLVersionID:    UBLVersion21,
 		CustomizationID: CustomizationID20,
+		ProfileID:       newProfileID(req.OperationType),
 		ID:              docID,
 		IssueDate:       req.IssueDate,
 		IssueTime:       req.IssueTime,
@@ -92,20 +95,32 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 	dn.LegalMonetaryTotal = lmt
 
 	for _, li := range req.Items {
-		dn.DebitNoteLines = append(dn.DebitNoteLines, buildDebitNoteLine(li, req.CurrencyCode))
+		line, err := buildDebitNoteLine(li, req.CurrencyCode)
+		if err != nil {
+			return nil, err
+		}
+		dn.DebitNoteLines = append(dn.DebitNoteLines, line)
 	}
 
 	return marshalISO8859(&dn)
 }
 
-func buildDebitNoteLine(li model.LineItem, cur string) debitNoteLine {
+func buildDebitNoteLine(li model.LineItem, cur string) (debitNoteLine, error) {
+	unitPrice := li.UnitPrice
+	if isGratuitoCode(li.TaxExemptionReasonCode) {
+		unitPrice = "0.00"
+	}
+	pr, err := buildPricingReference(li, cur)
+	if err != nil {
+		return debitNoteLine{}, err
+	}
 	return debitNoteLine{
-		ID:                  fmt.Sprint(li.LineNumber),
+		ID:                  strconv.Itoa(li.LineNumber),
 		DebitedQuantity:     quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
-		PricingReference:    buildPricingReference(li, cur),
+		PricingReference:    pr,
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
-		Price:               price{PriceAmount: newCurrencyAmount(li.UnitPrice, cur)},
-	}
+		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
+	}, nil
 }

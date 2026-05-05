@@ -12,27 +12,27 @@ import (
 
 func newTestInvoice() model.IssueRequest {
 	return model.IssueRequest{
-		SupplierRUC:       "20100113612",
-		SupplierName:      "EMPRESA TEST SAC",
-		SupplierAddress:   "AV. TEST 123",
-		EstablishmentCode: "0000",
-		DocType:           "01",
-		Series:            "F001",
-		Correlative:       1,
-		IssueDate:         "2024-01-15",
-		IssueTime:         "15:20:30",
-		CurrencyCode:      "PEN",
-		OperationType:     "0101",
-		CustomerDocType:   "6",
-		CustomerDocNumber: "20601327318",
-		CustomerName:      "CLIENTE TEST SRL",
-		CustomerAddress:   "AV. CLIENTE 456",
-		Subtotal:          "1000.00",
-		TotalIGV:          "180.00",
-		TotalISC:          "0.00",
-		TotalOtherTaxes:   "0.00",
-		TotalDiscount:     "0.00",
-		TotalAmount:       "1180.00",
+		SupplierRUC:        "20100113612",
+		SupplierName:       "EMPRESA TEST SAC",
+		SupplierAddress:    "AV. TEST 123",
+		EstablishmentCode:  "0000",
+		DocType:            "01",
+		Series:             "F001",
+		Correlative:        1,
+		IssueDate:          "2024-01-15",
+		IssueTime:          "15:20:30",
+		CurrencyCode:       "PEN",
+		OperationType:      "0101",
+		CustomerDocType:    "6",
+		CustomerDocNumber:  "20601327318",
+		CustomerName:       "CLIENTE TEST SRL",
+		CustomerAddress:    "AV. CLIENTE 456",
+		Subtotal:           "1000.00",
+		TotalIGV:           "180.00",
+		TotalISC:           "0.00",
+		TotalOtherTaxes:    "0.00",
+		TotalDiscount:      "0.00",
+		TotalAmount:        "1180.00",
 		TaxInclusiveAmount: "1180.00",
 		Notes: []model.Note{
 			{Code: "1000", Text: "MIL CIENTO OCHENTA CON 00/100 SOLES"},
@@ -65,7 +65,7 @@ func TestBuildDocumentXML_Invoice(t *testing.T) {
 		xml := string(xmlBytes)
 
 		// Verify XML declaration
-		is.True(t, strings.HasPrefix(xml, `<?xml version="1.0" encoding="ISO-8859-1"?>`), "should have ISO-8859-1 declaration")
+		is.True(t, strings.HasPrefix(xml, `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>`), "should have ISO-8859-1 declaration")
 
 		// Verify root element and namespaces
 		is.True(t, strings.Contains(xml, `<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"`), "should have Invoice root")
@@ -93,7 +93,7 @@ func TestBuildDocumentXML_Invoice(t *testing.T) {
 		is.True(t, strings.Contains(xml, `20601327318`), "should have customer RUC")
 
 		// Verify cac:Signature reference
-		is.True(t, strings.Contains(xml, `<cbc:URI>#signatureKG</cbc:URI>`), "should have signature URI reference")
+		is.True(t, strings.Contains(xml, `<cbc:URI>#SignatureSP</cbc:URI>`), "should have signature URI reference")
 
 		// Verify ext:UBLExtensions placeholder
 		is.True(t, strings.Contains(xml, `<ext:UBLExtensions>`), "should have UBLExtensions")
@@ -205,5 +205,165 @@ func TestFilename(t *testing.T) {
 	t.Run("should format filename per SUNAT spec", func(t *testing.T) {
 		name := xmlbuilder.Filename("20100113612", "01", "F001", 1)
 		is.Equal(t, "20100113612-01-F001-00000001", name)
+	})
+}
+
+func TestBuildDocumentXML_IVAP(t *testing.T) {
+	t.Run("IVAP line emits TaxScheme 1016 and 4% percent", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Subtotal = "500.00"
+		req.TotalIGV = "20.00"
+		req.TotalAmount = "520.00"
+		req.TaxInclusiveAmount = "520.00"
+		req.Items = []model.LineItem{
+			{
+				LineNumber:             1,
+				Description:            "ARROZ PILADO 50KG",
+				Quantity:               "10",
+				UnitCode:               "KGM",
+				UnitPrice:              "50.00",
+				UnitPriceWithTax:       "52.00",
+				TaxExemptionReasonCode: "17",
+				IGVAmount:              "20.00",
+				ISCAmount:              "0.00",
+				DiscountAmount:         "0.00",
+				LineTotal:              "500.00",
+				PriceTypeCode:          "01",
+			},
+		}
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// Document-level TaxSubtotal must reference IVAP scheme code 1016 at 4 %.
+		is.True(t, strings.Contains(xml, "1016"), "should emit IVAP tax scheme code 1016")
+		is.True(t, strings.Contains(xml, "<cbc:Percent>4.00</cbc:Percent>"), "should emit 4% percent for IVAP")
+		// Line-level tax category should also carry IVAP scheme.
+		is.True(t, strings.Contains(xml, `<cbc:Name>IVAP</cbc:Name>`), "should label tax scheme as IVAP")
+	})
+}
+
+func TestBuildDocumentXML_ISC(t *testing.T) {
+	t.Run("gravado-onerosa line with ISC: IGV TaxableAmount = LineTotal + ISC", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Subtotal = "100.00"
+		req.TotalISC = "20.00"
+		req.TotalIGV = "21.60"
+		req.TotalAmount = "141.60"
+		req.TaxInclusiveAmount = "141.60"
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "PRODUCTO CON ISC",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "100.00",
+			UnitPriceWithTax:       "141.60",
+			TaxExemptionReasonCode: "10",
+			IGVAmount:              "21.60",
+			ISCAmount:              "20.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "100.00",
+			PriceTypeCode:          "01",
+			ISCTierRange:           "01",
+		}}
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// IGV TaxSubtotal must declare TaxableAmount = 120.00 (= 100 + 20 ISC).
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">120.00</cbc:TaxableAmount>`),
+			"IGV TaxableAmount must include ISC: LineTotal + ISC = 120.00")
+		is.True(t, strings.Contains(xml, `<cbc:TaxAmount currencyID="PEN">21.60</cbc:TaxAmount>`),
+			"IGV TaxAmount must be 21.60")
+		// ISC TaxSubtotal still uses bare valor_venta as its base.
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>`),
+			"ISC TaxableAmount must remain 100.00 (valor_venta only)")
+	})
+}
+
+func TestBuildDocumentXML_Gratuito(t *testing.T) {
+	t.Run("mixed onerosa+gratuito invoice carries leyenda 1002 and gratuita tax scheme", func(t *testing.T) {
+		req := newTestInvoice()
+		// Onerosa line stays as in newTestInvoice (1000 base, 180 IGV, 1180 total).
+		// Add a gratuito line whose referential value is 50 with declared IGV 9
+		// (gravado-gratuito, code 11). It should NOT contribute to PayableAmount.
+		req.Items = append(req.Items, model.LineItem{
+			LineNumber:             2,
+			Description:            "MUESTRA PROMOCIONAL",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "50.00",
+			TaxExemptionReasonCode: "11",
+			IGVAmount:              "9.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		})
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// Leyenda 1002 must be auto-injected.
+		is.True(t, strings.Contains(xml, `languageLocaleID="1002"`), "should inject leyenda 1002")
+		is.True(t, strings.Contains(xml, "TRANSFERENCIA GRATUITA"), "should carry leyenda text")
+
+		// FreeOfChargeIndicator must NOT be emitted — SUNAT keys gratuito
+		// behavior on TaxScheme/ID=9996, not on this indicator (greenter
+		// reference: never emits it). Including it has caused validator drift.
+		is.True(t, !strings.Contains(xml, "FreeOfChargeIndicator"),
+			"should not emit FreeOfChargeIndicator on gratuito line")
+
+		// Document must include a Gratuita TaxSubtotal (tax scheme 9996) at line level.
+		is.True(t, strings.Contains(xml, "9996"), "should emit gratuita tax scheme 9996")
+
+		// SUNAT only allows gratuita taxes at line level — the document-level
+		// cac:TaxTotal must not include a Gratuita TaxScheme/ID=9996 subtotal.
+		// (We assert the regular IGV subtotal is present and rely on the line
+		//  level for the gratuita declaration.)
+		is.True(t, strings.Contains(xml, `<cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">S</cbc:ID>`),
+			"should keep regular IGV subtotal at document level")
+	})
+
+	t.Run("gravado-gratuito line declares IGV at 18% with IGV-exclusive base (rules 3103 + 3111)", func(t *testing.T) {
+		req := newTestInvoice()
+		// Replace items with a single gravado-gratuito line: gross=118, IGV=18,
+		// base must be 100 so that 100 × 18% = 18 satisfies SUNAT rule 3103,
+		// and TaxAmount must be != 0 to satisfy rule 3111.
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "MUESTRA PROMOCIONAL",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "118.00",
+			TaxExemptionReasonCode: "11",
+			IGVAmount:              "18.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		}}
+		req.Subtotal = "0.00"
+		req.TotalIGV = "0.00"
+		req.TotalISC = "0.00"
+		req.TotalAmount = "0.00"
+		req.TaxInclusiveAmount = "0.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// Line-level: TaxableAmount=100.00, TaxAmount=18.00, Percent=18.00.
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>`),
+			"line TaxableAmount must be IGV-exclusive base 100.00")
+		is.True(t, strings.Contains(xml, `<cbc:TaxAmount currencyID="PEN">18.00</cbc:TaxAmount>`),
+			"line TaxAmount must be the would-be IGV 18.00 (rule 3111)")
+		is.True(t, strings.Contains(xml, "<cbc:Percent>18.00</cbc:Percent>"),
+			"gravado-gratuito must declare Percent=18.00 (rule 3103)")
 	})
 }

@@ -99,7 +99,7 @@ func TestSignXML(t *testing.T) {
 		is.True(t, strings.Contains(xml, "ds:SignatureValue"), "should contain ds:SignatureValue")
 		is.True(t, strings.Contains(xml, "ds:X509Certificate"), "should contain ds:X509Certificate")
 		is.True(t, strings.Contains(xml, "ds:DigestValue"), "should contain ds:DigestValue")
-		is.True(t, strings.Contains(xml, `Id="signatureKG"`), "should have signature ID")
+		is.True(t, strings.Contains(xml, `Id="SignatureSP"`), "should have signature ID")
 	})
 }
 

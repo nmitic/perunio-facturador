@@ -61,4 +61,36 @@ func TestParse(t *testing.T) {
 		_, err := cdr.Parse([]byte("not a zip"))
 		is.True(t, err != nil)
 	})
+
+	t.Run("should surface root cbc:Note entries as observations", func(t *testing.T) {
+		cdrXML := []byte(`<?xml version="1.0" encoding="ISO-8859-1"?>
+<ApplicationResponse xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:Note>4001 - Catalogo no es valido</cbc:Note>
+  <cbc:Note>4234 - El dato ingresado no cumple</cbc:Note>
+  <DocumentResponse>
+    <Response>
+      <ResponseCode>0</ResponseCode>
+      <Description>aceptada</Description>
+    </Response>
+  </DocumentResponse>
+</ApplicationResponse>`)
+
+		var buf bytes.Buffer
+		w := zip.NewWriter(&buf)
+		f, err := w.Create("R-20100113612-01-F001-00000001.xml")
+		is.NotError(t, err)
+		_, err = f.Write(cdrXML)
+		is.NotError(t, err)
+		is.NotError(t, w.Close())
+
+		result, err := cdr.Parse(buf.Bytes())
+		is.NotError(t, err)
+		is.True(t, result.Accepted)
+		is.Equal(t, "0", result.ResponseCode)
+		is.Equal(t, 2, len(result.Notes))
+		is.Equal(t, "4001 - Catalogo no es valido", result.Notes[0])
+		is.Equal(t, "4234 - El dato ingresado no cumple", result.Notes[1])
+	})
 }

@@ -1,508 +1,530 @@
 ---
-description: SUNAT Peru electronic invoicing (facturación electrónica) knowledge base for building a Go backend facturador. Covers UBL 2.1 XML structure, validation rules, digital signature, SOAP services, and SUNAT catalogs.
+name: perunio-facturador
+description: Use this skill when building, modifying, or debugging a Peruvian electronic invoicing (SEE — Sistema de Emisión Electrónica) backend in Go. Covers SUNAT UBL 2.1 / UBL 2.0 XML structure for Factura, Boleta, Notas de Crédito y Débito, Resumen Diario (RC), Comunicación de Baja (RA), digital signature (XMLDSig enveloped), file/ZIP naming, SOAP WS-Security envelopes for sendBill / sendSummary / getStatus / getStatusCdr, CDR (ApplicationResponse) parsing, SUNAT catalogs (01, 06, 07, 16, 17, 51), and the validation/contingency rules from RS 097-2012/SUNAT and modificatorias.
 ---
 
 # SUNAT Electronic Invoicing — Go Backend Skill
 
+Authoritative knowledge base for building a Go facturador against SUNAT's SEE
+(Sistema de Emisión Electrónica — Sistemas del Contribuyente). Source of
+truth: `Manual del Programador` (May 2021, v2.1) and the `Guía de Elaboración
+de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
+
+---
+
 ## 1. Document Types & XML Structure
 
-| Code | Name | Root Element | UBL | CustomizationID | Series Pattern | Submit |
-|------|------|-------------|-----|-----------------|----------------|--------|
-| 01 | Factura | `/Invoice` | 2.1 | 2.0 | `F[A-Z0-9]{3}` or `[0-9]{1,4}` | sendBill (sync) |
-| 03 | Boleta | `/Invoice` | 2.1 | 2.0 | `B[A-Z0-9]{3}` or `[0-9]{1,4}` | sendSummary (async) |
-| 07 | Nota de Crédito | `/CreditNote` | 2.1 | 2.0 | `F[C][0-9]{2}` / `B[C][0-9]{2}` | sendBill (sync) |
-| 08 | Nota de Débito | `/DebitNote` | 2.1 | 2.0 | `F[D][0-9]{2}` / `B[D][0-9]{2}` | sendBill (sync) |
-| RC | Resumen Diario | `/SummaryDocuments` | **2.0** | 1.1 | `RC-YYYYMMDD-NNNNN` | sendSummary (async) |
-| RA | Comunicación de Baja | `/VoidedDocuments` | **2.0** | 1.0 | `RA-YYYYMMDD-NNNNN` | sendSummary (async) |
+| Code | Name                    | Root Element        | UBL | CustomizationID | ID Pattern (cbc:ID)     | Submit method  |
+| ---- | ----------------------- | ------------------- | --- | --------------- | ----------------------- | -------------- |
+| 01   | Factura                 | `/Invoice`          | 2.1 | 2.0             | `F[A-Z0-9]{3}-\d{1,8}`  | `sendBill`     |
+| 03   | Boleta de venta         | `/Invoice`          | 2.1 | 2.0             | `B[A-Z0-9]{3}-\d{1,8}`  | `sendSummary` (vía RC) |
+| 07   | Nota de Crédito         | `/CreditNote`       | 2.1 | 2.0             | `[FB][A-Z0-9]{3}-\d{1,8}` | `sendBill`   |
+| 08   | Nota de Débito          | `/DebitNote`        | 2.1 | 2.0             | `[FB][A-Z0-9]{3}-\d{1,8}` | `sendBill`   |
+| RC   | Resumen Diario          | `/SummaryDocuments` | 2.0 | 1.1             | `RC-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
+| RA   | Comunicación de Baja    | `/VoidedDocuments`  | 2.0 | 1.0             | `RA-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
+| RR   | Resumen de Reversión (Ret/Per) | `/VoidedDocuments` | 2.0 | 1.0    | `RR-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
+| 09 / 31 | Guía de Remisión (transportista / remitente) | `/DespatchAdvice` | 2.1 | 2.0 | `T[A-Z0-9]{3}-\d{1,8}` | `sendBill` (endpoint distinto) |
+| 20 / 40 | Retención / Percepción | (Retention/Perception) | 2.0 | — | `R[A-Z0-9]{3} / P[A-Z0-9]{3}` | `sendBill` (endpoint distinto) |
+| LT   | Lote de Facturas/Notas  | n/a (multi-XML zip) | —   | —               | `LT-YYYYMMDD-NNNNN`     | `sendPack` (async, máx 500 docs) |
 
-> **WARNING**: RC and RA use UBL **2.0**, NOT 2.1. This is the #1 cause of silent rejections.
+> **Invariant:** RC, RA, RR, and Retención/Percepción use **UBL 2.0**.
+> Factura/Boleta/Notas/Guía use **UBL 2.1**.
 
-### Namespaces
+---
 
-```xml
-xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-<!-- CreditNote: ...CreditNote-2, DebitNote: ...DebitNote-2 -->
-xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
-xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
-xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-<!-- RC/RA only: -->
-xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1"
+## 2. Endpoints (WSDL)
+
+### Production
+| Service | URL |
+| --- | --- |
+| Factura, Boleta, Notas, RC, RA, Lotes | `https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl` |
+| Retención / Percepción / RR | `https://e-factura.sunat.gob.pe/ol-ti-itemision-otroscpe-gem/billService?wsdl` |
+| Guía de Remisión | `https://e-guiaremision.sunat.gob.pe/ol-ti-itemision-guia-gem/billService?wsdl` |
+| Consulta validez CPE | `https://e-factura.sunat.gob.pe/ol-it-wsconsvalidcpe/billValidService?wsdl` |
+| Consulta CDR / estado | `https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService?wsdl` |
+
+### Homologación
+`https://www.sunat.gob.pe/ol-ti-itcpgem-sqa/billService`
+
+### Beta (testing only — no real cert needed)
+| Service | URL |
+| --- | --- |
+| Factura | `https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService?wsdl` |
+| Guía    | `https://e-beta.sunat.gob.pe/ol-ti-itemision-guia-gem-beta/billService?wsdl` |
+| Retenciones | `https://e-beta.sunat.gob.pe/ol-ti-itemision-otroscpe-gem-beta/billService?wsdl` |
+
+**Beta credentials:** `Username = {RUC}MODDATOS`, `Password = MODDATOS`.
+
+---
+
+## 3. File & ZIP Naming (STRICT)
+
+### Comprobantes (01, 03, 07, 08, 09, 31)
+```
+{RUC11}-{TT}-{SERIE4}-{CORR}.{xml|zip}
+```
+* `RUC11` — 11-digit RUC of the issuer
+* `TT` — document type code (01, 03, 07, 08, 09, 31)
+* `SERIE4` — `F###`, `B###`, `T###` (4 chars total)
+* `CORR` — correlative, 1–8 digits, **no left padding required**
+
+Examples:
+```
+20100066603-01-F001-1.xml
+20100066603-07-F001-00000001.xml
+20100066603-08-F001-1.zip
 ```
 
-### Invoice XML Skeleton (annotated for NC/ND differences)
+### Resumen / Baja / Reversión (RC, RA, RR)
+```
+{RUC11}-{RC|RA|RR}-{YYYYMMDD}-{CORR}.{xml|zip}
+```
+`CORR` is 1–5 digits. Since 2018-01-01, **RC must be sent in blocks of max 500 lines per file**, each block as a different correlative (envíos are complementary, not replacements).
 
+Examples:
+```
+20100066603-RC-20110522-1.xml
+20100066603-RA-20110522-1.zip
+```
+
+### Lotes (LT)
+```
+{RUC11}-LT-{YYYYMMDD}-{CORR}.zip
+```
+ZIP contains up to **500** XML files (mix of 01/07/08), all from the same emisor RUC.
+
+### Contingencia impresa (TXT, not XML)
+```
+{RUC11}-RF-{DDMMYYYY}-{NN}.{txt|zip}
+```
+`NN` = 01..99. Pipe-delimited (`|`) records per row.
+
+---
+
+## 4. ZIP Structure
+
+Each ZIP contains only the signed XML — nothing else:
+
+```
+{RUC}-{TT}-{SERIE}-{CORR}.zip
+└── {RUC}-{TT}-{SERIE}-{CORR}.xml
+```
+
+> **Note:** Older SUNAT manuals reference an empty `dummy/` directory alongside the XML. In practice, current SUNAT validators count `dummy/` as an extra entry and reject the submission with error **0158** (*"El archivo ZIP contiene demasiados comprobantes"*). Submit the XML alone.
+
+Rules:
+* Single-comprobante ZIPs (sendBill, sendSummary): exactly **one XML**, no extra entries.
+* Lote ZIPs (sendPack): up to **500 XMLs**, all matching the issuer RUC and consistent with the LT filename.
+* XML filename (minus extension) must match the ZIP filename (minus extension).
+* Filenames are case-sensitive on the SUNAT side — stick to the convention shown above.
+
+---
+
+## 5. Mandatory XML Header
+
+### Factura / Boleta (UBL 2.1)
 ```xml
-<?xml version="1.0" encoding="ISO-8859-1"?>
-<Invoice xmlns="...Invoice-2" xmlns:cac="..." xmlns:cbc="..." xmlns:ext="...">
-  <!-- NC: <CreditNote>, ND: <DebitNote> -->
+<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+         xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+         xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+
   <ext:UBLExtensions>
-    <ext:UBLExtension><ext:ExtensionContent>
-      <!-- ds:Signature injected here after signing -->
-    </ext:ExtensionContent></ext:UBLExtension>
+    <ext:UBLExtension>
+      <ext:ExtensionContent>
+        <!-- ds:Signature inserted here AFTER everything else is built -->
+      </ext:ExtensionContent>
+    </ext:UBLExtension>
   </ext:UBLExtensions>
+
   <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
   <cbc:CustomizationID>2.0</cbc:CustomizationID>
-  <cbc:ID>F001-00000001</cbc:ID>           <!-- NC: FC01-1, ND: FD01-1 -->
-  <cbc:IssueDate>2024-01-15</cbc:IssueDate>
-  <cbc:IssueTime>15:20:30</cbc:IssueTime>
-  <cbc:InvoiceTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Documento"
-    listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">01</cbc:InvoiceTypeCode>
-  <!-- NC/ND: omit InvoiceTypeCode, no equivalent needed -->
-  <cbc:Note languageLocaleID="1000">MIL SOLES</cbc:Note>  <!-- Monto en letras -->
-  <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency"
-    listAgencyName="United Nations Economic Commission for Europe">PEN</cbc:DocumentCurrencyCode>
-  <!-- NC/ND only: DiscrepancyResponse -->
-  <!-- <cac:DiscrepancyResponse>
-    <cbc:ReferenceID>F001-00000001</cbc:ReferenceID>  affected doc
-    <cbc:ResponseCode>01</cbc:ResponseCode>            Cat.09 for NC, 01|02 for ND
-    <cbc:Description>Anulación de la operación</cbc:Description>
-  </cac:DiscrepancyResponse>
-  <cac:BillingReference><cac:InvoiceDocumentReference>
-    <cbc:ID>F001-00000001</cbc:ID>
-    <cbc:DocumentTypeCode>01</cbc:DocumentTypeCode>
-  </cac:InvoiceDocumentReference></cac:BillingReference> -->
-  <cac:Signature><!-- cac:Signature reference, see Section 3 --></cac:Signature>
-  <cac:AccountingSupplierParty><!-- Supplier RUC, name, address --></cac:AccountingSupplierParty>
-  <cac:AccountingCustomerParty><!-- Customer ID, name --></cac:AccountingCustomerParty>
-  <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="PEN">259.11</cbc:TaxAmount>
-    <cac:TaxSubtotal><!-- One per tax type: IGV, ISC, OTROS --></cac:TaxSubtotal>
-  </cac:TaxTotal>
-  <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="PEN">1439.48</cbc:LineExtensionAmount>
-    <cbc:TaxInclusiveAmount currencyID="PEN">1698.59</cbc:TaxInclusiveAmount>
-    <cbc:AllowanceTotalAmount currencyID="PEN">0.00</cbc:AllowanceTotalAmount>
-    <!-- ND: uses ChargeTotalAmount instead of AllowanceTotalAmount -->
-    <cbc:PayableAmount currencyID="PEN">1698.59</cbc:PayableAmount>
-  </cac:LegalMonetaryTotal>
-  <cac:InvoiceLine>  <!-- NC: CreditNoteLine, ND: DebitNoteLine -->
-    <cbc:ID>1</cbc:ID>
-    <cbc:InvoicedQuantity unitCode="NIU">50</cbc:InvoicedQuantity>
-    <!-- NC: CreditedQuantity, ND: DebitedQuantity -->
-    <cbc:LineExtensionAmount currencyID="PEN">1439.48</cbc:LineExtensionAmount>
-    <cac:PricingReference><cac:AlternativeConditionPrice>
-      <cbc:PriceAmount currencyID="PEN">34.99</cbc:PriceAmount>
-      <cbc:PriceTypeCode listName="Tipo de Precio" listAgencyName="PE:SUNAT"
-        listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
-    </cac:AlternativeConditionPrice></cac:PricingReference>
-    <cac:TaxTotal><!-- Line-level tax, see Section 2 --></cac:TaxTotal>
-    <cac:Item><cbc:Description>PRODUCTO X</cbc:Description></cac:Item>
-    <cac:Price><cbc:PriceAmount currencyID="PEN">28.79</cbc:PriceAmount></cac:Price>
-  </cac:InvoiceLine>
+  <cbc:ProfileID
+      schemeName="SUNAT:Identificador de Tipo de Operación"
+      schemeAgencyName="PE:SUNAT"
+      schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17">0101</cbc:ProfileID>
+  <cbc:ID>F001-1</cbc:ID>
+  <cbc:IssueDate>2026-05-04</cbc:IssueDate>
+  <cbc:IssueTime>10:30:00</cbc:IssueTime>
+  <cbc:InvoiceTypeCode
+      listAgencyName="PE:SUNAT"
+      listName="SUNAT:Identificador de Tipo de Documento"
+      listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">01</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
+
+  <cac:Signature>...</cac:Signature>          <!-- UBL signature reference, MANDATORY -->
+  <cac:AccountingSupplierParty>...</cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty>...</cac:AccountingCustomerParty>
+  <cac:TaxTotal>...</cac:TaxTotal>
+  <cac:LegalMonetaryTotal>...</cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>...</cac:InvoiceLine>
 </Invoice>
 ```
 
-## 2. Validation Rules
+### Nota de Crédito (UBL 2.1, root `/CreditNote`)
+Use `cbc:CreditNoteTypeCode` (catalog 09) instead of `InvoiceTypeCode`. Add `cac:DiscrepancyResponse` (with `cbc:ResponseCode` from catalog 09) and `cac:BillingReference` pointing to the original document.
 
-Error code ranges: `0100-0999` SUNAT exceptions | `1000-1999` format/structure | `2000-3999` rejections | `4000+` observations (warnings, doc still accepted).
+### Nota de Débito (UBL 2.1, root `/DebitNote`)
+Use `cbc:DebitNoteTypeCode` (catalog 10). Same `DiscrepancyResponse` + `BillingReference` pattern.
 
-### Header Fields
+> **Document type code (`01`, `03`, `07`, `08`) lives in different elements depending on root.** Don't conflate with `ProfileID` (which is the operation type, e.g. `0101 = Venta interna`).
 
-| Field | Format | Rule | Error |
-|-------|--------|------|-------|
-| UBLVersionID | `"2.1"` | Must be exactly "2.1" (RC/RA: "2.0") | 2074, 2075 |
-| CustomizationID | `"2.0"` | Must be exactly "2.0" (RC: "1.1", RA: "1.0") | 2072, 2073 |
-| ID (Factura) | `[F][A-Z0-9]{3}-[0-9]{1,8}` | Must match filename serie+correlativo | 1001, 1035, 1036 |
-| ID (Boleta) | `[B][A-Z0-9]{3}-[0-9]{1,8}` | Same regex but starts with B | 1001 |
-| IssueDate | `YYYY-MM-DD` | Max 2 days future (err 2329); late submission deadline (err 2108) | 2108, 2329 |
-| IssueTime | `hh:mm:ss` | No active validation | — |
-| InvoiceTypeCode | Cat.01 | Must match document type in filename | 1003, 1004 |
-| DocumentCurrencyCode | ISO 4217 | Must be consistent across ALL amounts in document | 2071 |
+---
 
-### Supplier (AccountingSupplierParty)
+## 6. SUNAT Catalogs (most-used)
 
-- RUC: 11-digit numeric, `schemeID="6"` (err 1007, 1008)
-- Must match RUC in XML filename (err 1034)
-- Contributor must be active: `ind_estado = "00"` (err 2010)
-- Contributor must be habido: `ind_condicion != "12"` (err 2011)
-- `AddressTypeCode`: 4-digit establishment code, "0000" for main (err 3030)
-- `RegistrationName`: 1-1500 chars, no whitespace chars except space (err 1037)
+| Catalog | Purpose                              | Used in element |
+| ------- | ------------------------------------ | --------------- |
+| 01      | Tipo de documento (CPE)              | `cbc:InvoiceTypeCode`, `cbc:DocumentTypeCode` |
+| 02      | Monedas (ISO 4217)                   | `currencyID` attrs |
+| 05      | Tipos de tributo                     | `cac:TaxScheme/cbc:ID` |
+| 06      | Tipo de documento de identidad       | `schemeID` of `PartyIdentification/cbc:ID` |
+| 07      | Tipos de afectación al IGV           | `cbc:TaxExemptionReasonCode` |
+| 08      | Tipos de sistema de cálculo del ISC  | `cbc:TierRange` |
+| 09      | Tipo de nota de crédito              | `cbc:ResponseCode` (en CreditNote) |
+| 10      | Tipo de nota de débito               | `cbc:ResponseCode` (en DebitNote) |
+| 12      | Tipo de operación (guía)             | — |
+| 16      | Tipo de precio                       | `cbc:PriceTypeCode` (`01` = con IGV, `02` = gratuito) |
+| 17      | Tipo de operación (factura)          | `cbc:ProfileID` (`0101` = Venta interna) |
+| 51      | Tipo de operación (catálogo extendido) | `cbc:ProfileID` (algunos casos) |
+| 52      | Códigos de leyendas                  | `cbc:Note/@languageLocaleID` (`1000`, `2000`, etc.) |
 
-### Customer (AccountingCustomerParty)
+### Catalog 06 — document identity (`schemeID`)
+| Code | Doc type |
+| --- | --- |
+| 0 | Doc. trib. no domiciliado, sin RUC |
+| 1 | DNI |
+| 4 | Carnet de extranjería |
+| 6 | RUC |
+| 7 | Pasaporte |
+| A | Cédula diplomática |
 
-- **Factura**: customer doc type must be `"6"` (RUC) in most cases (err 2800)
-  - Exceptions: exports allow `"-"`, type 0112 allows `"1"` or `"6"`, type 2106 allows `"7"`, `"B"`, `"G"`
-- **Boleta**: allows types `0,1,4,6,7,A,B,C,D,E,G` (Cat.06)
-- If type `"6"` (RUC): must be 11-digit numeric (err 2017), must exist in SUNAT registry (err 1083)
-- If type `"1"` (DNI): must be 8-digit numeric (err 2801)
-- **Boleta >S/700**: customer identity document is required
+### Catalog 07 — IGV affectation (most common)
+| Code | Meaning |
+| --- | --- |
+| 10 | Gravado — Operación onerosa |
+| 20 | Exonerado — Operación onerosa |
+| 30 | Inafecto — Operación onerosa |
+| 11–17 | Gravado — Retiro / bonificación / premios (gratuitas) |
+| 21 | Exonerado — Transferencia gratuita |
+| 31–37 | Inafecto — gratuitos / retiros |
+| 40 | Exportación |
 
-### Amount Formats
+### TaxScheme IDs (catalog 05) — used in `cac:TaxScheme/cbc:ID`
+| Tributo | ID  | UN/ECE 5153 | Name |
+| ------- | --- | ----------- | ---- |
+| IGV     | 1000 | VAT  | IGV |
+| ISC     | 2000 | EXC  | ISC |
+| ICBPER  | 7152 | OTH  | ICBPER (bolsas plásticas) |
+| Otros   | 9999 | OTH  | Otros tributos |
+| Exoneración | 9997 | VAT | EXO |
+| Inafecto    | 9998 | FRE | INA |
+| Exportación | 9995 | FRE | EXP |
+| Gratuito    | 9996 | FRE | GRA |
 
-- Document totals: `n(12,2)` — 12 integer digits, up to 2 decimals (err 3021)
-- Unit prices: `n(12,10)` — 12 integer digits, up to 10 decimals (err 2369)
-- All `@currencyID` attributes must match `DocumentCurrencyCode` (err 2071)
+---
 
-### Line Item Rules
+## 7. Tax Rules
 
-- `cbc:ID`: unique numeric, max 3 digits, > 0 (err 2023, 2752)
-- `InvoicedQuantity`: positive decimal `n(12,10)`, cannot be 0 (err 2024, 2025)
-- Must have exactly one `cac:TaxTotal` per line (err 3195, 3026)
-- Must have at least one IGV-affecting `TaxSubtotal` with `TaxableAmount > 0` (err 3105)
-- `PriceTypeCode`: `"01"` = unit price (onerosa), `"02"` = referential (gratuita) (err 2410)
-- No duplicate `PriceTypeCode` in same line (err 2409)
+* **IGV nominal rate:** 18% (as of 2026-05; verify current rate before deploy).
+* SUNAT validates against **declared values**, not by recomputing — but it cross-checks for internal consistency. Keep your own computation precise.
+* **Tolerance:** ±0.01 (1 céntimo) on totals.
+* **Number formats:**
+  * Monetary totals: `n(12,2)` — up to 12 integer digits + 2 decimals.
+  * Unit values / `cbc:PriceAmount`: `n(12,10)` — up to 10 decimals allowed.
+  * Quantities: `n(23,10)`.
+* **Currency must match across the document** — `DocumentCurrencyCode`, every `@currencyID`, and `LegalMonetaryTotal` must agree.
+* **`cbc:PriceTypeCode` (catalog 16):**
+  * `01` — normal billable price (includes IGV in `PricingReference/AlternativeConditionPrice`).
+  * `02` — free/gratuito (use unit value `0.00` in `cbc:PriceAmount` of `cac:Price`, declare reference value separately).
 
-### Tax Code Combinations per Line (TaxableAmount > 0)
+### Lines — invariants
+* At least one `cac:InvoiceLine` (or `cac:CreditNoteLine` / `cac:DebitNoteLine`).
+* Each line has at least one `cac:TaxTotal` with one or more `cac:TaxSubtotal`.
+* `cbc:InvoicedQuantity` (or equivalent) must be `> 0`.
+* Each line must declare its `cac:TaxCategory/cac:TaxScheme` (IGV scheme + affectation code from catalog 07).
 
-Only these combinations of `TaxScheme/cbc:ID` are valid per line (err 3223):
+---
 
-| Primary | Optional | Meaning |
-|---------|----------|---------|
-| 1000 (IGV) | 2000, 9999 | Gravado (taxed) |
-| 1016 (IVAP) | 9999 | Rice tax |
-| 9995 (Exportación) | 9999 | Export |
-| 9996 (Gratuita) | 2000, 9999 | Free transfer |
-| 9997 (Exonerado) | 2000, 9999 | Exonerated |
-| 9998 (Inafecto) | 2000, 9999 | Unaffected |
+## 8. Customer Identification Rules
 
-### Tax Calculation
+| Document | Customer identity | Notes |
+| -------- | ----------------- | ----- |
+| Factura (01) | RUC required (`schemeID="6"`) | Exception: export operations |
+| Boleta (03) | Any catalog 06 type allowed | DNI typical |
+| Boleta > S/ 700 | Identity **mandatory** | Below this threshold, identity may be omitted (with restrictions) |
+| Notas (07/08) | Same as referenced doc | Plus `cac:BillingReference` to original |
 
-- **IGV = 18%** of (`TaxableAmount` + ISC amount if present)
-- Tolerance: +/- 1 (one cent) on computed vs declared (err 3103)
-- If `TaxExemptionReasonCode` indicates gratuita (11-17, 21, 31-37): IGV TaxAmount depends on type
-  - Codes 11-17 (gravado gratuita): IGV amount must be > 0 (err 3111)
-  - Codes 21, 31-37 (exonerado/inafecto gratuita): IGV amount must be 0 (err 3110)
-  - Code 40 (exportación): IGV amount must be 0 (err 3110)
+---
 
-### Common Attribute Constants (OBSERV 4251-4257 if wrong)
+## 9. Digital Signature (XMLDSig, enveloped)
 
-| Context | Attribute | Value |
-|---------|-----------|-------|
-| Identity | `@schemeName` / `@schemeAgencyName` / `@schemeURI` | `"Documento de Identidad"` / `"PE:SUNAT"` / `"urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06"` |
-| Doc type | `@listAgencyName` / `@listName` / `@listURI` | `"PE:SUNAT"` / `"Tipo de Documento"` / `"urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01"` |
-| Currency | `@listID` / `@listAgencyName` | `"ISO 4217 Alpha"` / `"United Nations Economic Commission for Europe"` |
-| Unit code | `@unitCodeListID` | `"UN/ECE rec 20"` |
+### Cert requirements
+* **X.509 v3**, RSA, **min 2048-bit private key** (manual still cites 1024 from 2012; current SUNAT enforcement is 2048+).
+* RUC must appear in **OU (Organizational Unit)** of the Subject DN.
+* Cert must be **registered with SUNAT** via Menú SOL → "Actualización de certificado digital" before production use.
+* Cert must be valid (not expired, not revoked) at signing time.
 
-## 3. Digital Signature
+### Where the signature goes
+1. Build the entire XML *including* `cac:Signature` (UBL reference block) and an **empty** `<ext:ExtensionContent>` placeholder inside `<ext:UBLExtensions>/<ext:UBLExtension>`.
+2. Compute the enveloped XMLDSig over the **whole document** (root element: `Invoice` / `CreditNote` / `DebitNote` / `SummaryDocuments` / `VoidedDocuments`).
+3. Insert the resulting `<ds:Signature>` inside the empty `<ext:ExtensionContent>`.
+4. **Do not modify the XML after signing** — any whitespace change invalidates the signature.
 
-### Algorithm URIs (exact strings required)
-
-```
-Canonicalization: http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments
-Signature:       http://www.w3.org/2000/09/xmldsig#rsa-sha1
-Digest:          http://www.w3.org/2000/09/xmldsig#sha1
-Transform:       http://www.w3.org/2000/09/xmldsig#enveloped-signature
-```
-
-### Certificate Requirements
-
-- X.509 v3, minimum 1024-bit RSA key
-- RUC must appear in the OU (Organizational Unit) field of the Subject Name
-- Must be registered with SUNAT via Menú SOL before use
-- Beta environment does NOT require a certificate
-
-### Dual Signature Locations
-
-Two XML structures are required — the actual `ds:Signature` AND a `cac:Signature` reference:
-
+### Required transforms / algorithms
 ```xml
-<!-- Location 1: Actual XMLDSig in UBLExtensions -->
-<ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent>
-  <ds:Signature Id="signatureKG">
-    <ds:SignedInfo>
-      <ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"/>
-      <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-      <ds:Reference URI="">
-        <ds:Transforms>
-          <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-        </ds:Transforms>
-        <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
-        <ds:DigestValue>...</ds:DigestValue>
-      </ds:Reference>
-    </ds:SignedInfo>
-    <ds:SignatureValue>...</ds:SignatureValue>
-    <ds:KeyInfo><ds:X509Data>
-      <ds:X509Certificate>...base64 cert...</ds:X509Certificate>
-    </ds:X509Data></ds:KeyInfo>
-  </ds:Signature>
-</ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod        Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>  <!-- minimum -->
+<ds:Reference URI="">
+  <ds:Transforms>
+    <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+  </ds:Transforms>
+  <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+  <ds:DigestValue>...</ds:DigestValue>
+</ds:Reference>
+```
+> SHA-1/RSA-SHA1 are what the manual examples ship. Newer cert authorities sign with SHA-256; SUNAT accepts `rsa-sha256` + `sha256` digests. Stick to whatever your cert chain permits.
 
-<!-- Location 2: cac:Signature reference (after DocumentCurrencyCode, before parties) -->
+### Encoding rule
+The signature must be computed using the **same encoding** as the document (`ISO-8859-1`). Canonicalize, then sign — do **not** re-encode after canonicalization.
+
+### `cac:Signature` block (UBL reference, mandatory regardless)
+```xml
 <cac:Signature>
-  <cbc:ID>IDSignKG</cbc:ID>
+  <cbc:ID>SignSUNAT</cbc:ID>
   <cac:SignatoryParty>
-    <cac:PartyIdentification><cbc:ID>20100113612</cbc:ID></cac:PartyIdentification>
-    <cac:PartyName><cbc:Name><![CDATA[Company Name]]></cbc:Name></cac:PartyName>
+    <cac:PartyIdentification><cbc:ID>{RUC}</cbc:ID></cac:PartyIdentification>
+    <cac:PartyName><cbc:Name>{RAZON_SOCIAL}</cbc:Name></cac:PartyName>
   </cac:SignatoryParty>
   <cac:DigitalSignatureAttachment>
-    <cac:ExternalReference><cbc:URI>#signatureKG</cbc:URI></cac:ExternalReference>
+    <cac:ExternalReference><cbc:URI>#SignSUNAT</cbc:URI></cac:ExternalReference>
   </cac:DigitalSignatureAttachment>
 </cac:Signature>
 ```
+The `ds:Signature/@Id` (in the actual signature placed in `ExtensionContent`) must match this URI fragment (`SignSUNAT`).
 
-### Go Notes
+---
 
-- **Encoding**: Marshal UTF-8 with `encoding/xml`, transcode via `charmap.ISO8859_1.NewEncoder()`, replace declaration to `encoding="ISO-8859-1"`.
-- **Signing**: Use `github.com/beevik/etree` to inject `ds:Signature` into `ext:ExtensionContent` post-marshal. Do NOT modify after signing.
-
-## 4. SOAP Web Service Flow
-
-### Flow
+## 10. SOAP Flow
 
 ```
-Build XML → Sign (XMLDSig) → ZIP (one XML per ZIP) → SOAP call → Parse CDR
+build XML  →  sign  →  zip  →  base64  →  SOAP envelope  →  POST  →  CDR (zip → ApplicationResponse)
 ```
 
-### Endpoints
-
-| Environment | URL |
-|-------------|-----|
-| Beta | `https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService` |
-| Production | `https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService` |
-| Consultation | `https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService` |
+### WS-Security header (UsernameToken)
+```xml
+<soapenv:Header>
+  <wsse:Security>
+    <wsse:UsernameToken>
+      <wsse:Username>{RUC}{USUARIO_SOL}</wsse:Username>   <!-- concatenated, no separator -->
+      <wsse:Password>{CLAVE_SOL}</wsse:Password>
+    </wsse:UsernameToken>
+  </wsse:Security>
+</soapenv:Header>
+```
+Clave SOL must be a **secondary user** with profile `"Envío de documentos electrónicos - Grandes emisores"`. All transport via HTTPS/TLS.
 
 ### Methods
 
-| Method | Use For | Params | Response | Mode |
-|--------|---------|--------|----------|------|
-| `sendBill` | Factura, NC, ND | `fileName`, `contentFile` (base64 ZIP) | `applicationResponse` (base64 ZIP w/ CDR) | Sync |
-| `sendSummary` | RC, RA | `fileName`, `contentFile` (base64 ZIP) | `ticket` (string) | Async |
-| `getStatus` | Check ticket | `ticket` (string) | `statusCode`, `content` | Poll |
-| `getStatusCdr` | Query any CDR | `rucComprobante`, `tipoComprobante`, `serieComprobante`, `numeroComprobante` | `statusCdr` | Sync |
-| `sendPack` | Batch (max 500) | `fileName`, `contentFile` | `ticket` | Async |
+#### `sendBill` — synchronous
+**In:** `fileName` (string), `contentFile` (base64 ZIP).
+**Out:** base64 ZIP containing the CDR (`R-{originalName}.xml` ApplicationResponse).
+**Used for:** Factura, Notas, Retención, Percepción, Guía.
 
-### getStatus Response Codes
+#### `sendSummary` — asynchronous
+**In:** same as sendBill.
+**Out:** `ticket` string (poll later with `getStatus`).
+**Used for:** RC (Resumen Diario de Boletas), RA (Comunicación de Baja), RR.
 
-- `0` = Procesado (done, CDR in `content`)
-- `98` = En proceso (still processing, retry)
-- `99` = Error processing
+#### `sendPack` — asynchronous (lotes)
+**In:** ZIP with up to 500 XMLs.
+**Out:** `ticket` (poll with `getStatus`, returns ZIP with one CDR per document plus a summary report).
 
-### WS-Security SOAP Header
+#### `getStatus` — ticket polling
+**In:** `ticket`.
+**Out:** `StatusResponse { statusCode, content }`:
+| `statusCode` | Meaning |
+| --- | --- |
+| `0`  | Procesado correctamente — `content` = ZIP with CDR |
+| `98` | En proceso — retry later |
+| `99` | Procesado con errores — `content` = ZIP with CDR (rechazado) |
 
+#### `getStatusCdr` — direct CDR query (sync, by document identity)
+**In:** `rucComprobante`, `tipoComprobante` (01/07/08), `serieComprobante`, `numeroComprobante`.
+**Out:** `StatusCdr { statusCode, content, statusMessage }`. `content` is the CDR ZIP.
+> Only Factura / Notas (series starting with `F`) are supported by `getStatusCdr`.
+
+#### `billConsultService` — validity / status query
+| `statusCode` | Meaning |
+| --- | --- |
+| `0001` | Aceptado |
+| `0002` | Rechazado |
+| `0003` | Dado de baja |
+| `0004`–`0012` | Validation / lookup errors (see manual Anexo 2) |
+
+---
+
+## 11. CDR (ApplicationResponse) — parsing
+
+The CDR is a UBL 2.0 `ApplicationResponse`, signed by SUNAT, returned inside a ZIP named `R-{originalName}.zip` containing `R-{originalName}.xml`.
+
+### Key fields
+| XPath | Meaning |
+| --- | --- |
+| `/ApplicationResponse/cbc:ID` | SUNAT reception process ID (15 digits) |
+| `/ApplicationResponse/cbc:UBLVersionID` | Always `2.0` |
+| `/ApplicationResponse/cbc:CustomizationID` | Always `1.0` |
+| `/ApplicationResponse/cbc:ResponseDate`, `cbc:ResponseTime` | When CDR was issued |
+| `/ApplicationResponse/cbc:Note` | **Observaciones** — warnings (`code-description`), accepted-with-warnings only |
+| `/ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:ResponseCode` | `0` = aceptado, otherwise rejected |
+| `/ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:Description` | Human-readable status |
+| `/ApplicationResponse/cac:DocumentResponse/cac:DocumentReference/cbc:ID` | Echo of the processed doc ID |
+
+### Three CDR outcomes
+1. **Aceptado** — `ResponseCode = 0`, no `cbc:Note`. Document is registered.
+2. **Aceptado con observaciones** — `ResponseCode = 0`, with one or more `cbc:Note` (warning codes ≥ 4000). Document is **valid**; observations are advisory.
+3. **Rechazado** — `ResponseCode != 0` (codes 2000–3999). Document is **not** registered.
+
+---
+
+## 12. Error Code Ranges
+
+| Range       | Class | Behavior |
+| ----------- | ----- | -------- |
+| `0100`–`0999` | Excepciones SUNAT | SOAP Fault, no CDR. Server-side problem; retry is reasonable. |
+| `1000`–`1999` | Excepciones contribuyente (formato/estructura) | SOAP Fault. Fix the XML/ZIP and resend. |
+| `2000`–`3999` | Errores → CDR rechazado | CDR returned, document not registered. **For Factura/Notas the correlative is consumed** — must issue a new number. For Retención/Percepción/Guía/RC/RA/RR the whole document is rejected and you may resend with the same name. |
+| `4000`+     | Observaciones | CDR aceptado **con advertencia**. Document is valid. |
+
+### SOAP Fault shape
 ```xml
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-  xmlns:ser="http://service.sunat.gob.pe" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
-  <soapenv:Header>
-    <wsse:Security>
-      <wsse:UsernameToken>
-        <wsse:Username>20100113612MODDATOS</wsse:Username>
-        <wsse:Password>moddatos</wsse:Password>
-      </wsse:UsernameToken>
-    </wsse:Security>
-  </soapenv:Header>
-  <soapenv:Body>
-    <ser:sendBill>
-      <fileName>20100113612-01-F001-00000001.zip</fileName>
-      <contentFile>...base64...</contentFile>
-    </ser:sendBill>
-  </soapenv:Body>
-</soapenv:Envelope>
+<soap-env:Fault>
+  <faultcode>soap-env:Server.{code}</faultcode>   <!-- or Client.{code} -->
+  <faultstring>{description}</faultstring>
+</soap-env:Fault>
+```
+* `Server.*` — SUNAT-side issue.
+* `Client.*` — request malformed (auth, schema, signature, encoding).
+
+---
+
+## 13. Common Gotchas (battle-tested)
+
+1. **Encoding lock-in.** XML declaration must be `ISO-8859-1`. Bytes-on-the-wire must match. UTF-8 with `ñ` or accents → rejected.
+2. **Sign last, change nothing after.** Any whitespace, attribute reorder, or namespace prefix change after signing breaks the digest.
+3. **Series doesn't encode the doc type.** `F001` can be a Factura *or* a Nota de Crédito on a Factura. `cbc:InvoiceTypeCode` / `cbc:CreditNoteTypeCode` is the source of truth — use it to route, not the series prefix.
+4. **`ProfileID` ≠ document type.** ProfileID is the *operation* (catalog 17, e.g. `0101` Venta interna). The doc type code is in `InvoiceTypeCode` (catalog 01).
+5. **`UBLVersionID` mismatch by root.** Invoice/CreditNote/DebitNote/DespatchAdvice = `2.1`; SummaryDocuments/VoidedDocuments = `2.0`. `CustomizationID`: comprobantes = `2.0`, RC = `1.1`, RA/RR = `1.0`.
+6. **Boletas don't go via `sendBill`.** Submit them in batches via Resumen Diario (RC) — unless you're using SEE-SOL portal mode.
+7. **Filename casing.** `.XML`/`.ZIP` uppercase or `.xml`/`.zip` lowercase both work, but the **base name** (RUC-TT-SERIE-CORR) must match between zip and xml exactly.
+8. **Duplicate IDs.** Once a `{RUC, TipoDoc, Serie, Correlativo}` is **accepted**, that number is consumed forever. Rechazos on Factura/Nota also burn the number — generate a new one.
+9. **Tolerance is per-line and per-total.** ±0.01 each. Don't accumulate rounding across many lines without compensating on the totals.
+10. **`cac:Signature` is mandatory in the body** even though the actual XMLDSig lives in `<ext:UBLExtensions>`. They are two different blocks.
+11. **WS-Security `Username` is concatenated.** `{RUC}{usuario_sol}` with **no separator**. The 11-digit RUC is glued directly to the SOL user.
+12. **Resumen Diario blocks ≤ 500 lines** since 2018-01-01. Split larger days into multiple correlatives — they accumulate, they don't replace.
+13. **Lote `sendPack`** ≤ 500 docs per ZIP, all from same RUC. Mix of 01/07/08 OK.
+
+---
+
+## 14. Go Implementation Patterns
+
+### Suggested package layout
+```
+/internal
+  /ubl          — XML structs (Invoice, CreditNote, DebitNote, SummaryDocuments, VoidedDocuments, ApplicationResponse)
+  /catalogs     — typed enums for cat 01, 06, 07, 16, 17, 51, 52, TaxSchemes
+  /sign         — XMLDSig enveloped signer (RSA-SHA1 + RSA-SHA256), c14n
+  /pack         — ISO-8859-1 marshaling, ZIP packaging (signed XML only)
+  /soap         — WS-Security UsernameToken, sendBill/sendSummary/getStatus/getStatusCdr clients
+  /cdr          — ApplicationResponse parser, error classification
+  /validate     — pre-send schema + business-rule checks
 ```
 
-### Beta Environment
-
-- Username: `{RUC}MODDATOS` (e.g., `20100113612MODDATOS`)
-- Password: `moddatos`
-- No digital certificate needed
-
-### CDR (Constancia de Recepción)
-
-- `ApplicationResponse` UBL 2.0 inside ZIP, named `R-{original-filename}.xml`
-- Key field: `cac:DocumentResponse/cac:Response/cbc:ResponseCode` — `0` = accepted
-- Error details in `cbc:Description`, same code ranges as validation errors
-
-## 5. File Nomenclature
-
-| Type | XML Filename | ZIP Filename | CDR Filename |
-|------|-------------|-------------|-------------|
-| Factura/NC/ND | `{RUC}-{TT}-{SERIE}-{CORR}.xml` | `.zip` | `R-{RUC}-{TT}-{SERIE}-{CORR}.xml` |
-| Resumen Diario | `{RUC}-RC-{YYYYMMDD}-{NNNNN}.xml` | `.zip` | `R-{RUC}-RC-{YYYYMMDD}-{NNNNN}.xml` |
-| Com. de Baja | `{RUC}-RA-{YYYYMMDD}-{NNNNN}.xml` | `.zip` | `R-{RUC}-RA-{YYYYMMDD}-{NNNNN}.xml` |
-
-Example: `20100113612-01-F001-00000001.xml` → zipped → CDR: `R-20100113612-01-F001-00000001.xml`
-
-ZIP contains exactly **one** XML for `sendBill`. Correlativo: up to 8 digits (RC/RA: 5), starts at 1.
-
-## 6. Business Rules & Gotchas
-
-1. **TRAP: Resumen Diario uses UBL 2.0**, not 2.1. `UBLVersionID="2.0"`, `CustomizationID="1.1"`. Uses `sac:` namespace for SUNAT-specific elements.
-2. **TRAP: Comunicación de Baja uses UBL 2.0**. `CustomizationID="1.0"`. Root is `VoidedDocuments`.
-3. **NC on boletas cannot use motivos 04, 05, 08** (Descuento global, Descuento por item, Bonificación).
-4. **ND only has 2 motivos**: `01` = Intereses por mora, `02` = Aumento en el valor. No others.
-5. **Boleta customer identity required when total > S/700.00**.
-6. **NC tipo 10 ("Otros conceptos") and ND tipo 03 ("Penalidad/Otros") are NOT included** in Resumen Diario.
-7. **Resumen Diario deadline**: must be sent within 7 calendar days of document emission date.
-8. **Resumen ConditionCode**: `1` = Adicionar (add new), `2` = Modificar (update), `3` = Anular (void).
-9. **Resumen is complementary**: new submissions don't replace previous ones. Each adds/modifies/voids specific documents.
-10. **Max 500 lines per Resumen** block. Split into multiple if needed.
-11. **All Resumen amounts must be in PEN** (Soles), even if original boleta was in USD.
-12. **Resumen ReferenceDate**: all documents in one Resumen must share the same emission date.
-13. **Series prefixes**: `F___` = Factura, `B___` = Boleta, `FC__`/`BC__` = NC, `FD__`/`BD__` = ND.
-14. **CreditNote uses `CreditNoteLine`/`CreditedQuantity`**, not InvoiceLine/InvoicedQuantity.
-15. **DebitNote uses `DebitNoteLine`/`DebitedQuantity`**.
-16. **NC DiscrepancyResponse**: `ResponseCode` from Catálogo 09 (01-09). `ReferenceID` = affected document number.
-17. **ND DiscrepancyResponse**: `ResponseCode` only `01` or `02`.
-18. **Comunicación de Baja**: only doc types `01, 07, 08, 30, 34, 42` can be voided. 7-day limit from emission.
-19. **Encoding MUST be ISO-8859-1** — not UTF-8. The XML declaration and actual encoding must match.
-20. **IssueDate**: cannot be more than 2 days in the future from submission date.
-21. **InvoiceTypeCode must match the filename** type code (err 1003). Common copy-paste bug.
-22. **Duplicate document check**: SUNAT tracks all sent document IDs. Resending a previously accepted factura with different data = error 1033.
-
-## 7. Go Architecture Patterns
-
-### Recommended Package Structure
-
-```
-internal/
-  document/    # Invoice, CreditNote, DebitNote, SummaryDocuments, VoidedDocuments builders
-  xml/         # XML marshaling, ISO-8859-1 encoding, namespace constants
-  signature/   # XMLDSig signing: Sign(xmlBytes, cert, key) -> signedXML
-  soap/        # SOAP client + WS-Security UsernameToken
-  catalog/     # SUNAT catalog constants (Cat01, Cat05, Cat06, Cat07, etc.)
-  validation/  # Pre-submission validation: Validate(doc) -> []ValidationError
-  zip/         # ZIP packaging and CDR extraction
-```
-
-### Key Interfaces
-
+### Encoding pipeline
 ```go
-// DocumentBuilder builds a signed XML document ready for submission
-type DocumentBuilder interface {
-    Build() ([]byte, error)  // Returns signed ISO-8859-1 XML bytes
-}
+// 1. Marshal to UTF-8
+buf, _ := xml.MarshalIndent(invoice, "", "")
 
-// Signer signs an XML document with XMLDSig
-type Signer interface {
-    Sign(doc []byte, cert *x509.Certificate, key *rsa.PrivateKey) ([]byte, error)
-}
+// 2. Convert to ISO-8859-1 (use golang.org/x/text/encoding/charmap)
+encoded, err := charmap.ISO8859_1.NewEncoder().Bytes(buf)
 
-// SUNATClient communicates with SUNAT SOAP services
-type SUNATClient interface {
-    SendBill(filename string, zipContent []byte) (*CDR, error)
-    SendSummary(filename string, zipContent []byte) (ticket string, err error)
-    GetStatus(ticket string) (*CDR, error)
-    GetStatusCdr(ruc, tipo, serie string, numero int) (*CDR, error)
-}
+// 3. Replace XML declaration
+encoded = bytes.Replace(encoded,
+    []byte(`<?xml version="1.0" encoding="UTF-8"?>`),
+    []byte(`<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>`),
+    1)
 
-// CDR represents a parsed Constancia de Recepción
-type CDR struct {
-    ResponseCode int      // 0 = accepted
-    Description  string   // Success/error message
-    Notes        []string // Additional observations (4000+ codes)
-    Accepted     bool
-}
+// 4. Sign (enveloped XMLDSig over the full document)
+signed, err := signer.Sign(encoded, certKey, certX509)
 
-// ValidationError carries a SUNAT error code for programmatic handling
-type ValidationError struct {
-    Code    int    // SUNAT error code (e.g., 2074)
-    Message string
-    Field   string // XPath of the offending field
-}
+// 5. Zip the signed XML alone (no dummy/ folder — triggers SUNAT error 0158)
+zipBytes, err := pack.Build(filename, signed)
+
+// 6. Base64-wrap into SOAP and POST
 ```
 
-### ISO-8859-1 Encoding Strategy
+### XMLDSig — practical advice
+* **Use `github.com/beevik/etree`** for tree manipulation when injecting `<ds:Signature>` into the placeholder.
+* **Don't roll your own canonicalization.** Use `github.com/russellhaering/goxmldsig` or wrap a tested C14N implementation. Exclusive C14N (`xml-exc-c14n`) is what most CAs deliver, but **SUNAT examples use inclusive C14N (`xml-c14n-20010315`)** — match what your cert/library expects and what the SUNAT validator accepts (inclusive is safer).
+* **Sign over the whole document**, `URI=""`, with one `enveloped-signature` transform.
 
-Marshal to UTF-8 via `encoding/xml`, then transcode with `charmap.ISO8859_1.NewEncoder().Bytes(utf8XML)`. Replace `encoding="UTF-8"` with `encoding="ISO-8859-1"` in the XML declaration.
+### Validate before sending
+Run XSD validation locally (libxml2 via cgo or a Go XSD validator) plus business-rule checks (RUC checksum, totals tolerance, catalog code membership) before the ZIP/sign step. Rechazos burn correlatives — fail fast in the app layer.
 
-### Signature Injection Pattern
+### Idempotency
+Track `(ruc, tipo_doc, serie, correlativo)` → CDR locally. On retry after a network failure, hit `getStatusCdr` (sync, no ticket needed) before resubmitting — SUNAT's response is authoritative and prevents double-burning a correlative.
 
-1. Marshal structs to UTF-8 XML (leave `ext:ExtensionContent` empty)
-2. Parse with `github.com/beevik/etree`, find `ext:ExtensionContent`
-3. Compute digest, build `ds:Signature`, insert into `ext:ExtensionContent`
-4. Serialize, transcode to ISO-8859-1. **Never modify after signing.**
+### Async polling (sendSummary, sendPack)
+Backoff: start 5s, double up to ~60s, cap total wait at ~10 min. `statusCode=98` is the only "keep polling" signal; `0` and `99` both have `content` and end the loop.
 
-### Testing
+---
 
-- Use beta environment for integration tests, keep sample XMLs in `testdata/`
-- Validate XML against XSD schemas in `resources/XSD Schemas 2.1/`
+## 15. Contingencia (printed-doc fallback)
 
-## 8. Catalog Reference
+When the issuer cannot emit electronically (force majeure, system down), they may issue printed comprobantes from a SUNAT-authorized print shop and later report them via SEE-SOL portal:
 
-### Cat.01 — Document Types
+1. Build a **TXT file** (pipe-delimited, one record per line) per Anexo 11 of the manual.
+2. Filename: `{RUC}-RF-{DDMMYYYY}-{NN}.txt`, then ZIP it (same base name).
+3. Upload via SUNAT Operaciones en Línea (manual web flow, not WS).
+4. SUNAT returns a **ticket** + later an error file if any rows fail.
 
-| Code | Name |
-|------|------|
-| 01 | Factura |
-| 03 | Boleta de Venta |
-| 07 | Nota de Crédito |
-| 08 | Nota de Débito |
-| 09 | Guía de Remisión Remitente |
-| 20 | Comprobante de Retención |
-| 31 | Guía de Remisión Transportista |
-| 40 | Comprobante de Percepción |
+> The **last** RF file submitted for a date **completely replaces** all previous submissions for that date — design your local state accordingly.
 
-### Cat.05 — Tax Schemes
+For Retención/Percepción contingencia: same flow, types `40` / `41` / `20`, filename pattern `{RUC}-{TT}-{YYYYMMDD}-{NN}.txt`.
 
-| Code | Name | UN/ECE ID | TaxTypeCode | TaxCategory ID |
-|------|------|-----------|-------------|----------------|
-| 1000 | IGV | 1000 | VAT | S |
-| 1016 | IVAP | 1016 | VAT | S |
-| 2000 | ISC | 2000 | EXC | S |
-| 7152 | ICBPER | 7152 | OTH | S |
-| 9995 | Exportación | 9995 | FRE | G |
-| 9996 | Gratuita | 9996 | FRE | E |
-| 9997 | Exonerado | 9997 | VAT | E |
-| 9998 | Inafecto | 9998 | FRE | O |
-| 9999 | Otros tributos | 9999 | OTH | S |
+---
 
-TaxScheme attributes: `schemeID="UN/ECE 5305"`, `schemeAgencyID="6"`.
+## 16. Quick Reference — XML elements by frequency
 
-### Cat.06 — Identity Document Types
+| Element | Where | Notes |
+| ------- | ----- | ----- |
+| `cbc:UBLVersionID`, `cbc:CustomizationID`, `cbc:ProfileID` | header | see §1, §6 |
+| `cbc:ID` | header | series-correlativo or RC/RA filename |
+| `cbc:IssueDate`, `cbc:IssueTime` | header | `YYYY-MM-DD`, `HH:MM:SS` |
+| `cbc:InvoiceTypeCode` / `CreditNoteTypeCode` / `DebitNoteTypeCode` | header | catalog 01 / 09 / 10 |
+| `cbc:DocumentCurrencyCode` | header | ISO 4217 |
+| `cac:AccountingSupplierParty` | header | emisor: RUC (cat 06 = `6`), razón social, dirección |
+| `cac:AccountingCustomerParty` | header | cliente: doc id (cat 06), nombre |
+| `cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme` | totals + lines | tax scheme ID (cat 05), affectation (cat 07) |
+| `cac:LegalMonetaryTotal` | totals | `LineExtensionAmount`, `TaxInclusiveAmount`, `PayableAmount`, etc. |
+| `cac:InvoiceLine` (or `CreditNoteLine`/`DebitNoteLine`) | per line | qty, price, taxes |
+| `cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode` | per line | catalog 16 (`01`/`02`) |
+| `cac:BillingReference` | nota only | reference to original Invoice/Boleta |
+| `cac:DiscrepancyResponse` | nota only | reason code (cat 09 / 10) |
 
-| Code | Name |
-|------|------|
-| 0 | Doc. Trib. No Dom. Sin RUC |
-| 1 | DNI |
-| 4 | Carnet de Extranjería |
-| 6 | RUC |
-| 7 | Pasaporte |
-| A | Ced. Diplomática de Identidad |
-| B | Doc. Ident. País Residencia (No Dom.) |
-| C | Tax Identification Number (TIN) |
-| D | Identification Number (IN) |
-| E | NITE |
+---
 
-### Cat.07 — IGV Affectation Types
+## 17. Verification checklist before going live
 
-| Code | Name | Tax Code | IGV |
-|------|------|----------|-----|
-| 10 | Gravado - Onerosa | 1000 | 18% |
-| 11-16 | Gravado - Gratuita (retiro, donación, bonificación, etc.) | 9996 | Calc |
-| 17 | Gravado - IVAP | 1016 | IVAP |
-| 20 | Exonerado - Onerosa | 9997 | 0 |
-| 21 | Exonerado - Gratuita | 9996 | 0 |
-| 30 | Inafecto - Onerosa | 9998 | 0 |
-| 31-37 | Inafecto - Gratuita (retiro, bonificación, muestras, etc.) | 9996 | 0 |
-| 40 | Exportación | 9995 | 0 |
-
-### Cat.09 — Nota de Crédito Types
-
-| Code | Name | Allowed on Boleta? |
-|------|------|--------------------|
-| 01 | Anulación de la operación | Yes |
-| 02 | Anulación por error en el RUC | Yes |
-| 03 | Corrección por error en la descripción | Yes |
-| 04 | Descuento global | **No** |
-| 05 | Descuento por ítem | **No** |
-| 06 | Devolución total | Yes |
-| 07 | Devolución por ítem | Yes |
-| 08 | Bonificación | **No** |
-| 09 | Disminución en el valor | Yes |
-
-### Cat.16 — Price Type
-
-| Code | Name |
-|------|------|
-| 01 | Precio unitario (incluye IGV) |
-| 02 | Valor referencial unitario en operaciones no onerosas (gratuitas) |
-
-### Cat.51 — Operation Types (most common)
-
-| Code | Name |
-|------|------|
-| 0101 | Venta interna |
-| 0102 | Exportación de bienes |
-| 0103 | No domiciliados |
-| 0104 | Venta interna - Anticipos |
-| 0200 | Exportación de bienes |
-| 0201 | Exportación de servicios |
-
-### Cat.52 — Legends
-
-| Code | Name |
-|------|------|
-| 1000 | Monto en letras (optional) |
-| 1002 | Transferencia gratuita (when all lines are gratuitas) |
-| 2000 | Comprobante de percepción |
-| 3000 | Código interno del software de facturación |
+- [ ] Cert registered with SUNAT (Menú SOL).
+- [ ] Beta endpoint exercised end-to-end (send → CDR aceptado).
+- [ ] Homologación endpoint passed (SUNAT certifies the issuer).
+- [ ] All XSD validations pass locally.
+- [ ] ISO-8859-1 round-trip tested with `ñ` and accents.
+- [ ] Signature verifies under both the `xmlsec1` CLI and SUNAT's beta receiver.
+- [ ] CDR parser handles aceptado / aceptado-con-observaciones / rechazado / SOAP fault.
+- [ ] Idempotent retry via `getStatusCdr` implemented.
+- [ ] RC ≤ 500 lines per file enforced; LT ≤ 500 docs per ZIP enforced.
+- [ ] Correlative state persisted with row-level locking — no double issuance.

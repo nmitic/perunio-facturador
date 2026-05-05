@@ -15,13 +15,13 @@ const NSDespatchAdvice = "urn:oasis:names:specification:ubl:schema:xsd:DespatchA
 // Invoice there is no TaxTotal, LegalMonetaryTotal, PricingReference
 // or Price — GRE carries goods metadata only.
 type despatchAdvice struct {
-	XMLName         xml.Name `xml:"DespatchAdvice"`
-	XMLNS           string   `xml:"xmlns,attr"`
-	XMLNSCAC        string   `xml:"xmlns:cac,attr"`
-	XMLNSCBC        string   `xml:"xmlns:cbc,attr"`
-	XMLNSEXT        string   `xml:"xmlns:ext,attr"`
-	XMLNSDS         string   `xml:"xmlns:ds,attr"`
-	XMLNSSAC        string   `xml:"xmlns:sac,attr"`
+	XMLName  xml.Name `xml:"DespatchAdvice"`
+	XMLNS    string   `xml:"xmlns,attr"`
+	XMLNSCAC string   `xml:"xmlns:cac,attr"`
+	XMLNSCBC string   `xml:"xmlns:cbc,attr"`
+	XMLNSEXT string   `xml:"xmlns:ext,attr"`
+	XMLNSDS  string   `xml:"xmlns:ds,attr"`
+	XMLNSSAC string   `xml:"xmlns:sac,attr"`
 
 	UBLExtensions   ublExtensions
 	UBLVersionID    string `xml:"cbc:UBLVersionID"`
@@ -34,7 +34,7 @@ type despatchAdvice struct {
 
 	Notes []noteElement `xml:"cbc:Note,omitempty"`
 
-	OrderReference              *orderReference              `xml:"cac:OrderReference,omitempty"`
+	OrderReference               *orderReference               `xml:"cac:OrderReference,omitempty"`
 	AdditionalDocumentReferences []additionalDocumentReference `xml:"cac:AdditionalDocumentReference,omitempty"`
 
 	Signature cacSignature
@@ -97,24 +97,24 @@ type deliveryCustomerParty struct {
 // references the remitente (the party whose goods are being carried).
 // For por Eventos with a type-31 issuer this is likewise the remitente.
 type sellerSupplierParty struct {
-	XMLName         xml.Name              `xml:"cac:SellerSupplierParty"`
-	CustomerAssignedAccountID *schemeID   `xml:"cbc:CustomerAssignedAccountID,omitempty"`
-	Party           party                 `xml:"cac:Party"`
+	XMLName                   xml.Name  `xml:"cac:SellerSupplierParty"`
+	CustomerAssignedAccountID *schemeID `xml:"cbc:CustomerAssignedAccountID,omitempty"`
+	Party                     party     `xml:"cac:Party"`
 }
 
 // shipment carries the transport metadata: weight, packages, mode,
 // origin/destination addresses, driver and vehicle.
 type shipment struct {
-	XMLName                           xml.Name               `xml:"cac:Shipment"`
-	ID                                string                 `xml:"cbc:ID"`
-	HandlingCode                      handlingCode           `xml:"cbc:HandlingCode"`
-	Information                       string                 `xml:"cbc:Information,omitempty"`
-	GrossWeightMeasure                weightMeasure          `xml:"cbc:GrossWeightMeasure"`
-	TotalTransportHandlingUnitQuantity string                `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
-	SplitConsignmentIndicator         string                 `xml:"cbc:SplitConsignmentIndicator,omitempty"`
-	ShipmentStage                     shipmentStage          `xml:"cac:ShipmentStage"`
-	Delivery                          delivery               `xml:"cac:Delivery"`
-	OriginAddress                     *despatchAddress       `xml:"cac:OriginAddress,omitempty"`
+	XMLName                            xml.Name         `xml:"cac:Shipment"`
+	ID                                 string           `xml:"cbc:ID"`
+	HandlingCode                       handlingCode     `xml:"cbc:HandlingCode"`
+	Information                        string           `xml:"cbc:Information,omitempty"`
+	GrossWeightMeasure                 weightMeasure    `xml:"cbc:GrossWeightMeasure"`
+	TotalTransportHandlingUnitQuantity string           `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
+	SplitConsignmentIndicator          string           `xml:"cbc:SplitConsignmentIndicator,omitempty"`
+	ShipmentStage                      shipmentStage    `xml:"cac:ShipmentStage"`
+	Delivery                           delivery         `xml:"cac:Delivery"`
+	OriginAddress                      *despatchAddress `xml:"cac:OriginAddress,omitempty"`
 }
 
 // handlingCode carries the Cat.20 transfer reason code.
@@ -143,12 +143,12 @@ type weightMeasure struct {
 // shipmentStage carries the transport mode (Cat.18), transit period,
 // and either a carrier (public transport) or driver+vehicle (private).
 type shipmentStage struct {
-	XMLName           xml.Name           `xml:"cac:ShipmentStage"`
-	TransportModeCode string             `xml:"cbc:TransportModeCode"`
-	TransitPeriod     *transitPeriod     `xml:"cac:TransitPeriod,omitempty"`
-	CarrierParty      *carrierParty      `xml:"cac:CarrierParty,omitempty"`
-	TransportMeans    *transportMeans    `xml:"cac:TransportMeans,omitempty"`
-	DriverPersons     []driverPerson     `xml:"cac:DriverPerson,omitempty"`
+	XMLName           xml.Name        `xml:"cac:ShipmentStage"`
+	TransportModeCode string          `xml:"cbc:TransportModeCode"`
+	TransitPeriod     *transitPeriod  `xml:"cac:TransitPeriod,omitempty"`
+	CarrierParty      *carrierParty   `xml:"cac:CarrierParty,omitempty"`
+	TransportMeans    *transportMeans `xml:"cac:TransportMeans,omitempty"`
+	DriverPersons     []driverPerson  `xml:"cac:DriverPerson,omitempty"`
 }
 
 type transitPeriod struct {
@@ -165,7 +165,7 @@ type carrierParty struct {
 
 // transportMeans (transporte privado) — vehicle plates.
 type transportMeans struct {
-	RoadTransport     *roadTransport     `xml:"cac:RoadTransport,omitempty"`
+	RoadTransport         *roadTransport         `xml:"cac:RoadTransport,omitempty"`
 	MeasurementDimensions []measurementDimension `xml:"cac:MeasurementDimension,omitempty"`
 }
 
@@ -174,8 +174,8 @@ type roadTransport struct {
 }
 
 type measurementDimension struct {
-	AttributeID     string        `xml:"cbc:AttributeID"`
-	Measure         weightMeasure `xml:"cbc:Measure,omitempty"`
+	AttributeID string        `xml:"cbc:AttributeID"`
+	Measure     weightMeasure `xml:"cbc:Measure,omitempty"`
 }
 
 // driverPerson (transporte privado) — driver identity + license.
@@ -190,8 +190,8 @@ type driverPerson struct {
 
 // delivery carries the arrival address (punto de llegada).
 type delivery struct {
-	XMLName         xml.Name         `xml:"cac:Delivery"`
-	DeliveryAddress despatchAddress  `xml:"cac:DeliveryAddress"`
+	XMLName         xml.Name        `xml:"cac:Delivery"`
+	DeliveryAddress despatchAddress `xml:"cac:DeliveryAddress"`
 }
 
 // despatchAddress is a 6-digit ubigeo + street for both origin and
@@ -206,11 +206,11 @@ type despatchAddress struct {
 // despatchLineXML is the cac:DespatchLine element — GRE carries only
 // id, delivered quantity and item description (no prices).
 type despatchLineXML struct {
-	XMLName            xml.Name          `xml:"cac:DespatchLine"`
-	ID                 string            `xml:"cbc:ID"`
-	DeliveredQuantity  quantity          `xml:"cbc:DeliveredQuantity"`
+	XMLName            xml.Name            `xml:"cac:DespatchLine"`
+	ID                 string              `xml:"cbc:ID"`
+	DeliveredQuantity  quantity            `xml:"cbc:DeliveredQuantity"`
 	OrderLineReference *orderLineReference `xml:"cac:OrderLineReference,omitempty"`
-	Item               despatchItem      `xml:"cac:Item"`
+	Item               despatchItem        `xml:"cac:Item"`
 }
 
 type orderLineReference struct {
@@ -219,7 +219,7 @@ type orderLineReference struct {
 
 // despatchItem is a GRE line item — description + optional seller code.
 type despatchItem struct {
-	Description              string                    `xml:"cbc:Description"`
+	Description               string                     `xml:"cbc:Description"`
 	SellersItemIdentification *sellersItemIdentification `xml:"cac:SellersItemIdentification,omitempty"`
 }
 
@@ -403,8 +403,8 @@ func buildDespatchLines(lines []model.DespatchLine) []despatchLineXML {
 	out := make([]despatchLineXML, 0, len(lines))
 	for _, l := range lines {
 		line := despatchLineXML{
-			ID:                itoa(l.LineNumber),
-			DeliveredQuantity: quantity{Value: l.Quantity, UnitCode: l.UnitCode},
+			ID:                 itoa(l.LineNumber),
+			DeliveredQuantity:  quantity{Value: l.Quantity, UnitCode: l.UnitCode},
 			OrderLineReference: &orderLineReference{LineID: itoa(l.LineNumber)},
 			Item: despatchItem{
 				Description: l.Description,

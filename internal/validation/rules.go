@@ -179,16 +179,102 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 			errs = append(errs, model.ValidationError{Code: 3105, Message: fmt.Sprintf("line %d: tax exemption reason code is required", li.LineNumber), Field: fmt.Sprintf("items[%d].taxExemptionReasonCode", li.LineNumber)})
 		}
 
-		// IGV tolerance check (±1 cent) for gravado onerosa lines
+		// IGV tolerance check (±1 cent) for gravado onerosa lines.
+		// IGV base = valor_venta + ISC when ISC applies (SUNAT spec).
 		if li.TaxExemptionReasonCode == "10" {
-			errs = append(errs, validateIGVTolerance(li)...)
+			errs = append(errs, validateIGVTolerance(li, 0.18, true)...)
+		}
+
+		// IVAP tolerance check (±1 cent) at 4 % for arroz pilado lines.
+		// IVAP base = valor_venta only — does not stack on ISC.
+		if li.TaxExemptionReasonCode == "17" {
+			errs = append(errs, validateIGVTolerance(li, 0.04, false)...)
+		}
+
+		// Gratuito-specific rules: priceTypeCode must be '02' (precio
+		// referencial), LineTotal must be 0 (the value goes into
+		// PricingReference, not LineExtensionAmount).
+		if isGratuitoLineCode(li.TaxExemptionReasonCode) {
+			if li.PriceTypeCode != "02" {
+				errs = append(errs, model.ValidationError{
+					Code:    2010,
+					Message: fmt.Sprintf("line %d: priceTypeCode debe ser '02' para operaciones gratuitas (recibido: %q)", li.LineNumber, li.PriceTypeCode),
+					Field:   fmt.Sprintf("items[%d].priceTypeCode", li.LineNumber),
+				})
+			}
+			if !isZeroDecimal(li.LineTotal) {
+				errs = append(errs, model.ValidationError{
+					Code:    2011,
+					Message: fmt.Sprintf("line %d: lineTotal debe ser '0.00' para operaciones gratuitas (recibido: %q)", li.LineNumber, li.LineTotal),
+					Field:   fmt.Sprintf("items[%d].lineTotal", li.LineNumber),
+				})
+			}
+			// Referential price must be > 0 for any gratuita: it's the basis SUNAT
+			// uses for both the informativo IGV and the catalog 16 type-02 price.
+			if isZeroDecimal(li.UnitPriceWithTax) {
+				errs = append(errs, model.ValidationError{
+					Code:    3105,
+					Message: fmt.Sprintf("line %d: unitPriceWithTax (precio referencial) debe ser > 0 para operaciones gratuitas", li.LineNumber),
+					Field:   fmt.Sprintf("items[%d].unitPriceWithTax", li.LineNumber),
+				})
+			}
+			// Gravado-gratuito (11-16) is still gravado IGV: SUNAT requires a
+			// non-zero IGV tribute on the line (rule 3111; surfaces as 3105
+			// when the tribute is effectively absent).
+			if isGravadoGratuitoLineCode(li.TaxExemptionReasonCode) && isZeroDecimal(li.IGVAmount) {
+				errs = append(errs, model.ValidationError{
+					Code:    3111,
+					Message: fmt.Sprintf("line %d: igvAmount debe ser > 0 para gravado-gratuito (cat.07 codes 11-16)", li.LineNumber),
+					Field:   fmt.Sprintf("items[%d].igvAmount", li.LineNumber),
+				})
+			}
+		} else if li.PriceTypeCode != "" && li.PriceTypeCode != "01" {
+			errs = append(errs, model.ValidationError{
+				Code:    2010,
+				Message: fmt.Sprintf("line %d: priceTypeCode debe ser '01' para operaciones onerosas (recibido: %q)", li.LineNumber, li.PriceTypeCode),
+				Field:   fmt.Sprintf("items[%d].priceTypeCode", li.LineNumber),
+			})
 		}
 	}
 
 	return errs
 }
 
-func validateIGVTolerance(li model.LineItem) []model.ValidationError {
+// isGravadoGratuitoLineCode reports whether a Cat.07 affectation code is
+// gravado-gratuito (11-16): IGV-subject but free of charge.
+func isGravadoGratuitoLineCode(code string) bool {
+	switch code {
+	case "11", "12", "13", "14", "15", "16":
+		return true
+	}
+	return false
+}
+
+// isGratuitoLineCode reports whether a Cat.07 affectation code marks the line
+// as a transferencia/retiro a título gratuito.
+func isGratuitoLineCode(code string) bool {
+	switch code {
+	case "11", "12", "13", "14", "15", "16",
+		"21",
+		"31", "32", "33", "34", "35", "36", "37":
+		return true
+	}
+	return false
+}
+
+// isZeroDecimal returns true for decimal strings representing zero.
+func isZeroDecimal(s string) bool {
+	if s == "" {
+		return true
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return false
+	}
+	return v == 0
+}
+
+func validateIGVTolerance(li model.LineItem, rate float64, includeISCInBase bool) []model.ValidationError {
 	var errs []model.ValidationError
 
 	lineTotal, err := strconv.ParseFloat(li.LineTotal, 64)
@@ -199,12 +285,17 @@ func validateIGVTolerance(li model.LineItem) []model.ValidationError {
 	if err != nil {
 		return errs
 	}
+	base := lineTotal
+	if includeISCInBase {
+		iscAmount, _ := strconv.ParseFloat(li.ISCAmount, 64)
+		base += iscAmount
+	}
 
-	expectedIGV := lineTotal * 0.18
-	if math.Abs(expectedIGV-igvAmount) > 1.0 { // ±1 cent tolerance (SUNAT uses integer centavos, tolerance of 1)
+	expectedIGV := base * rate
+	if math.Abs(expectedIGV-igvAmount) > 0.01 { // ±0.01 sol tolerance per SUNAT manual §7
 		errs = append(errs, model.ValidationError{
 			Code:    3103,
-			Message: fmt.Sprintf("line %d: IGV amount %.2f exceeds tolerance (expected ~%.2f)", li.LineNumber, igvAmount, expectedIGV),
+			Message: fmt.Sprintf("line %d: IGV amount %.2f exceeds tolerance (expected ~%.2f at %.0f%%)", li.LineNumber, igvAmount, expectedIGV, rate*100),
 			Field:   fmt.Sprintf("items[%d].igvAmount", li.LineNumber),
 		})
 	}

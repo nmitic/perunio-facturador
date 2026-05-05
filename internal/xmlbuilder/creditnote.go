@@ -3,24 +3,26 @@ package xmlbuilder
 import (
 	"encoding/xml"
 	"fmt"
+	"strconv"
 
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
 // creditNote is the UBL 2.1 CreditNote XML root element.
 type creditNote struct {
-	XMLName              xml.Name                `xml:"CreditNote"`
-	XMLNS                string                  `xml:"xmlns,attr"`
-	XMLNSCAC             string                  `xml:"xmlns:cac,attr"`
-	XMLNSCBC             string                  `xml:"xmlns:cbc,attr"`
-	XMLNSEXT             string                  `xml:"xmlns:ext,attr"`
-	XMLNSDS              string                  `xml:"xmlns:ds,attr"`
+	XMLName              xml.Name `xml:"CreditNote"`
+	XMLNS                string   `xml:"xmlns,attr"`
+	XMLNSCAC             string   `xml:"xmlns:cac,attr"`
+	XMLNSCBC             string   `xml:"xmlns:cbc,attr"`
+	XMLNSEXT             string   `xml:"xmlns:ext,attr"`
+	XMLNSDS              string   `xml:"xmlns:ds,attr"`
 	UBLExtensions        ublExtensions
-	UBLVersionID         string                  `xml:"cbc:UBLVersionID"`
-	CustomizationID      string                  `xml:"cbc:CustomizationID"`
-	ID                   string                  `xml:"cbc:ID"`
-	IssueDate            string                  `xml:"cbc:IssueDate"`
-	IssueTime            string                  `xml:"cbc:IssueTime,omitempty"`
+	UBLVersionID         string `xml:"cbc:UBLVersionID"`
+	CustomizationID      string `xml:"cbc:CustomizationID"`
+	ProfileID            profileIDElement
+	ID                   string `xml:"cbc:ID"`
+	IssueDate            string `xml:"cbc:IssueDate"`
+	IssueTime            string `xml:"cbc:IssueTime,omitempty"`
 	Notes                []noteElement
 	DocumentCurrencyCode documentCurrencyCode
 	DiscrepancyResponse  discrepancyResponse
@@ -51,6 +53,7 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 
 		UBLVersionID:    UBLVersion21,
 		CustomizationID: CustomizationID20,
+		ProfileID:       newProfileID(req.OperationType),
 		ID:              docID,
 		IssueDate:       req.IssueDate,
 		IssueTime:       req.IssueTime,
@@ -85,20 +88,32 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 	cn.LegalMonetaryTotal = buildLegalMonetaryTotal(req)
 
 	for _, li := range req.Items {
-		cn.CreditNoteLines = append(cn.CreditNoteLines, buildCreditNoteLine(li, req.CurrencyCode))
+		line, err := buildCreditNoteLine(li, req.CurrencyCode)
+		if err != nil {
+			return nil, err
+		}
+		cn.CreditNoteLines = append(cn.CreditNoteLines, line)
 	}
 
 	return marshalISO8859(&cn)
 }
 
-func buildCreditNoteLine(li model.LineItem, cur string) creditNoteLine {
+func buildCreditNoteLine(li model.LineItem, cur string) (creditNoteLine, error) {
+	unitPrice := li.UnitPrice
+	if isGratuitoCode(li.TaxExemptionReasonCode) {
+		unitPrice = "0.00"
+	}
+	pr, err := buildPricingReference(li, cur)
+	if err != nil {
+		return creditNoteLine{}, err
+	}
 	return creditNoteLine{
-		ID:                  fmt.Sprint(li.LineNumber),
+		ID:                  strconv.Itoa(li.LineNumber),
 		CreditedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
-		PricingReference:    buildPricingReference(li, cur),
+		PricingReference:    pr,
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
-		Price:               price{PriceAmount: newCurrencyAmount(li.UnitPrice, cur)},
-	}
+		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
+	}, nil
 }

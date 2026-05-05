@@ -155,10 +155,12 @@ func (s *server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, compan
 		return nil, false
 	}
 
+	// SUNAT WS-Security UsernameToken: {RUC}{usuario_sol} concatenated, no
+	// separator. companies.username stores the SOL secondary user only.
 	return &pipelineDeps{
 		tenantID:      tenantID,
 		company:       company,
-		sunatUsername: *company.Username,
+		sunatUsername: company.RUC + *company.Username,
 		sunatPassword: sunatPassword,
 		parsedCert:    parsed,
 	}, true

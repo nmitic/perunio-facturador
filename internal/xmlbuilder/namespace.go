@@ -18,9 +18,9 @@ const (
 
 // UBL version constants.
 const (
-	UBLVersion21       = "2.1"
-	UBLVersion20       = "2.0"
-	CustomizationID20  = "2.0"  // For Invoice, CreditNote, DebitNote
-	CustomizationIDRC  = "1.1"  // For Resumen Diario
-	CustomizationIDRA  = "1.0"  // For Comunicacion de Baja
+	UBLVersion21      = "2.1"
+	UBLVersion20      = "2.0"
+	CustomizationID20 = "2.0" // For Invoice, CreditNote, DebitNote
+	CustomizationIDRC = "1.1" // For Resumen Diario
+	CustomizationIDRA = "1.0" // For Comunicacion de Baja
 )

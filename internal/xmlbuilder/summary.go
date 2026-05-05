@@ -28,9 +28,9 @@ type summaryDocuments struct {
 }
 
 type summarySupplierParty struct {
-	XMLName             xml.Name `xml:"cac:AccountingSupplierParty"`
-	CustomerAssignedID  string   `xml:"cbc:CustomerAssignedAccountID"`
-	AdditionalAccountID string   `xml:"cbc:AdditionalAccountID"`
+	XMLName             xml.Name     `xml:"cac:AccountingSupplierParty"`
+	CustomerAssignedID  string       `xml:"cbc:CustomerAssignedAccountID"`
+	AdditionalAccountID string       `xml:"cbc:AdditionalAccountID"`
 	Party               summaryParty `xml:"cac:Party"`
 }
 
@@ -43,22 +43,22 @@ type summaryPartyLegalEntity struct {
 }
 
 type summaryDocumentsLine struct {
-	LineID                  string                `xml:"cbc:LineID"`
-	DocumentTypeCode        string                `xml:"cbc:DocumentTypeCode"`
-	DocumentSerialID        string                `xml:"sac:DocumentSerialID"`
-	StartDocumentNumberID   string                `xml:"sac:StartDocumentNumberID"`
-	EndDocumentNumberID     string                `xml:"sac:EndDocumentNumberID"`
-	TotalAmount             currencyAmount        `xml:"sac:TotalAmount"`
+	LineID                  string                  `xml:"cbc:LineID"`
+	DocumentTypeCode        string                  `xml:"cbc:DocumentTypeCode"`
+	DocumentSerialID        string                  `xml:"sac:DocumentSerialID"`
+	StartDocumentNumberID   string                  `xml:"sac:StartDocumentNumberID"`
+	EndDocumentNumberID     string                  `xml:"sac:EndDocumentNumberID"`
+	TotalAmount             currencyAmount          `xml:"sac:TotalAmount"`
 	BillingPayment          []summaryBillingPayment `xml:"sac:BillingPayment"`
-	AccountingCustomerParty *summaryCustomerParty `xml:"cac:AccountingCustomerParty,omitempty"`
-	BillingReference        *summaryBillingRef    `xml:"cac:BillingReference,omitempty"`
-	ConditionCode           string                `xml:"cac:Status>cbc:ConditionCode"`
-	TotalTaxAmount          currencyAmount        `xml:"sac:TaxTotal>cbc:TaxAmount"`
+	AccountingCustomerParty *summaryCustomerParty   `xml:"cac:AccountingCustomerParty,omitempty"`
+	BillingReference        *summaryBillingRef      `xml:"cac:BillingReference,omitempty"`
+	ConditionCode           string                  `xml:"cac:Status>cbc:ConditionCode"`
+	TotalTaxAmount          currencyAmount          `xml:"sac:TaxTotal>cbc:TaxAmount"`
 }
 
 type summaryBillingPayment struct {
-	PaidAmount      currencyAmount `xml:"cbc:PaidAmount"`
-	InstructionID   string         `xml:"cbc:InstructionID"`
+	PaidAmount    currencyAmount `xml:"cbc:PaidAmount"`
+	InstructionID string         `xml:"cbc:InstructionID"`
 }
 
 type summaryCustomerParty struct {
@@ -128,13 +128,13 @@ func SummaryFilename(ruc, issueDate string, correlative int) string {
 func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	line := summaryDocumentsLine{
 		LineID:                fmt.Sprint(item.LineNumber),
-		DocumentTypeCode:     item.DocType,
-		DocumentSerialID:     item.Series,
+		DocumentTypeCode:      item.DocType,
+		DocumentSerialID:      item.Series,
 		StartDocumentNumberID: fmt.Sprint(item.StartCorrelative),
-		EndDocumentNumberID:  fmt.Sprint(item.EndCorrelative),
-		TotalAmount:          newCurrencyAmount(item.TotalAmount, "PEN"), // RC amounts always PEN
-		ConditionCode:        item.ConditionCode,
-		TotalTaxAmount:       newCurrencyAmount(item.TotalIGV, "PEN"),
+		EndDocumentNumberID:   fmt.Sprint(item.EndCorrelative),
+		TotalAmount:           newCurrencyAmount(item.TotalAmount, "PEN"), // RC amounts always PEN
+		ConditionCode:         item.ConditionCode,
+		TotalTaxAmount:        newCurrencyAmount(item.TotalIGV, "PEN"),
 	}
 
 	// Billing payments (tax breakdowns)

@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/go-pdf/fpdf"
@@ -10,6 +11,59 @@ import (
 
 	"github.com/perunio/perunio-facturador/internal/model"
 )
+
+// isGratuitoCat07 reports whether a Cat.07 affectation code is gratuito
+// (transferencia/retiro a título gratuito): 11-16, 21, 31-37.
+func isGratuitoCat07(code string) bool {
+	switch code {
+	case "11", "12", "13", "14", "15", "16",
+		"21",
+		"31", "32", "33", "34", "35", "36", "37":
+		return true
+	}
+	return false
+}
+
+// affectationLabel returns a short Spanish label for a Cat.07 code.
+func affectationLabel(code string) string {
+	if isGratuitoCat07(code) {
+		return "Gratuito"
+	}
+	switch code {
+	case "10":
+		return "Gravado"
+	case "17":
+		return "IVAP"
+	case "20":
+		return "Exonerado"
+	case "30":
+		return "Inafecto"
+	case "40":
+		return "Exportación"
+	}
+	return code
+}
+
+func parseAmount(s string) float64 {
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// nonZero reports whether a decimal string represents a non-zero value.
+func nonZero(s string) bool {
+	return parseAmount(s) > 0.0001
+}
+
+// formatMoney renders a float as a fixed-2 decimal string.
+func formatMoney(v float64) string {
+	return strconv.FormatFloat(v, 'f', 2, 64)
+}
 
 // Generate creates a PDF representation of an invoice.
 func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
@@ -61,12 +115,31 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 
 	pdf.Ln(4)
 
-	// Items table
+	// Detect which optional columns to show.
+	showISC := false
+	hasGratuito := false
+	for _, it := range req.Items {
+		if nonZero(it.ISCAmount) {
+			showISC = true
+		}
+		if isGratuitoCat07(it.TaxExemptionReasonCode) {
+			hasGratuito = true
+		}
+	}
+
+	// Items table — column widths sum to 190mm (page width minus 20mm margins).
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	colWidths := []float64{12, 80, 20, 25, 25, 28}
-	headers := []string{"#", "Descripcion", "Cant.", "P.Unit", "IGV", "Total"}
+	var colWidths []float64
+	var headers []string
+	if showISC {
+		colWidths = []float64{8, 60, 18, 22, 20, 18, 18, 26}
+		headers = []string{"#", "Descripcion", "Afect.", "Cant.", "P.Unit", "ISC", "IGV", "Total"}
+	} else {
+		colWidths = []float64{8, 78, 22, 22, 22, 18, 20}
+		headers = []string{"#", "Descripcion", "Afect.", "Cant.", "P.Unit", "IGV", "Total"}
+	}
 	for i, h := range headers {
 		pdf.CellFormat(colWidths[i], 7, h, "1", 0, "C", true, 0, "")
 	}
@@ -76,27 +149,102 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFillColor(255, 255, 255)
 	for _, item := range req.Items {
+		afect := affectationLabel(item.TaxExemptionReasonCode)
+		descCol := 1
+		afectCol := 2
+		cantCol := 3
+		precioCol := 4
 		pdf.CellFormat(colWidths[0], 6, fmt.Sprint(item.LineNumber), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(colWidths[1], 6, truncate(item.Description, 45), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(colWidths[2], 6, item.Quantity, "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colWidths[3], 6, item.UnitPrice, "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colWidths[4], 6, item.IGVAmount, "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colWidths[5], 6, item.LineTotal, "1", 0, "R", false, 0, "")
+		pdf.CellFormat(colWidths[descCol], 6, truncate(item.Description, 38), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(colWidths[afectCol], 6, afect, "1", 0, "C", false, 0, "")
+		pdf.CellFormat(colWidths[cantCol], 6, item.Quantity, "1", 0, "R", false, 0, "")
+		// Para gratuito mostramos el valor referencial (UnitPriceWithTax) en
+		// lugar de "0.00" para que el cliente vea el monto referencial.
+		precio := item.UnitPrice
+		if isGratuitoCat07(item.TaxExemptionReasonCode) && item.UnitPriceWithTax != "" {
+			precio = item.UnitPriceWithTax
+		}
+		pdf.CellFormat(colWidths[precioCol], 6, precio, "1", 0, "R", false, 0, "")
+		if showISC {
+			pdf.CellFormat(colWidths[5], 6, item.ISCAmount, "1", 0, "R", false, 0, "")
+			pdf.CellFormat(colWidths[6], 6, item.IGVAmount, "1", 0, "R", false, 0, "")
+			pdf.CellFormat(colWidths[7], 6, item.LineTotal, "1", 0, "R", false, 0, "")
+		} else {
+			pdf.CellFormat(colWidths[5], 6, item.IGVAmount, "1", 0, "R", false, 0, "")
+			pdf.CellFormat(colWidths[6], 6, item.LineTotal, "1", 0, "R", false, 0, "")
+		}
 		pdf.Ln(-1)
 	}
 
 	pdf.Ln(4)
 
-	// Totals
+	// Totals — agrupados por tipo de afectación a partir de los ítems.
+	var sumGravado, sumIvap, sumExo, sumInaf, sumExp, sumGrat float64
+	for _, it := range req.Items {
+		base := parseAmount(it.LineTotal)
+		switch {
+		case isGratuitoCat07(it.TaxExemptionReasonCode):
+			ref := parseAmount(it.UnitPriceWithTax) * parseAmount(it.Quantity)
+			sumGrat += ref
+		case it.TaxExemptionReasonCode == "10":
+			sumGravado += base
+		case it.TaxExemptionReasonCode == "17":
+			sumIvap += base
+		case it.TaxExemptionReasonCode == "20":
+			sumExo += base
+		case strings.HasPrefix(it.TaxExemptionReasonCode, "3"):
+			sumInaf += base
+		case it.TaxExemptionReasonCode == "40":
+			sumExp += base
+		default:
+			sumGravado += base
+		}
+	}
+
 	totalsX := 130.0
 	pdf.SetFont("Helvetica", "", 9)
+	if sumGravado > 0 {
+		totalRow(pdf, totalsX, "Op. Gravadas", req.CurrencyCode, formatMoney(sumGravado))
+	}
+	if sumIvap > 0 {
+		totalRow(pdf, totalsX, "Base IVAP", req.CurrencyCode, formatMoney(sumIvap))
+	}
+	if sumExo > 0 {
+		totalRow(pdf, totalsX, "Op. Exoneradas", req.CurrencyCode, formatMoney(sumExo))
+	}
+	if sumInaf > 0 {
+		totalRow(pdf, totalsX, "Op. Inafectas", req.CurrencyCode, formatMoney(sumInaf))
+	}
+	if sumExp > 0 {
+		totalRow(pdf, totalsX, "Exportación", req.CurrencyCode, formatMoney(sumExp))
+	}
 	totalRow(pdf, totalsX, "Subtotal", req.CurrencyCode, req.Subtotal)
-	totalRow(pdf, totalsX, "IGV (18%)", req.CurrencyCode, req.TotalIGV)
 	if req.TotalDiscount != "" && req.TotalDiscount != "0.00" {
 		totalRow(pdf, totalsX, "Descuento", req.CurrencyCode, req.TotalDiscount)
 	}
+	if nonZero(req.TotalISC) {
+		totalRow(pdf, totalsX, "ISC", req.CurrencyCode, req.TotalISC)
+	}
+	// Etiqueta IGV/IVAP según los buckets detectados.
+	switch {
+	case sumIvap > 0 && sumGravado == 0:
+		totalRow(pdf, totalsX, "IVAP (4%)", req.CurrencyCode, req.TotalIGV)
+	case sumIvap > 0 && sumGravado > 0:
+		totalRow(pdf, totalsX, "IGV + IVAP", req.CurrencyCode, req.TotalIGV)
+	default:
+		totalRow(pdf, totalsX, "IGV (18%)", req.CurrencyCode, req.TotalIGV)
+	}
+	if sumGrat > 0 {
+		totalRow(pdf, totalsX, "Total Gratuita", req.CurrencyCode, formatMoney(sumGrat))
+	}
 	pdf.SetFont("Helvetica", "B", 10)
 	totalRow(pdf, totalsX, "TOTAL", req.CurrencyCode, req.TotalAmount)
+	if hasGratuito {
+		pdf.Ln(2)
+		pdf.SetFont("Helvetica", "I", 7)
+		pdf.SetX(totalsX - 10)
+		pdf.CellFormat(70, 4, "Transferencia gratuita o a titulo gratuito (leyenda 1002)", "", 1, "R", false, 0, "")
+	}
 
 	// Forma de pago + cuotas
 	pdf.Ln(6)

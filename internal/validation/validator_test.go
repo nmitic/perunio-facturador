@@ -90,6 +90,26 @@ func TestValidate(t *testing.T) {
 		is.True(t, hasErrorCode(errs, 3103))
 	})
 
+	t.Run("should pass IGV tolerance when ISC is included in the base", func(t *testing.T) {
+		req := newValidInvoice()
+		// IGV applies on top of ISC: (100 + 20) * 18% = 21.60
+		req.Items = []model.LineItem{
+			{
+				LineNumber: 1, Description: "PRODUCTO CON ISC", Quantity: "1",
+				UnitCode: "NIU", UnitPrice: "100.00", UnitPriceWithTax: "141.60",
+				TaxExemptionReasonCode: "10", IGVAmount: "21.60", ISCAmount: "20.00",
+				LineTotal: "100.00", PriceTypeCode: "01",
+			},
+		}
+		req.Subtotal = "100.00"
+		req.TotalIGV = "21.60"
+		req.TotalISC = "20.00"
+		req.TotalAmount = "141.60"
+		req.TaxInclusiveAmount = "141.60"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorCode(errs, 3103))
+	})
+
 	t.Run("should fail for NC with invalid reason code on boleta", func(t *testing.T) {
 		req := newValidInvoice()
 		req.DocType = "07"

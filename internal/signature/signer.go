@@ -3,10 +3,13 @@ package signature
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/beevik/etree"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // SignXML takes unsigned ISO-8859-1 XML bytes and signs it using xmlsec1.
@@ -70,8 +73,15 @@ func writeTmp(dir, pattern string, data []byte) (string, error) {
 }
 
 // DigestValue extracts the ds:DigestValue from a signed XML document (for QR code).
+// SUNAT XML is ISO-8859-1; etree assumes UTF-8, so we register a charset reader.
 func DigestValue(signedXML []byte) (string, error) {
 	doc := etree.NewDocument()
+	doc.ReadSettings.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		if strings.EqualFold(charset, "ISO-8859-1") {
+			return charmap.ISO8859_1.NewDecoder().Reader(input), nil
+		}
+		return nil, fmt.Errorf("unsupported charset: %s", charset)
+	}
 	if err := doc.ReadFromBytes(signedXML); err != nil {
 		return "", fmt.Errorf("parse signed XML: %w", err)
 	}

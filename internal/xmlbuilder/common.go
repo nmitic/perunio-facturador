@@ -3,11 +3,12 @@ package xmlbuilder
 import "encoding/xml"
 
 const (
-	nsDS       = "http://www.w3.org/2000/09/xmldsig#"
-	algC14NWC  = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"
-	algRSASHA1 = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
-	algSHA1    = "http://www.w3.org/2000/09/xmldsig#sha1"
-	algEnvSig  = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+	nsDS        = "http://www.w3.org/2000/09/xmldsig#"
+	algC14N     = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+	algRSASHA1  = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+	algSHA1     = "http://www.w3.org/2000/09/xmldsig#sha1"
+	algEnvSig   = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+	signatureID = "SignatureSP"
 )
 
 // ublExtensions wraps the signature extension placeholder.
@@ -26,11 +27,11 @@ type extensionContent struct {
 }
 
 type dsSignatureTemplate struct {
-	XMLNS_DS       string           `xml:"xmlns:ds,attr"`
-	Id             string           `xml:"Id,attr"`
-	SignedInfo     dsSignedInfo     `xml:"ds:SignedInfo"`
-	SignatureValue string           `xml:"ds:SignatureValue"`
-	KeyInfo        dsKeyInfo        `xml:"ds:KeyInfo"`
+	XMLNS_DS       string       `xml:"xmlns:ds,attr"`
+	Id             string       `xml:"Id,attr"`
+	SignedInfo     dsSignedInfo `xml:"ds:SignedInfo"`
+	SignatureValue string       `xml:"ds:SignatureValue"`
+	KeyInfo        dsKeyInfo    `xml:"ds:KeyInfo"`
 }
 
 type dsSignedInfo struct {
@@ -66,9 +67,9 @@ func newExtensionContent() extensionContent {
 	return extensionContent{
 		Signature: dsSignatureTemplate{
 			XMLNS_DS: nsDS,
-			Id:       "signatureKG",
+			Id:       signatureID,
 			SignedInfo: dsSignedInfo{
-				CanonicalizationMethod: dsAlgorithm{Algorithm: algC14NWC},
+				CanonicalizationMethod: dsAlgorithm{Algorithm: algC14N},
 				SignatureMethod:        dsAlgorithm{Algorithm: algRSASHA1},
 				Reference: dsReference{
 					URI: "",
@@ -86,7 +87,7 @@ func newExtensionContent() extensionContent {
 type cacSignature struct {
 	XMLName                    xml.Name                   `xml:"cac:Signature"`
 	ID                         string                     `xml:"cbc:ID"`
-	SignatoryParty              signatoryParty             `xml:"cac:SignatoryParty"`
+	SignatoryParty             signatoryParty             `xml:"cac:SignatoryParty"`
 	DigitalSignatureAttachment digitalSignatureAttachment `xml:"cac:DigitalSignatureAttachment"`
 }
 
@@ -105,13 +106,13 @@ type externalReference struct {
 
 func newCACSignature(ruc, companyName string) cacSignature {
 	return cacSignature{
-		ID: "IDSignKG",
+		ID: signatureID,
 		SignatoryParty: signatoryParty{
 			PartyIdentification: partyIdentification{ID: schemeID{Value: ruc}},
 			PartyName:           partyName{Name: companyName},
 		},
 		DigitalSignatureAttachment: digitalSignatureAttachment{
-			ExternalReference: externalReference{URI: "#signatureKG"},
+			ExternalReference: externalReference{URI: "#" + signatureID},
 		},
 	}
 }
@@ -148,16 +149,16 @@ type partyLegalEntity struct {
 }
 
 type registrationAddress struct {
-	AddressTypeCode *addressTypeCode `xml:"cbc:AddressTypeCode,omitempty"`
-	CityName        string           `xml:"cbc:CityName,omitempty"`
-	CountrySubentity string          `xml:"cbc:CountrySubentity,omitempty"`
-	District        string           `xml:"cbc:District,omitempty"`
-	AddressLine     *addressLine     `xml:"cac:AddressLine,omitempty"`
-	Country         *country         `xml:"cac:Country,omitempty"`
+	AddressTypeCode  *addressTypeCode `xml:"cbc:AddressTypeCode,omitempty"`
+	CityName         string           `xml:"cbc:CityName,omitempty"`
+	CountrySubentity string           `xml:"cbc:CountrySubentity,omitempty"`
+	District         string           `xml:"cbc:District,omitempty"`
+	AddressLine      *addressLine     `xml:"cac:AddressLine,omitempty"`
+	Country          *country         `xml:"cac:Country,omitempty"`
 }
 
 type addressTypeCode struct {
-	Value    string `xml:",chardata"`
+	Value          string `xml:",chardata"`
 	ListAgencyName string `xml:"listAgencyName,attr,omitempty"`
 	ListName       string `xml:"listName,attr,omitempty"`
 }
@@ -192,7 +193,7 @@ type currencyAmount struct {
 
 // taxTotal represents a document-level or line-level tax total.
 type taxTotal struct {
-	XMLName     xml.Name      `xml:"cac:TaxTotal"`
+	XMLName     xml.Name       `xml:"cac:TaxTotal"`
 	TaxAmount   currencyAmount `xml:"cbc:TaxAmount"`
 	TaxSubtotal []taxSubtotal  `xml:"cac:TaxSubtotal"`
 }
@@ -204,11 +205,11 @@ type taxSubtotal struct {
 }
 
 type taxCategory struct {
-	ID        taxCategoryID `xml:"cbc:ID"`
-	Percent   string        `xml:"cbc:Percent,omitempty"`
-	TierRange string        `xml:"cbc:TierRange,omitempty"` // ISC calculation system (Cat.08)
+	ID                     taxCategoryID     `xml:"cbc:ID"`
+	Percent                string            `xml:"cbc:Percent,omitempty"`
+	TierRange              string            `xml:"cbc:TierRange,omitempty"` // ISC calculation system (Cat.08)
 	TaxExemptionReasonCode *taxExemptionCode `xml:"cbc:TaxExemptionReasonCode,omitempty"`
-	TaxScheme taxSchemeXML  `xml:"cac:TaxScheme"`
+	TaxScheme              taxSchemeXML      `xml:"cac:TaxScheme"`
 }
 
 type taxCategoryID struct {
@@ -239,57 +240,57 @@ type taxSchemeID struct {
 // paymentTerms represents cac:PaymentTerms (forma de pago, Cat.SUNAT).
 // Required on Factura/Boleta since 2018; SUNAT error 3244 fires when missing.
 type paymentTerms struct {
-	XMLName         xml.Name        `xml:"cac:PaymentTerms"`
-	ID              string          `xml:"cbc:ID"`
-	PaymentMeansID  string          `xml:"cbc:PaymentMeansID"`
-	Amount          *currencyAmount `xml:"cbc:Amount,omitempty"`
-	PaymentDueDate  string          `xml:"cbc:PaymentDueDate,omitempty"`
+	XMLName        xml.Name        `xml:"cac:PaymentTerms"`
+	ID             string          `xml:"cbc:ID"`
+	PaymentMeansID string          `xml:"cbc:PaymentMeansID"`
+	Amount         *currencyAmount `xml:"cbc:Amount,omitempty"`
+	PaymentDueDate string          `xml:"cbc:PaymentDueDate,omitempty"`
 }
 
 // legalMonetaryTotal represents the totals block.
 type legalMonetaryTotal struct {
-	XMLName              xml.Name       `xml:"cac:LegalMonetaryTotal"`
-	LineExtensionAmount  currencyAmount `xml:"cbc:LineExtensionAmount"`
-	TaxInclusiveAmount   currencyAmount `xml:"cbc:TaxInclusiveAmount"`
+	XMLName              xml.Name        `xml:"cac:LegalMonetaryTotal"`
+	LineExtensionAmount  currencyAmount  `xml:"cbc:LineExtensionAmount"`
+	TaxInclusiveAmount   currencyAmount  `xml:"cbc:TaxInclusiveAmount"`
 	AllowanceTotalAmount *currencyAmount `xml:"cbc:AllowanceTotalAmount,omitempty"`
 	ChargeTotalAmount    *currencyAmount `xml:"cbc:ChargeTotalAmount,omitempty"`
-	PayableAmount        currencyAmount `xml:"cbc:PayableAmount"`
+	PayableAmount        currencyAmount  `xml:"cbc:PayableAmount"`
 }
 
 // invoiceLine represents a single line item (for Invoice).
 type invoiceLine struct {
-	XMLName           xml.Name       `xml:"cac:InvoiceLine"`
-	ID                string         `xml:"cbc:ID"`
-	InvoicedQuantity  quantity       `xml:"cbc:InvoicedQuantity"`
-	LineExtensionAmount currencyAmount `xml:"cbc:LineExtensionAmount"`
-	PricingReference  pricingReference `xml:"cac:PricingReference"`
-	TaxTotal          taxTotal       `xml:"cac:TaxTotal"`
-	Item              item           `xml:"cac:Item"`
-	Price             price          `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:InvoiceLine"`
+	ID                  string            `xml:"cbc:ID"`
+	InvoicedQuantity    quantity          `xml:"cbc:InvoicedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
+	Item                item              `xml:"cac:Item"`
+	Price               price             `xml:"cac:Price"`
 }
 
 // creditNoteLine represents a single line item (for CreditNote).
 type creditNoteLine struct {
-	XMLName             xml.Name         `xml:"cac:CreditNoteLine"`
-	ID                  string           `xml:"cbc:ID"`
-	CreditedQuantity    quantity         `xml:"cbc:CreditedQuantity"`
-	LineExtensionAmount currencyAmount   `xml:"cbc:LineExtensionAmount"`
-	PricingReference    pricingReference `xml:"cac:PricingReference"`
-	TaxTotal            taxTotal         `xml:"cac:TaxTotal"`
-	Item                item             `xml:"cac:Item"`
-	Price               price            `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:CreditNoteLine"`
+	ID                  string            `xml:"cbc:ID"`
+	CreditedQuantity    quantity          `xml:"cbc:CreditedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
+	Item                item              `xml:"cac:Item"`
+	Price               price             `xml:"cac:Price"`
 }
 
 // debitNoteLine represents a single line item (for DebitNote).
 type debitNoteLine struct {
-	XMLName             xml.Name         `xml:"cac:DebitNoteLine"`
-	ID                  string           `xml:"cbc:ID"`
-	DebitedQuantity     quantity         `xml:"cbc:DebitedQuantity"`
-	LineExtensionAmount currencyAmount   `xml:"cbc:LineExtensionAmount"`
-	PricingReference    pricingReference `xml:"cac:PricingReference"`
-	TaxTotal            taxTotal         `xml:"cac:TaxTotal"`
-	Item                item             `xml:"cac:Item"`
-	Price               price            `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:DebitNoteLine"`
+	ID                  string            `xml:"cbc:ID"`
+	DebitedQuantity     quantity          `xml:"cbc:DebitedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
+	Item                item              `xml:"cac:Item"`
+	Price               price             `xml:"cac:Price"`
 }
 
 type quantity struct {
@@ -298,7 +299,7 @@ type quantity struct {
 }
 
 type pricingReference struct {
-	AlternativeConditionPrice alternativeConditionPrice `xml:"cac:AlternativeConditionPrice"`
+	AlternativeConditionPrice []alternativeConditionPrice `xml:"cac:AlternativeConditionPrice"`
 }
 
 type alternativeConditionPrice struct {
@@ -328,7 +329,10 @@ type noteElement struct {
 	LanguageLocaleID string   `xml:"languageLocaleID,attr,omitempty"`
 }
 
-// invoiceTypeCode with SUNAT-required attributes.
+// invoiceTypeCode with SUNAT-required attributes. The element value is
+// catalog 01 (document type, e.g. "01" Factura). The @listID attribute
+// carries catalog 51 (operation type, e.g. "0101" Venta interna) — SUNAT
+// rejects with error 3205 if missing.
 type invoiceTypeCode struct {
 	XMLName        xml.Name `xml:"cbc:InvoiceTypeCode"`
 	Value          string   `xml:",chardata"`
@@ -336,6 +340,16 @@ type invoiceTypeCode struct {
 	ListAgencyName string   `xml:"listAgencyName,attr"`
 	ListName       string   `xml:"listName,attr"`
 	ListURI        string   `xml:"listURI,attr"`
+}
+
+// profileID carries the SUNAT operation type (catalog 17), e.g. "0101"
+// for Venta interna. Lives between cbc:CustomizationID and cbc:ID.
+type profileIDElement struct {
+	XMLName          xml.Name `xml:"cbc:ProfileID"`
+	Value            string   `xml:",chardata"`
+	SchemeName       string   `xml:"schemeName,attr"`
+	SchemeAgencyName string   `xml:"schemeAgencyName,attr"`
+	SchemeURI        string   `xml:"schemeURI,attr"`
 }
 
 // documentCurrencyCode with required attributes.
@@ -457,5 +471,19 @@ func newInvoiceTypeCode(code, operationType string) invoiceTypeCode {
 		ListAgencyName: "PE:SUNAT",
 		ListName:       "Tipo de Documento",
 		ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",
+	}
+}
+
+// newProfileID returns the SUNAT cbc:ProfileID element carrying the
+// operation type (catalog 17). Defaults to "0101" (Venta interna).
+func newProfileID(operationType string) profileIDElement {
+	if operationType == "" {
+		operationType = "0101"
+	}
+	return profileIDElement{
+		Value:            operationType,
+		SchemeName:       "SUNAT:Identificador de Tipo de Operación",
+		SchemeAgencyName: "PE:SUNAT",
+		SchemeURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17",
 	}
 }

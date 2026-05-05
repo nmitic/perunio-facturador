@@ -14,8 +14,11 @@ import (
 )
 
 // applicationResponse is the UBL 2.0 ApplicationResponse for CDR parsing.
+// SUNAT puts "aceptado con observaciones" warning codes (>=4000) in the
+// repeating root-level cbc:Note element, not in DocumentResponse.
 type applicationResponse struct {
-	XMLName          xml.Name          `xml:"ApplicationResponse"`
+	XMLName          xml.Name           `xml:"ApplicationResponse"`
+	Notes            []string           `xml:"Note"`
 	DocumentResponse []documentResponse `xml:"DocumentResponse"`
 }
 
@@ -84,11 +87,11 @@ func parseApplicationResponse(xmlBytes, rawZipBytes []byte) (*model.CDR, error) 
 
 	cdr.Accepted = cdr.ResponseCode == "0"
 
-	// Extract notes/observations from additional DocumentResponses
-	for i := 1; i < len(appResp.DocumentResponse); i++ {
-		resp := appResp.DocumentResponse[i].Response
-		if resp.Description != "" {
-			cdr.Notes = append(cdr.Notes, resp.Description)
+	// Root-level cbc:Note entries surface "aceptado con observaciones"
+	// warnings (codes >=4000). Format is typically "<code> - <description>".
+	for _, n := range appResp.Notes {
+		if n != "" {
+			cdr.Notes = append(cdr.Notes, n)
 		}
 	}
 

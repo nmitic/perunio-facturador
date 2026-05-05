@@ -20,7 +20,7 @@ func marshalISO8859(v any) ([]byte, error) {
 // transcodeToISO8859 converts UTF-8 XML bytes to ISO-8859-1 with correct declaration.
 func transcodeToISO8859(utf8Bytes []byte) ([]byte, error) {
 	// Add XML declaration with ISO-8859-1 encoding
-	declaration := []byte(`<?xml version="1.0" encoding="ISO-8859-1"?>` + "\n")
+	declaration := []byte(`<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>` + "\n")
 
 	// Encode body to ISO-8859-1
 	encoder := charmap.ISO8859_1.NewEncoder()

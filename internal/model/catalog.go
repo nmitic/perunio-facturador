@@ -25,11 +25,11 @@ var (
 	TaxIVAP        = TaxSchemeType{"1016", "IVAP", "1016", "VAT", "S"}
 	TaxISC         = TaxSchemeType{"2000", "ISC", "2000", "EXC", "S"}
 	TaxICBPER      = TaxSchemeType{"7152", "ICBPER", "7152", "OTH", "S"}
-	TaxExportacion = TaxSchemeType{"9995", "Exportación", "9995", "FRE", "G"}
-	TaxGratuita    = TaxSchemeType{"9996", "Gratuita", "9996", "FRE", "E"}
-	TaxExonerado   = TaxSchemeType{"9997", "Exonerado", "9997", "VAT", "E"}
-	TaxInafecto    = TaxSchemeType{"9998", "Inafecto", "9998", "FRE", "O"}
-	TaxOtros       = TaxSchemeType{"9999", "Otros tributos", "9999", "OTH", "S"}
+	TaxExportacion = TaxSchemeType{"9995", "EXP", "9995", "FRE", "G"}
+	TaxGratuita    = TaxSchemeType{"9996", "GRA", "9996", "FRE", "E"}
+	TaxExonerado   = TaxSchemeType{"9997", "EXO", "9997", "VAT", "E"}
+	TaxInafecto    = TaxSchemeType{"9998", "INA", "9998", "FRE", "O"}
+	TaxOtros       = TaxSchemeType{"9999", "OTROS", "9999", "OTH", "S"}
 )
 
 var taxSchemeByCode = map[string]TaxSchemeType{
