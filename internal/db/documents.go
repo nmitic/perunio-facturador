@@ -38,14 +38,14 @@ const issuedDocumentColumns = `
 	forma_pago, cuotas,
 	reference_doc_type, reference_doc_series, reference_doc_correlative,
 	credit_debit_reason_code, credit_debit_reason_desc,
-	sunat_response_code, sunat_response_description, sunat_ticket,
+	sunat_response_code, sunat_response_description, sunat_ticket, sunat_observations,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key, r2_pdf_key,
 	qr_data,
 	sent_at, accepted_at, created_at, updated_at
 `
 
 func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
-	var cuotasRaw []byte
+	var cuotasRaw, observationsRaw []byte
 	if err := row.Scan(
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
 		&d.IssueDate, &d.IssueTime, &d.DueDate,
@@ -56,7 +56,7 @@ func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
 		&d.FormaPago, &cuotasRaw,
 		&d.ReferenceDocType, &d.ReferenceDocSeries, &d.ReferenceDocCorrelative,
 		&d.CreditDebitReasonCode, &d.CreditDebitReasonDesc,
-		&d.SunatResponseCode, &d.SunatResponseDescription, &d.SunatTicket,
+		&d.SunatResponseCode, &d.SunatResponseDescription, &d.SunatTicket, &observationsRaw,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
 		&d.QrData,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
@@ -66,6 +66,11 @@ func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
 	if len(cuotasRaw) > 0 {
 		if err := json.Unmarshal(cuotasRaw, &d.Cuotas); err != nil {
 			return fmt.Errorf("unmarshal cuotas: %w", err)
+		}
+	}
+	if len(observationsRaw) > 0 {
+		if err := json.Unmarshal(observationsRaw, &d.SunatObservations); err != nil {
+			return fmt.Errorf("unmarshal sunat_observations: %w", err)
 		}
 	}
 	return nil
@@ -163,6 +168,7 @@ type IssuedDocumentResult struct {
 	Status                   string
 	SunatResponseCode        *string
 	SunatResponseDescription *string
+	SunatObservations        []model.Observation
 	R2XmlKey                 *string
 	R2SignedXmlKey           *string
 	R2ZipKey                 *string
@@ -190,6 +196,13 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 		}
 		if res.SunatResponseDescription != nil {
 			add("sunat_response_description", *res.SunatResponseDescription)
+		}
+		if len(res.SunatObservations) > 0 {
+			obsJSON, err := json.Marshal(res.SunatObservations)
+			if err != nil {
+				return fmt.Errorf("marshal sunat_observations: %w", err)
+			}
+			add("sunat_observations", obsJSON)
 		}
 		if res.R2XmlKey != nil {
 			add("r2_xml_key", *res.R2XmlKey)

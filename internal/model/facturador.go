@@ -59,9 +59,10 @@ type IssuedDocument struct {
 	CreditDebitReasonCode   *string `json:"creditDebitReasonCode"`
 	CreditDebitReasonDesc   *string `json:"creditDebitReasonDesc"`
 
-	SunatResponseCode        *string `json:"sunatResponseCode"`
-	SunatResponseDescription *string `json:"sunatResponseDescription"`
-	SunatTicket              *string `json:"sunatTicket"`
+	SunatResponseCode        *string       `json:"sunatResponseCode"`
+	SunatResponseDescription *string       `json:"sunatResponseDescription"`
+	SunatTicket              *string       `json:"sunatTicket"`
+	SunatObservations        []Observation `json:"sunatObservations,omitempty"`
 
 	R2XmlKey       *string `json:"r2XmlKey"`
 	R2SignedXmlKey *string `json:"r2SignedXmlKey"`

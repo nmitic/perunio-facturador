@@ -257,6 +257,25 @@ func derefString(s *string, fallback string) string {
 	return *s
 }
 
+// parseCDRNotes converts raw CDR note strings (e.g. "4319 - Descripcion")
+// into structured Observation values.
+func parseCDRNotes(notes []string) []model.Observation {
+	if len(notes) == 0 {
+		return nil
+	}
+	obs := make([]model.Observation, 0, len(notes))
+	for _, n := range notes {
+		code, msg, _ := strings.Cut(n, " - ")
+		if msg == "" {
+			// No separator found — treat the whole string as the message.
+			obs = append(obs, model.Observation{Code: "", Message: n})
+		} else {
+			obs = append(obs, model.Observation{Code: strings.TrimSpace(code), Message: strings.TrimSpace(msg)})
+		}
+	}
+	return obs
+}
+
 // issueDocumentPipelineHandler runs the full issue pipeline against a draft
 // issued_documents row loaded from the DB. This replaces the legacy stateless
 // POST /api/v1/documents/issue endpoint.
@@ -431,9 +450,10 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// 6. Update the DB row with the pipeline outcome.
+	observations := parseCDRNotes(parsedCDR.Notes)
 	status := "rejected"
 	if parsedCDR.Accepted {
-		if len(parsedCDR.Notes) > 0 {
+		if len(observations) > 0 {
 			status = "accepted_with_observations"
 		} else {
 			status = "accepted"
@@ -444,6 +464,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		Status:                   status,
 		SunatResponseCode:        &parsedCDR.ResponseCode,
 		SunatResponseDescription: &parsedCDR.Description,
+		SunatObservations:        observations,
 		R2SignedXmlKey:           &signedKey,
 		R2ZipKey:                 &zipKey,
 		R2CdrKey:                 &cdrKey,
