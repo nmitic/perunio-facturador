@@ -366,4 +366,172 @@ func TestBuildDocumentXML_Gratuito(t *testing.T) {
 		is.True(t, strings.Contains(xml, "<cbc:Percent>18.00</cbc:Percent>"),
 			"gravado-gratuito must declare Percent=18.00 (rule 3103)")
 	})
+
+	t.Run("gravado-gratuito (11) emits PricingReference with PriceTypeCode=02 and AdditionalMonetaryTotal 1004 (SUNAT fault 2028)", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "with_gratuito",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "118.00",
+			TaxExemptionReasonCode: "11",
+			IGVAmount:              "18.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		}}
+		req.Subtotal = "0.00"
+		req.TotalIGV = "0.00"
+		req.TotalISC = "0.00"
+		req.TotalAmount = "0.00"
+		req.TaxInclusiveAmount = "0.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1"`),
+			"sac namespace must be declared on root")
+		is.True(t, strings.Contains(xml, "<cac:AlternativeConditionPrice>"),
+			"gratuito line must emit cac:AlternativeConditionPrice (SUNAT fault 2028)")
+		is.True(t, strings.Contains(xml, `<cbc:PriceAmount currencyID="PEN">118.00</cbc:PriceAmount>`),
+			"AlternativeConditionPrice must carry the IGV-inclusive referential price 118.00")
+		is.True(t, strings.Contains(xml, ">02</cbc:PriceTypeCode>"),
+			"PriceTypeCode must be 02 (referencial gratuita) on gratuito lines")
+		is.True(t, strings.Contains(xml, "<sac:AdditionalMonetaryTotal>"),
+			"document must emit sac:AdditionalMonetaryTotal when gratuito lines exist")
+		is.True(t, strings.Contains(xml, "<cbc:ID>1004</cbc:ID>"),
+			"AdditionalMonetaryTotal ID must be 1004 (total gratuito)")
+		// SUNAT XSD requires sac:AdditionalMonetaryTotal to live inside
+		// ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sac:AdditionalInformation,
+		// NOT as a sibling of cac:LegalMonetaryTotal (fault soap-env:Client.0306,
+		// "cvc-particle 2.1: ... next item should be cac:InvoiceLine").
+		is.True(t, strings.Contains(xml, "<sac:AdditionalInformation>"),
+			"AdditionalMonetaryTotal must be wrapped in sac:AdditionalInformation")
+		amtIdx := strings.Index(xml, "<sac:AdditionalMonetaryTotal>")
+		linesIdx := strings.Index(xml, "<cac:InvoiceLine>")
+		extEnd := strings.Index(xml, "</ext:UBLExtensions>")
+		is.True(t, amtIdx > 0 && extEnd > 0 && amtIdx < extEnd,
+			"AdditionalMonetaryTotal must appear inside ext:UBLExtensions")
+		is.True(t, linesIdx > extEnd,
+			"InvoiceLine must come after ext:UBLExtensions, with no sac:AdditionalMonetaryTotal between LegalMonetaryTotal and InvoiceLine")
+		// LegalMonetaryTotal/PayableAmount must remain 0 (the free amount is in 1004).
+		is.True(t, strings.Contains(xml, "<cbc:PayableAmount currencyID=\"PEN\">100.00</cbc:PayableAmount>"),
+			"AdditionalMonetaryTotal/PayableAmount must equal the IGV-exclusive referential base 100.00")
+	})
+
+	t.Run("exonerado-gratuito (21) aggregates UnitPriceWithTax×Qty into AdditionalMonetaryTotal 1004", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "muestra exonerada",
+			Quantity:               "2",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "50.00",
+			TaxExemptionReasonCode: "21",
+			IGVAmount:              "0.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		}}
+		req.Subtotal = "0.00"
+		req.TotalIGV = "0.00"
+		req.TotalISC = "0.00"
+		req.TotalAmount = "0.00"
+		req.TaxInclusiveAmount = "0.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, "<cac:AlternativeConditionPrice>"),
+			"exonerado-gratuito line must also emit AlternativeConditionPrice")
+		is.True(t, strings.Contains(xml, "<sac:AdditionalMonetaryTotal>"),
+			"AdditionalMonetaryTotal must be emitted for exonerado-gratuito")
+		// 50 × 2 = 100, IGV=0, so total free base = 100.00.
+		is.True(t, strings.Contains(xml,
+			"<sac:AdditionalMonetaryTotal><cbc:ID>1004</cbc:ID><cbc:PayableAmount currencyID=\"PEN\">100.00</cbc:PayableAmount></sac:AdditionalMonetaryTotal>"),
+			"AdditionalMonetaryTotal must total 100.00 (UnitPriceWithTax×Qty for exonerado)")
+	})
+
+	t.Run("inafecto-gratuito (31) aggregates UnitPriceWithTax×Qty into AdditionalMonetaryTotal 1004", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "donacion inafecta",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "75.00",
+			TaxExemptionReasonCode: "31",
+			IGVAmount:              "0.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		}}
+		req.Subtotal = "0.00"
+		req.TotalIGV = "0.00"
+		req.TotalISC = "0.00"
+		req.TotalAmount = "0.00"
+		req.TaxInclusiveAmount = "0.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml,
+			"<sac:AdditionalMonetaryTotal><cbc:ID>1004</cbc:ID><cbc:PayableAmount currencyID=\"PEN\">75.00</cbc:PayableAmount></sac:AdditionalMonetaryTotal>"),
+			"AdditionalMonetaryTotal must total 75.00 for inafecto-gratuito")
+	})
+
+	t.Run("mixed onerosa+gratuito: AdditionalMonetaryTotal contains only the gratuito base", func(t *testing.T) {
+		req := newTestInvoice() // onerosa line: 1000 base, 180 IGV
+		req.Items = append(req.Items, model.LineItem{
+			LineNumber:             2,
+			Description:            "MUESTRA",
+			Quantity:               "1",
+			UnitCode:               "NIU",
+			UnitPrice:              "0.00",
+			UnitPriceWithTax:       "59.00",
+			TaxExemptionReasonCode: "11",
+			IGVAmount:              "9.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "0.00",
+			LineTotal:              "0.00",
+			PriceTypeCode:          "02",
+		})
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// Onerosa line still emits its own PriceTypeCode=01 PricingReference.
+		is.True(t, strings.Contains(xml, ">01</cbc:PriceTypeCode>"),
+			"onerosa line must keep PriceTypeCode=01")
+		is.True(t, strings.Contains(xml, ">02</cbc:PriceTypeCode>"),
+			"gratuito line must emit PriceTypeCode=02")
+		// 59 - 9 = 50 from the gratuito line; onerosa contributes nothing.
+		is.True(t, strings.Contains(xml,
+			"<sac:AdditionalMonetaryTotal><cbc:ID>1004</cbc:ID><cbc:PayableAmount currencyID=\"PEN\">50.00</cbc:PayableAmount></sac:AdditionalMonetaryTotal>"),
+			"AdditionalMonetaryTotal must aggregate only gratuito lines (50.00)")
+		// LegalMonetaryTotal/PayableAmount stays at the onerosa total.
+		is.True(t, strings.Contains(xml, "<cbc:PayableAmount currencyID=\"PEN\">1180.00</cbc:PayableAmount>"),
+			"LegalMonetaryTotal/PayableAmount must reflect only the onerosa total")
+	})
+
+	t.Run("pure onerosa invoice does not emit AdditionalMonetaryTotal", func(t *testing.T) {
+		req := newTestInvoice()
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, !strings.Contains(xml, "<sac:AdditionalMonetaryTotal"),
+			"non-gratuito invoices must not emit sac:AdditionalMonetaryTotal")
+	})
 }

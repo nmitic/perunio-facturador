@@ -21,6 +21,7 @@ type Company struct {
 	TenantID              string
 	RUC                   string
 	CompanyName           string
+	FiscalAddress         string
 	Username              *string
 	EncryptedPassword     *string
 	EncryptedClientID     *string
@@ -38,7 +39,9 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 	var c *Company
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, `
-			SELECT id, tenant_id, ruc, COALESCE(company_name, ''), username, password,
+			SELECT id, tenant_id, ruc, COALESCE(company_name, ''),
+			       COALESCE(fiscal_address, ''),
+			       username, password,
 			       client_id, client_secret,
 			       COALESCE(is_active, true),
 			       COALESCE(sunat_environment::text, 'beta')
@@ -48,6 +51,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 		`, companyID)
 		var got Company
 		if err := row.Scan(&got.ID, &got.TenantID, &got.RUC, &got.CompanyName,
+			&got.FiscalAddress,
 			&got.Username, &got.EncryptedPassword,
 			&got.EncryptedClientID, &got.EncryptedClientSecret,
 			&got.IsActive, &got.SunatEnvironment); err != nil {
@@ -62,24 +66,3 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 	return c, err
 }
 
-// GetFiscalAddressByRUC looks up a RUC in the public ssco_entries table and
-// returns its registered fiscal address. Returns an empty string when not
-// found — the caller should fall back to a placeholder so the pipeline can
-// still run during onboarding. ssco_entries is a public/global table so no
-// tenant context is required.
-func (p *Pool) GetFiscalAddressByRUC(ctx context.Context, ruc string) (string, error) {
-	var address string
-	err := p.pool.QueryRow(ctx, `
-		SELECT COALESCE(domicilio_fiscal, '')
-		FROM ssco_entries
-		WHERE ruc = $1
-		LIMIT 1
-	`, ruc).Scan(&address)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", err
-	}
-	return address, nil
-}

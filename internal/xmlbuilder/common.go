@@ -21,9 +21,21 @@ type ublExtension struct {
 	ExtensionContent extensionContent `xml:"ext:ExtensionContent"`
 }
 
-// extensionContent holds the XMLDSig template that xmlsec1 will fill.
+// extensionContent is the body of an ext:UBLExtension. SUNAT uses two kinds:
+// (1) sac:AdditionalInformation — carries AdditionalMonetaryTotals (e.g.
+// ID=1004 for total gratuito) and AdditionalProperties.
+// (2) ds:Signature — XMLDSig template that xmlsec1 fills in.
+// Both fields are optional; an extension carries exactly one of them.
 type extensionContent struct {
-	Signature dsSignatureTemplate `xml:"ds:Signature"`
+	AdditionalInformation *sacAdditionalInformation `xml:"sac:AdditionalInformation,omitempty"`
+	Signature             *dsSignatureTemplate      `xml:"ds:Signature,omitempty"`
+}
+
+// sacAdditionalInformation is the SUNAT extension wrapper that holds
+// AdditionalMonetaryTotals (and, in future, AdditionalProperties).
+type sacAdditionalInformation struct {
+	XMLName                  xml.Name                  `xml:"sac:AdditionalInformation"`
+	AdditionalMonetaryTotals []additionalMonetaryTotal `xml:",omitempty"`
 }
 
 type dsSignatureTemplate struct {
@@ -65,7 +77,7 @@ type dsX509Data struct {
 
 func newExtensionContent() extensionContent {
 	return extensionContent{
-		Signature: dsSignatureTemplate{
+		Signature: &dsSignatureTemplate{
 			XMLNS_DS: nsDS,
 			Id:       signatureID,
 			SignedInfo: dsSignedInfo{
@@ -255,6 +267,14 @@ type legalMonetaryTotal struct {
 	AllowanceTotalAmount *currencyAmount `xml:"cbc:AllowanceTotalAmount,omitempty"`
 	ChargeTotalAmount    *currencyAmount `xml:"cbc:ChargeTotalAmount,omitempty"`
 	PayableAmount        currencyAmount  `xml:"cbc:PayableAmount"`
+}
+
+// additionalMonetaryTotal represents sac:AdditionalMonetaryTotal. Used to
+// declare the total referential value of operaciones gratuitas (ID=1004).
+type additionalMonetaryTotal struct {
+	XMLName       xml.Name       `xml:"sac:AdditionalMonetaryTotal"`
+	ID            string         `xml:"cbc:ID"`
+	PayableAmount currencyAmount `xml:"cbc:PayableAmount"`
 }
 
 // invoiceLine represents a single line item (for Invoice).

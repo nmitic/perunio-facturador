@@ -319,9 +319,10 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	}
 	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
-	// 3. Fiscal address from the public SSCO table, falling back to a
-	// placeholder so SUNAT doesn't reject the invoice during onboarding.
-	address, _ := s.pool.GetFiscalAddressByRUC(r.Context(), deps.company.RUC)
+	// 3. Fiscal address from the company row (populated during onboarding from
+	// the SUNAT RUC scrape), falling back to a placeholder when missing so the
+	// pipeline still runs and SUNAT doesn't reject the invoice.
+	address := deps.company.FiscalAddress
 	if address == "" {
 		address = "-"
 	}

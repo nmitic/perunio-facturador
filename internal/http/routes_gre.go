@@ -530,7 +530,7 @@ func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
-	address, _ := s.pool.GetFiscalAddressByRUC(r.Context(), deps.company.RUC)
+	address := deps.company.FiscalAddress
 	if address == "" {
 		address = "-"
 	}

@@ -59,29 +59,30 @@ func isGravadoGratuitoCode(code string) bool {
 
 // invoice is the UBL 2.1 Invoice XML root element.
 type invoice struct {
-	XMLName              xml.Name `xml:"Invoice"`
-	XMLNS                string   `xml:"xmlns,attr"`
-	XMLNSCAC             string   `xml:"xmlns:cac,attr"`
-	XMLNSCBC             string   `xml:"xmlns:cbc,attr"`
-	XMLNSEXT             string   `xml:"xmlns:ext,attr"`
-	XMLNSDS              string   `xml:"xmlns:ds,attr"`
-	UBLExtensions        ublExtensions
-	UBLVersionID         string `xml:"cbc:UBLVersionID"`
-	CustomizationID      string `xml:"cbc:CustomizationID"`
-	ProfileID            profileIDElement
-	ID                   string `xml:"cbc:ID"`
-	IssueDate            string `xml:"cbc:IssueDate"`
-	IssueTime            string `xml:"cbc:IssueTime,omitempty"`
-	InvoiceTypeCode      invoiceTypeCode
-	Notes                []noteElement
-	DocumentCurrencyCode documentCurrencyCode
-	Signature            cacSignature
-	SupplierParty        accountingSupplierParty
-	CustomerParty        accountingCustomerParty
-	PaymentTerms         []paymentTerms
-	TaxTotal             taxTotal
-	LegalMonetaryTotal   legalMonetaryTotal
-	InvoiceLines         []invoiceLine
+	XMLName                  xml.Name `xml:"Invoice"`
+	XMLNS                    string   `xml:"xmlns,attr"`
+	XMLNSCAC                 string   `xml:"xmlns:cac,attr"`
+	XMLNSCBC                 string   `xml:"xmlns:cbc,attr"`
+	XMLNSEXT                 string   `xml:"xmlns:ext,attr"`
+	XMLNSSAC                 string   `xml:"xmlns:sac,attr"`
+	XMLNSDS                  string   `xml:"xmlns:ds,attr"`
+	UBLExtensions            ublExtensions
+	UBLVersionID             string `xml:"cbc:UBLVersionID"`
+	CustomizationID          string `xml:"cbc:CustomizationID"`
+	ProfileID                profileIDElement
+	ID                       string `xml:"cbc:ID"`
+	IssueDate                string `xml:"cbc:IssueDate"`
+	IssueTime                string `xml:"cbc:IssueTime,omitempty"`
+	InvoiceTypeCode          invoiceTypeCode
+	Notes                    []noteElement
+	DocumentCurrencyCode     documentCurrencyCode
+	Signature                cacSignature
+	SupplierParty            accountingSupplierParty
+	CustomerParty            accountingCustomerParty
+	PaymentTerms             []paymentTerms
+	TaxTotal                 taxTotal
+	LegalMonetaryTotal       legalMonetaryTotal
+	InvoiceLines             []invoiceLine
 }
 
 // buildInvoiceXML creates UBL 2.1 Invoice XML bytes from an issue request.
@@ -93,10 +94,11 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		XMLNSCAC: NSCAC,
 		XMLNSCBC: NSCBC,
 		XMLNSEXT: NSEXT,
+		XMLNSSAC: NSSAC,
 		XMLNSDS:  NSDS,
 
 		UBLExtensions: ublExtensions{
-			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
+			Extension: buildInvoiceExtensions(req),
 		},
 
 		UBLVersionID:    UBLVersion21,
@@ -358,10 +360,10 @@ var validPriceTypeCodes = map[string]struct{}{
 }
 
 func buildPricingReference(li model.LineItem, cur string) (*pricingReference, error) {
-	// Gratuito lines omit cac:PricingReference entirely.
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
-		return nil, nil
-	}
+	// SUNAT requires cac:PricingReference / cac:AlternativeConditionPrice on
+	// every line, including gratuito (fault 2028 fires otherwise). For
+	// gratuito lines the PriceTypeCode is "02" (referencial) and the
+	// PriceAmount is the IGV-inclusive referential value.
 	if _, ok := validPriceTypeCodes[li.PriceTypeCode]; !ok {
 		return nil, fmt.Errorf("xmlbuilder: line %d has invalid Cat.16 PriceTypeCode %q", li.LineNumber, li.PriceTypeCode)
 	}
@@ -376,6 +378,57 @@ func buildPricingReference(li model.LineItem, cur string) (*pricingReference, er
 			},
 		}},
 	}, nil
+}
+
+// gratuitoReferentialBase returns the IGV-exclusive referential base for a
+// gratuito line: (UnitPriceWithTax × Quantity) − IGVAmount. For exonerado
+// (21) and inafecto (31-37) gratuito codes IGVAmount is 0, so the formula
+// degenerates to UnitPriceWithTax × Quantity. This is the value SUNAT expects
+// in cac:TaxSubtotal/cbc:TaxableAmount and aggregated into
+// sac:AdditionalMonetaryTotal ID=1004.
+func gratuitoReferentialBase(li model.LineItem) float64 {
+	gross := parseDecimal(li.UnitPriceWithTax) * parseDecimal(li.Quantity)
+	return gross - parseDecimal(li.IGVAmount)
+}
+
+// buildAdditionalMonetaryTotals emits sac:AdditionalMonetaryTotal entries.
+// Currently only ID=1004 (total valor referencial of operaciones gratuitas)
+// is produced, when the document contains at least one gratuito line. SUNAT
+// requires this block to interpret invoices whose LegalMonetaryTotal is zero
+// but whose lines carry referential value (transferencia gratuita).
+func buildAdditionalMonetaryTotals(req model.IssueRequest) []additionalMonetaryTotal {
+	var totalFreeBase float64
+	for _, li := range req.Items {
+		if isGratuitoCode(li.TaxExemptionReasonCode) {
+			totalFreeBase += gratuitoReferentialBase(li)
+		}
+	}
+	if totalFreeBase == 0 {
+		return nil
+	}
+	return []additionalMonetaryTotal{{
+		ID:            "1004",
+		PayableAmount: newCurrencyAmount(formatDecimal(totalFreeBase), req.CurrencyCode),
+	}}
+}
+
+// buildInvoiceExtensions returns the ext:UBLExtension list for an Invoice.
+// SUNAT places sac:AdditionalInformation (with AdditionalMonetaryTotals such
+// as ID=1004 for gratuito) inside its own ext:UBLExtension, separate from the
+// XMLDSig signature extension. The signature extension is always last.
+func buildInvoiceExtensions(req model.IssueRequest) []ublExtension {
+	var exts []ublExtension
+	if amts := buildAdditionalMonetaryTotals(req); len(amts) > 0 {
+		exts = append(exts, ublExtension{
+			ExtensionContent: extensionContent{
+				AdditionalInformation: &sacAdditionalInformation{
+					AdditionalMonetaryTotals: amts,
+				},
+			},
+		})
+	}
+	exts = append(exts, ublExtension{ExtensionContent: newExtensionContent()})
+	return exts
 }
 
 func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
@@ -397,8 +450,7 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	//   - exonerado-/inafecto-gratuito (21, 31-37): both 0.00.
 	if isGratuitoCode(li.TaxExemptionReasonCode) {
 		if isGravadoGratuitoCode(li.TaxExemptionReasonCode) {
-			gross := parseDecimal(li.UnitPriceWithTax) * parseDecimal(li.Quantity)
-			taxableAmount = formatDecimal(gross - parseDecimal(li.IGVAmount))
+			taxableAmount = formatDecimal(gratuitoReferentialBase(li))
 			taxAmount = li.IGVAmount
 		} else {
 			taxableAmount = "0.00"
@@ -480,7 +532,7 @@ func newLineTaxCategory(exemptionReasonCode string, ts model.TaxSchemeType) taxC
 		tc.TaxExemptionReasonCode = &taxExemptionCode{
 			Value:          exemptionReasonCode,
 			ListAgencyName: "PE:SUNAT",
-			ListName:       "Tipo de Afectacion del IGV",
+			ListName:       "Afectacion del IGV",
 			ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07",
 		}
 	}
