@@ -17,7 +17,6 @@ import (
 	facturadorCrypto "github.com/perunio/perunio-facturador/internal/crypto"
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/model"
-	"github.com/perunio/perunio-facturador/internal/pdf"
 	"github.com/perunio/perunio-facturador/internal/r2"
 	"github.com/perunio/perunio-facturador/internal/signature"
 	"github.com/perunio/perunio-facturador/internal/soap"
@@ -331,8 +330,6 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	// the same pure functions the old stateless handler used.
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address)
 	issueReq.Environment = env
-	issueReq.BrandColor = deps.company.BrandColor
-	issueReq.LogoBase64 = deps.company.LogoBase64
 
 	// Pre-submission validation — fail fast before calling SUNAT.
 	if vErrs := validation.Validate(issueReq); len(vErrs) > 0 {
@@ -408,18 +405,12 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// Build QR data (same format the legacy handler used).
+	// Build QR data (rendered client-side from this string when the user downloads the PDF).
 	digestVal, _ := signature.DigestValue(signedXML)
 	qrData := fmt.Sprintf("%s|%s|%s|%08d|%s|%s|%s|%s|%s|%s|",
 		issueReq.SupplierRUC, issueReq.DocType, issueReq.Series, issueReq.Correlative,
 		issueReq.TotalIGV, issueReq.TotalAmount, issueReq.IssueDate,
 		issueReq.CustomerDocType, issueReq.CustomerDocNumber, digestVal)
-
-	// PDF is non-fatal — persist the document even if PDF generation fails.
-	pdfBytes, pdfErr := pdf.Generate(issueReq, qrData)
-	if pdfErr != nil {
-		s.log.Warn("generate pdf", "error", pdfErr, "docId", docID)
-	}
 
 	// 5. Upload artifacts to R2 under the canonical documents/{tenantId}/...
 	// layout. Failures here are fatal — the DB row must not claim R2 keys
@@ -442,15 +433,6 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", err.Error())
 		return
 	}
-	var pdfKey *string
-	if pdfBytes != nil {
-		k := r2.DocumentKey(deps.tenantID, companyID, docID, r2.FilePDF)
-		if err := s.r2.UploadDocumentFile(r.Context(), k, r2.FilePDF, pdfBytes); err != nil {
-			s.log.Warn("upload pdf", "error", err, "key", k)
-		} else {
-			pdfKey = &k
-		}
-	}
 
 	// 6. Update the DB row with the pipeline outcome.
 	observations := parseCDRNotes(parsedCDR.Notes)
@@ -471,7 +453,6 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 		R2SignedXmlKey:           &signedKey,
 		R2ZipKey:                 &zipKey,
 		R2CdrKey:                 &cdrKey,
-		R2PdfKey:                 pdfKey,
 		QRData:                   &qrData,
 		MarkSent:                 true,
 		MarkAccepted:             parsedCDR.Accepted,

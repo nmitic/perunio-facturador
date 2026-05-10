@@ -504,8 +504,6 @@ func (s *server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 		r2Key = doc.R2ZipKey
 	case "cdr":
 		r2Key = doc.R2CdrKey
-	case "pdf":
-		r2Key = doc.R2PdfKey
 	default:
 		writeError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", "Tipo de archivo inválido")
 		return

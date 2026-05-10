@@ -61,11 +61,6 @@ type IssueRequest struct {
 	SunatUsername string `json:"sunatUsername"`
 	SunatPassword string `json:"sunatPassword"`
 	Environment   string `json:"environment"` // "beta" or "production"
-
-	// PDF branding (read from companies.brand_color / companies.logo_base64).
-	// Empty values trigger the generator's default styling.
-	BrandColor string `json:"brandColor,omitempty"` // "#RRGGBB"
-	LogoBase64 string `json:"logoBase64,omitempty"` // "data:image/png;base64,..."
 }
 
 // CuotaCredito is one installment in a credit-sale invoice.
