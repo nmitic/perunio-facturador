@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +12,53 @@ import (
 
 	"github.com/perunio/perunio-facturador/internal/model"
 )
+
+// defaultBrandRGB is the slate (#1F2937) used when a company hasn't picked
+// a brand color, so unbranded PDFs still look intentional rather than ugly.
+var defaultBrandRGB = [3]int{31, 41, 55}
+
+// parseHexColor decodes "#RRGGBB" into 0-255 RGB triplet. Returns
+// defaultBrandRGB on any parse failure so callers don't need fallback logic.
+func parseHexColor(hex string) (int, int, int) {
+	hex = strings.TrimSpace(hex)
+	if len(hex) != 7 || hex[0] != '#' {
+		return defaultBrandRGB[0], defaultBrandRGB[1], defaultBrandRGB[2]
+	}
+	v, err := strconv.ParseUint(hex[1:], 16, 32)
+	if err != nil {
+		return defaultBrandRGB[0], defaultBrandRGB[1], defaultBrandRGB[2]
+	}
+	return int((v >> 16) & 0xFF), int((v >> 8) & 0xFF), int(v & 0xFF)
+}
+
+// decodeLogoDataURI splits "data:image/<png|jpeg>;base64,<payload>" and
+// returns (bytes, fpdf-image-type, ok). Anything else returns ok=false.
+func decodeLogoDataURI(s string) ([]byte, string, bool) {
+	const prefix = "data:image/"
+	if !strings.HasPrefix(s, prefix) {
+		return nil, "", false
+	}
+	semi := strings.Index(s, ";")
+	comma := strings.Index(s, ",")
+	if semi < 0 || comma < 0 || comma < semi {
+		return nil, "", false
+	}
+	mime := strings.ToLower(s[len(prefix):semi])
+	var imgType string
+	switch mime {
+	case "png":
+		imgType = "PNG"
+	case "jpeg", "jpg":
+		imgType = "JPG"
+	default:
+		return nil, "", false
+	}
+	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if err != nil || len(raw) == 0 {
+		return nil, "", false
+	}
+	return raw, imgType, true
+}
 
 // isGratuitoCat07 reports whether a Cat.07 affectation code is gratuito
 // (transferencia/retiro a título gratuito): 11-16, 21, 31-37.
@@ -71,40 +119,68 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 	pdf.SetAutoPageBreak(true, 15)
 	pdf.AddPage()
 
+	br, bg, bb := parseHexColor(req.BrandColor)
+
 	// Document type title
 	docTitle := documentTitle(req.DocType)
 	docID := fmt.Sprintf("%s-%08d", req.Series, req.Correlative)
 
-	// Header: Company info (left) + Document box (right)
-	pdf.SetFont("Helvetica", "B", 11)
-	pdf.Cell(100, 6, req.SupplierName)
-	pdf.Ln(6)
-	pdf.SetFont("Helvetica", "", 9)
-	pdf.Cell(100, 5, fmt.Sprintf("RUC: %s", req.SupplierRUC))
-	pdf.Ln(5)
-	if req.SupplierAddress != "" {
-		pdf.Cell(100, 5, req.SupplierAddress)
-		pdf.Ln(5)
+	// === Header band: full-width brand-coloured stripe with logo (left),
+	// company info (centre), and document box (right). ===
+	const headerH = 34.0
+	pdf.SetFillColor(br, bg, bb)
+	pdf.Rect(0, 0, 210, headerH, "F")
+
+	// Logo (optional). Aspect-fit into a 24x24mm slot at the top-left.
+	textX := 10.0
+	if logoBytes, imgType, ok := decodeLogoDataURI(req.LogoBase64); ok {
+		opts := fpdf.ImageOptions{ImageType: imgType}
+		pdf.RegisterImageOptionsReader("brand_logo", opts, bytes.NewReader(logoBytes))
+		// Height-constrained; fpdf preserves aspect when one of w/h is 0.
+		pdf.ImageOptions("brand_logo", 8, 5, 0, 24, false, opts, 0, "")
+		textX = 38
 	}
 
-	// Document box (right side)
-	pdf.SetXY(120, 10)
-	pdf.SetFont("Helvetica", "B", 10)
-	pdf.SetFillColor(240, 240, 240)
-	pdf.Rect(115, 8, 80, 25, "FD")
-	pdf.SetXY(115, 10)
-	pdf.CellFormat(80, 6, fmt.Sprintf("RUC: %s", req.SupplierRUC), "", 0, "C", false, 0, "")
-	pdf.SetXY(115, 17)
-	pdf.CellFormat(80, 6, docTitle, "", 0, "C", false, 0, "")
-	pdf.SetXY(115, 24)
-	pdf.CellFormat(80, 6, docID, "", 0, "C", false, 0, "")
-
-	pdf.SetY(42)
-
-	// Customer info
+	// Company info on the band (white text).
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetXY(textX, 7)
+	pdf.SetFont("Helvetica", "B", 12)
+	pdf.CellFormat(80, 6, truncate(req.SupplierName, 40), "", 0, "L", false, 0, "")
+	pdf.SetXY(textX, 14)
 	pdf.SetFont("Helvetica", "", 9)
-	pdf.SetFillColor(245, 245, 245)
+	pdf.CellFormat(80, 5, fmt.Sprintf("RUC: %s", req.SupplierRUC), "", 0, "L", false, 0, "")
+	if req.SupplierAddress != "" {
+		pdf.SetXY(textX, 20)
+		pdf.CellFormat(110, 5, truncate(req.SupplierAddress, 70), "", 0, "L", false, 0, "")
+	}
+
+	// Document box on the right: white card with brand-coloured text.
+	pdf.SetFillColor(255, 255, 255)
+	pdf.SetDrawColor(255, 255, 255)
+	pdf.Rect(140, 5, 65, 24, "F")
+	pdf.SetTextColor(br, bg, bb)
+	pdf.SetXY(140, 7)
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(65, 5, fmt.Sprintf("RUC: %s", req.SupplierRUC), "", 0, "C", false, 0, "")
+	pdf.SetXY(140, 13)
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(65, 5, docTitle, "", 0, "C", false, 0, "")
+	pdf.SetXY(140, 20)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(65, 6, docID, "", 0, "C", false, 0, "")
+
+	// Reset text/draw colours for the body.
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetY(headerH + 6)
+
+	// Customer info — section header in brand color.
+	pdf.SetFillColor(br, bg, bb)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 9)
 	pdf.CellFormat(190, 6, "DATOS DEL CLIENTE", "1", 1, "L", true, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFont("Helvetica", "", 9)
 	customerRow(pdf, "Cliente", req.CustomerName)
 	customerRow(pdf, "Documento", fmt.Sprintf("%s: %s", docTypeLabel(req.CustomerDocType), req.CustomerDocNumber))
 	if req.CustomerAddress != "" {
@@ -129,7 +205,7 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 
 	// Items table — column widths sum to 190mm (page width minus 20mm margins).
 	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetFillColor(50, 50, 50)
+	pdf.SetFillColor(br, bg, bb)
 	pdf.SetTextColor(255, 255, 255)
 	var colWidths []float64
 	var headers []string
@@ -237,8 +313,15 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 	if sumGrat > 0 {
 		totalRow(pdf, totalsX, "Total Gratuita", req.CurrencyCode, formatMoney(sumGrat))
 	}
-	pdf.SetFont("Helvetica", "B", 10)
-	totalRow(pdf, totalsX, "TOTAL", req.CurrencyCode, req.TotalAmount)
+	// TOTAL row — brand-filled bar with white bold text.
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetFillColor(br, bg, bb)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetX(totalsX)
+	pdf.CellFormat(30, 8, "TOTAL", "", 0, "L", true, 0, "")
+	pdf.CellFormat(30, 8, fmt.Sprintf("%s %s", req.CurrencyCode, req.TotalAmount), "", 1, "R", true, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFillColor(255, 255, 255)
 	if hasGratuito {
 		pdf.Ln(2)
 		pdf.SetFont("Helvetica", "I", 7)
@@ -259,7 +342,7 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 	pdf.Ln(6)
 	if formaPagoLabel == "Credito" && len(req.Cuotas) > 0 {
 		pdf.SetFont("Helvetica", "B", 8)
-		pdf.SetFillColor(50, 50, 50)
+		pdf.SetFillColor(br, bg, bb)
 		pdf.SetTextColor(255, 255, 255)
 		cuotaCols := []float64{20, 40, 50}
 		cuotaHdr := []string{"Cuota", "Vencimiento", "Monto"}
@@ -299,8 +382,14 @@ func Generate(req model.IssueRequest, qrData string) ([]byte, error) {
 		}
 	}
 
-	// Footer
-	pdf.SetY(-20)
+	// Footer — brand-coloured rule above the legal lines.
+	pdf.SetY(-22)
+	pdf.SetDrawColor(br, bg, bb)
+	pdf.SetLineWidth(0.6)
+	pdf.Line(10, pdf.GetY(), 200, pdf.GetY())
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetLineWidth(0.2)
+	pdf.SetY(-18)
 	pdf.SetFont("Helvetica", "I", 7)
 	pdf.Cell(190, 4, "Representacion impresa de la factura electronica")
 	pdf.Ln(4)

@@ -331,6 +331,8 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 	// the same pure functions the old stateless handler used.
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address)
 	issueReq.Environment = env
+	issueReq.BrandColor = deps.company.BrandColor
+	issueReq.LogoBase64 = deps.company.LogoBase64
 
 	// Pre-submission validation — fail fast before calling SUNAT.
 	if vErrs := validation.Validate(issueReq); len(vErrs) > 0 {

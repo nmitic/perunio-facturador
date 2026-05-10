@@ -31,6 +31,9 @@ type Company struct {
 	// issue pipeline uses when the request body omits it. Mirrors the
 	// `companies.sunat_environment` column on the shared Postgres DB.
 	SunatEnvironment string
+	// PDF branding — empty strings mean "no override; use defaults".
+	BrandColor string // "#RRGGBB"
+	LogoBase64 string // data URI ("data:image/png;base64,...")
 }
 
 // GetCompany loads the company + SUNAT credentials for the issue pipeline,
@@ -44,7 +47,9 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			       username, password,
 			       client_id, client_secret,
 			       COALESCE(is_active, true),
-			       COALESCE(sunat_environment::text, 'beta')
+			       COALESCE(sunat_environment::text, 'beta'),
+			       COALESCE(brand_color, ''),
+			       COALESCE(logo_base64, '')
 			FROM companies
 			WHERE id = $1
 			LIMIT 1
@@ -54,7 +59,8 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			&got.FiscalAddress,
 			&got.Username, &got.EncryptedPassword,
 			&got.EncryptedClientID, &got.EncryptedClientSecret,
-			&got.IsActive, &got.SunatEnvironment); err != nil {
+			&got.IsActive, &got.SunatEnvironment,
+			&got.BrandColor, &got.LogoBase64); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
