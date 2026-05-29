@@ -112,6 +112,31 @@ func TestBuildDocumentXML_Invoice(t *testing.T) {
 	})
 }
 
+func TestBuildDocumentXML_Boleta(t *testing.T) {
+	t.Run("should generate a boleta (03) for an anonymous consumidor final customer", func(t *testing.T) {
+		req := newTestInvoice()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
+		req.CustomerName = model.ConsumidorFinalName
+		req.CustomerAddress = ""
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+
+		xml := string(xmlBytes)
+
+		// Boleta document type code (Cat.01 = 03).
+		is.True(t, strings.Contains(xml, `>03</cbc:InvoiceTypeCode>`), "should carry boleta type code 03")
+		is.True(t, strings.Contains(xml, `<cbc:ID>B001-00000001</cbc:ID>`), "should have boleta document ID")
+
+		// Consumidor final customer: Cat.06 doc type 0, name CLIENTES VARIOS.
+		is.True(t, strings.Contains(xml, `schemeID="0"`), "should have consumidor final scheme ID 0")
+		is.True(t, strings.Contains(xml, model.ConsumidorFinalName), "should have consumidor final name")
+	})
+}
+
 func TestBuildDocumentXML_PaymentTerms(t *testing.T) {
 	t.Run("contado emits a single FormaPago/Contado entry", func(t *testing.T) {
 		req := newTestInvoice()

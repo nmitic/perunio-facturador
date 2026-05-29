@@ -185,14 +185,11 @@ func (b *createDocumentBody) validate() string {
 	if len(b.CurrencyCode) != 3 {
 		return "currencyCode inválido"
 	}
-	if b.CustomerDocType == "" || len(b.CustomerDocType) > 2 {
+	// Customer is optional at draft time: a boleta with no customer is defaulted
+	// to consumidor final when stored, and the issue-time validator is the real
+	// gate (facturas still require a RUC there). Only enforce format here.
+	if len(b.CustomerDocType) > 2 {
 		return "customerDocType inválido"
-	}
-	if b.CustomerDocNumber == "" {
-		return "customerDocNumber requerido"
-	}
-	if b.CustomerName == "" {
-		return "customerName requerido"
 	}
 	for _, f := range []struct {
 		name string

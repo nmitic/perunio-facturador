@@ -105,11 +105,14 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2801, Message: "customer DNI must be 8 digits", Field: "customerDocNumber"})
 	}
 
-	// Boleta > S/700: customer identity required
+	// Boleta > S/700: a real identity is required. Consumidor final
+	// (IdentityDocTribNoRUC) is only valid for boletas <= S/700, so reject it
+	// here too — otherwise the consumidor-final default could carry a
+	// high-value boleta through.
 	if req.DocType == model.DocTypeBoleta {
 		total, err := strconv.ParseFloat(req.TotalAmount, 64)
 		if err == nil && total > 700.00 {
-			if req.CustomerDocType == "" || req.CustomerDocNumber == "" {
+			if req.CustomerDocType == "" || req.CustomerDocType == model.IdentityDocTribNoRUC || req.CustomerDocNumber == "" {
 				errs = append(errs, model.ValidationError{Code: 2800, Message: "boleta > S/700 requires customer identity document", Field: "customerDocType"})
 			}
 		}

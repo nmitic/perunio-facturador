@@ -38,7 +38,7 @@ type SendBillResult struct {
 	ApplicationResponse []byte // Base64-decoded ZIP containing CDR
 }
 
-// SendBill sends a signed ZIP to SUNAT (sync, for Factura/NC/ND).
+// SendBill sends a signed ZIP to SUNAT (sync, for Factura/Boleta/NC/ND).
 func (c *Client) SendBill(username, password, filename string, zipContent []byte) (*SendBillResult, error) {
 	envelope := buildSendBillEnvelope(username, password, filename, zipContent)
 

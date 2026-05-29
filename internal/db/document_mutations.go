@@ -136,6 +136,16 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			return err
 		}
 
+		// Boleta with no customer supplied: default to consumidor final so a
+		// simple cash sale can be issued without an identified buyer. The
+		// > S/700 case is rejected later by validation, which forbids the
+		// consumidor-final doc type on high-value boletas.
+		if docType == model.DocTypeBoleta && in.CustomerDocType == "" {
+			in.CustomerDocType = model.IdentityDocTribNoRUC
+			in.CustomerDocNumber = model.ConsumidorFinalDocNumber
+			in.CustomerName = model.ConsumidorFinalName
+		}
+
 		// 2. Insert the document.
 		var cuotasJSON any
 		if in.Cuotas != nil {

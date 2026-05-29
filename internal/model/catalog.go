@@ -64,6 +64,14 @@ const (
 	IdentityNITE              = "E"
 )
 
+// Consumidor final is the anonymous buyer used on boletas with no identified
+// customer: Cat.06 doc type IdentityDocTribNoRUC ("0"), with this number and
+// name. Boletas > S/700 may not use it — they require a real DNI or RUC.
+const (
+	ConsumidorFinalDocNumber = "0"
+	ConsumidorFinalName      = "CLIENTES VARIOS"
+)
+
 // Cat07 — IGV Affectation Types
 const (
 	AffectGravadoOnerosa   = "10"

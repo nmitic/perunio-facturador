@@ -43,6 +43,27 @@ func newValidInvoice() model.IssueRequest {
 	}
 }
 
+// newBoletaUnder700 returns a valid boleta (03) for S/118 with a single line,
+// leaving the customer fields for the test to set.
+func newBoletaUnder700() model.IssueRequest {
+	req := newValidInvoice()
+	req.DocType = "03"
+	req.Series = "B001"
+	req.Subtotal = "100.00"
+	req.TotalIGV = "18.00"
+	req.TotalAmount = "118.00"
+	req.TaxInclusiveAmount = "118.00"
+	req.Items = []model.LineItem{
+		{
+			LineNumber: 1, Description: "PRODUCTO TEST", Quantity: "1",
+			UnitCode: "NIU", UnitPrice: "100.00", UnitPriceWithTax: "118.00",
+			TaxExemptionReasonCode: "10", IGVAmount: "18.00",
+			LineTotal: "100.00", PriceTypeCode: "01",
+		},
+	}
+	return req
+}
+
 func TestValidate(t *testing.T) {
 	t.Run("should pass for a valid factura", func(t *testing.T) {
 		errs := validation.Validate(newValidInvoice())
@@ -74,6 +95,49 @@ func TestValidate(t *testing.T) {
 		req.CustomerDocNumber = ""
 		errs := validation.Validate(req)
 		is.True(t, hasErrorCode(errs, 2800))
+	})
+
+	t.Run("should pass for a consumidor final boleta at or under 700", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
+		req.CustomerName = model.ConsumidorFinalName
+		errs := validation.Validate(req)
+		is.Equal(t, 0, len(errs))
+	})
+
+	t.Run("should fail when boleta over 700 uses consumidor final identity", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.Subtotal = "800.00"
+		req.TotalIGV = "144.00"
+		req.TotalAmount = "944.00"
+		req.TaxInclusiveAmount = "944.00"
+		req.Items[0].UnitPrice = "800.00"
+		req.Items[0].UnitPriceWithTax = "944.00"
+		req.Items[0].IGVAmount = "144.00"
+		req.Items[0].LineTotal = "800.00"
+		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
+		req.CustomerName = model.ConsumidorFinalName
+		errs := validation.Validate(req)
+		is.True(t, hasErrorCode(errs, 2800))
+	})
+
+	t.Run("should pass when boleta over 700 carries a valid DNI", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.Subtotal = "800.00"
+		req.TotalIGV = "144.00"
+		req.TotalAmount = "944.00"
+		req.TaxInclusiveAmount = "944.00"
+		req.Items[0].UnitPrice = "800.00"
+		req.Items[0].UnitPriceWithTax = "944.00"
+		req.Items[0].IGVAmount = "144.00"
+		req.Items[0].LineTotal = "800.00"
+		req.CustomerDocType = model.IdentityDNI
+		req.CustomerDocNumber = "12345678"
+		req.CustomerName = "JUAN PEREZ"
+		errs := validation.Validate(req)
+		is.Equal(t, 0, len(errs))
 	})
 
 	t.Run("should fail when line items are empty", func(t *testing.T) {
