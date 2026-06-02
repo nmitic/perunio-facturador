@@ -59,30 +59,30 @@ func isGravadoGratuitoCode(code string) bool {
 
 // invoice is the UBL 2.1 Invoice XML root element.
 type invoice struct {
-	XMLName                  xml.Name `xml:"Invoice"`
-	XMLNS                    string   `xml:"xmlns,attr"`
-	XMLNSCAC                 string   `xml:"xmlns:cac,attr"`
-	XMLNSCBC                 string   `xml:"xmlns:cbc,attr"`
-	XMLNSEXT                 string   `xml:"xmlns:ext,attr"`
-	XMLNSSAC                 string   `xml:"xmlns:sac,attr"`
-	XMLNSDS                  string   `xml:"xmlns:ds,attr"`
-	UBLExtensions            ublExtensions
-	UBLVersionID             string `xml:"cbc:UBLVersionID"`
-	CustomizationID          string `xml:"cbc:CustomizationID"`
-	ProfileID                profileIDElement
-	ID                       string `xml:"cbc:ID"`
-	IssueDate                string `xml:"cbc:IssueDate"`
-	IssueTime                string `xml:"cbc:IssueTime,omitempty"`
-	InvoiceTypeCode          invoiceTypeCode
-	Notes                    []noteElement
-	DocumentCurrencyCode     documentCurrencyCode
-	Signature                cacSignature
-	SupplierParty            accountingSupplierParty
-	CustomerParty            accountingCustomerParty
-	PaymentTerms             []paymentTerms
-	TaxTotal                 taxTotal
-	LegalMonetaryTotal       legalMonetaryTotal
-	InvoiceLines             []invoiceLine
+	XMLName              xml.Name `xml:"Invoice"`
+	XMLNS                string   `xml:"xmlns,attr"`
+	XMLNSCAC             string   `xml:"xmlns:cac,attr"`
+	XMLNSCBC             string   `xml:"xmlns:cbc,attr"`
+	XMLNSEXT             string   `xml:"xmlns:ext,attr"`
+	XMLNSSAC             string   `xml:"xmlns:sac,attr"`
+	XMLNSDS              string   `xml:"xmlns:ds,attr"`
+	UBLExtensions        ublExtensions
+	UBLVersionID         string `xml:"cbc:UBLVersionID"`
+	CustomizationID      string `xml:"cbc:CustomizationID"`
+	ProfileID            profileIDElement
+	ID                   string `xml:"cbc:ID"`
+	IssueDate            string `xml:"cbc:IssueDate"`
+	IssueTime            string `xml:"cbc:IssueTime,omitempty"`
+	InvoiceTypeCode      invoiceTypeCode
+	Notes                []noteElement
+	DocumentCurrencyCode documentCurrencyCode
+	Signature            cacSignature
+	SupplierParty        accountingSupplierParty
+	CustomerParty        accountingCustomerParty
+	PaymentTerms         []paymentTerms
+	TaxTotal             taxTotal
+	LegalMonetaryTotal   legalMonetaryTotal
+	InvoiceLines         []invoiceLine
 }
 
 // buildInvoiceXML creates UBL 2.1 Invoice XML bytes from an issue request.
@@ -307,18 +307,19 @@ func hasNoteWithCode(notes []noteElement, code string) bool {
 
 func buildLegalMonetaryTotal(req model.IssueRequest) legalMonetaryTotal {
 	cur := req.CurrencyCode
-	lmt := legalMonetaryTotal{
+	// req.TotalDiscount is the sum of per-line descuentos, which are already
+	// itemised as line-level cac:AllowanceCharge and subtracted from each
+	// line's cbc:LineExtensionAmount (and therefore from req.Subtotal). It must
+	// NOT also be declared as a document-level cbc:AllowanceTotalAmount: that
+	// total is reserved for global discounts backed by a document-level
+	// cac:AllowanceCharge, which this service does not model. Counting it twice
+	// breaks the SUNAT total identity (TaxInclusiveAmount = LineExtensionAmount
+	// − AllowanceTotalAmount + TaxAmount).
+	return legalMonetaryTotal{
 		LineExtensionAmount: newCurrencyAmount(req.Subtotal, cur),
 		TaxInclusiveAmount:  newCurrencyAmount(req.TaxInclusiveAmount, cur),
 		PayableAmount:       newCurrencyAmount(req.TotalAmount, cur),
 	}
-
-	if !isZeroAmount(req.TotalDiscount) {
-		amt := newCurrencyAmount(req.TotalDiscount, cur)
-		lmt.AllowanceTotalAmount = &amt
-	}
-
-	return lmt
 }
 
 func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
@@ -345,10 +346,38 @@ func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
 		InvoicedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
 		PricingReference:    pr,
+		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
 		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
 	}, nil
+}
+
+// buildLineDiscount returns the line-level descuento por ítem (Cat.53 "00")
+// when the line carries a non-zero discount, or nil otherwise. Without it
+// SUNAT recomputes cbc:LineExtensionAmount as cac:Price/PriceAmount × Quantity
+// and rejects the line with fault 3271 because the gross price no longer
+// matches the net line total. Gratuito lines have a zero price and never carry
+// a discount, so they are skipped.
+func buildLineDiscount(li model.LineItem, cur string) *lineAllowanceCharge {
+	if isZeroAmount(li.DiscountAmount) || isGratuitoCode(li.TaxExemptionReasonCode) {
+		return nil
+	}
+	discount := parseDecimal(li.DiscountAmount)
+	// BaseAmount is the gross line value (valor unitario × cantidad), i.e. the
+	// net line total plus the discount being applied.
+	base := parseDecimal(li.LineTotal) + discount
+	var factor float64
+	if base != 0 {
+		factor = discount / base
+	}
+	return &lineAllowanceCharge{
+		ChargeIndicator:         false,
+		AllowanceChargeReason:   "00",
+		MultiplierFactorNumeric: strconv.FormatFloat(factor, 'f', 5, 64),
+		Amount:                  newCurrencyAmount(formatDecimal(discount), cur),
+		BaseAmount:              newCurrencyAmount(formatDecimal(base), cur),
+	}
 }
 
 // validPriceTypeCodes is the set of accepted Cat.16 PriceTypeCode values.

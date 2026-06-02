@@ -279,38 +279,55 @@ type additionalMonetaryTotal struct {
 
 // invoiceLine represents a single line item (for Invoice).
 type invoiceLine struct {
-	XMLName             xml.Name          `xml:"cac:InvoiceLine"`
-	ID                  string            `xml:"cbc:ID"`
-	InvoicedQuantity    quantity          `xml:"cbc:InvoicedQuantity"`
-	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
-	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
-	Item                item              `xml:"cac:Item"`
-	Price               price             `xml:"cac:Price"`
+	XMLName             xml.Name             `xml:"cac:InvoiceLine"`
+	ID                  string               `xml:"cbc:ID"`
+	InvoicedQuantity    quantity             `xml:"cbc:InvoicedQuantity"`
+	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
+	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
+	Item                item                 `xml:"cac:Item"`
+	Price               price                `xml:"cac:Price"`
 }
 
 // creditNoteLine represents a single line item (for CreditNote).
 type creditNoteLine struct {
-	XMLName             xml.Name          `xml:"cac:CreditNoteLine"`
-	ID                  string            `xml:"cbc:ID"`
-	CreditedQuantity    quantity          `xml:"cbc:CreditedQuantity"`
-	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
-	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
-	Item                item              `xml:"cac:Item"`
-	Price               price             `xml:"cac:Price"`
+	XMLName             xml.Name             `xml:"cac:CreditNoteLine"`
+	ID                  string               `xml:"cbc:ID"`
+	CreditedQuantity    quantity             `xml:"cbc:CreditedQuantity"`
+	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
+	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
+	Item                item                 `xml:"cac:Item"`
+	Price               price                `xml:"cac:Price"`
 }
 
 // debitNoteLine represents a single line item (for DebitNote).
 type debitNoteLine struct {
-	XMLName             xml.Name          `xml:"cac:DebitNoteLine"`
-	ID                  string            `xml:"cbc:ID"`
-	DebitedQuantity     quantity          `xml:"cbc:DebitedQuantity"`
-	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
-	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
-	Item                item              `xml:"cac:Item"`
-	Price               price             `xml:"cac:Price"`
+	XMLName             xml.Name             `xml:"cac:DebitNoteLine"`
+	ID                  string               `xml:"cbc:ID"`
+	DebitedQuantity     quantity             `xml:"cbc:DebitedQuantity"`
+	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
+	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
+	Item                item                 `xml:"cac:Item"`
+	Price               price                `xml:"cac:Price"`
+}
+
+// lineAllowanceCharge represents a line-level cac:AllowanceCharge. SUNAT uses
+// it to itemise a descuento por ítem (Cat.53 code "00", which affects the IGV
+// base). The discount reconciles cbc:LineExtensionAmount with cac:Price: SUNAT
+// rule 3271 computes LineExtensionAmount = Price.PriceAmount × Quantity − Amount,
+// so the line price stays gross (valor unitario) and the discount is subtracted
+// here. MultiplierFactorNumeric = Amount / BaseAmount.
+type lineAllowanceCharge struct {
+	ChargeIndicator         bool           `xml:"cbc:ChargeIndicator"`
+	AllowanceChargeReason   string         `xml:"cbc:AllowanceChargeReasonCode"`
+	MultiplierFactorNumeric string         `xml:"cbc:MultiplierFactorNumeric"`
+	Amount                  currencyAmount `xml:"cbc:Amount"`
+	BaseAmount              currencyAmount `xml:"cbc:BaseAmount"`
 }
 
 type quantity struct {

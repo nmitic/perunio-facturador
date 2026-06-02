@@ -560,3 +560,59 @@ func TestBuildDocumentXML_Gratuito(t *testing.T) {
 			"non-gratuito invoices must not emit sac:AdditionalMonetaryTotal")
 	})
 }
+
+func TestBuildDocumentXML_LineDiscount(t *testing.T) {
+	// Mirrors the real SUNAT fault 3271 case: a 100.00 unit price line with a
+	// 50.00 descuento por ítem (net valor de venta 50.00, IGV 9.00, total 59.00).
+	newDiscountInvoice := func() model.IssueRequest {
+		req := newTestInvoice()
+		req.Subtotal = "50.00"
+		req.TotalIGV = "9.00"
+		req.TotalDiscount = "50.00"
+		req.TotalAmount = "59.00"
+		req.TaxInclusiveAmount = "59.00"
+		req.Notes = nil
+		req.Items = []model.LineItem{{
+			LineNumber:             1,
+			Description:            "Contabilidad basica",
+			Quantity:               "1.0",
+			UnitCode:               "NIU",
+			UnitPrice:              "100.00",
+			UnitPriceWithTax:       "59.00",
+			TaxExemptionReasonCode: "10",
+			IGVAmount:              "9.00",
+			ISCAmount:              "0.00",
+			DiscountAmount:         "50.00",
+			LineTotal:              "50.00",
+			PriceTypeCode:          "01",
+		}}
+		return req
+	}
+
+	t.Run("emits a line-level cac:AllowanceCharge reconciling LineExtensionAmount with the gross price", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newDiscountInvoice())
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// SUNAT 3271 reconciles LineExtensionAmount = Price.PriceAmount × Qty − Amount.
+		is.True(t, strings.Contains(xml, "<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>00</cbc:AllowanceChargeReasonCode><cbc:MultiplierFactorNumeric>0.50000</cbc:MultiplierFactorNumeric><cbc:Amount currencyID=\"PEN\">50.00</cbc:Amount><cbc:BaseAmount currencyID=\"PEN\">100.00</cbc:BaseAmount></cac:AllowanceCharge>"),
+			"line discount must emit a Cat.53 \"00\" AllowanceCharge with the gross base")
+		// Gross unit price stays in cac:Price; the discount lives in AllowanceCharge.
+		is.True(t, strings.Contains(xml, "<cac:Price><cbc:PriceAmount currencyID=\"PEN\">100.00</cbc:PriceAmount></cac:Price>"),
+			"cac:Price/PriceAmount must remain the gross valor unitario (100.00)")
+		is.True(t, strings.Contains(xml, "<cbc:LineExtensionAmount currencyID=\"PEN\">50.00</cbc:LineExtensionAmount>"),
+			"LineExtensionAmount must be the net line total (50.00)")
+	})
+
+	t.Run("does not double-count per-line discounts as a document AllowanceTotalAmount", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newDiscountInvoice())
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, !strings.Contains(xml, "<cbc:AllowanceTotalAmount"),
+			"per-line discounts must not surface as a document-level AllowanceTotalAmount")
+		// Total identity: TaxInclusiveAmount = LineExtensionAmount + TaxAmount = 59.00.
+		is.True(t, strings.Contains(xml, "<cbc:TaxInclusiveAmount currencyID=\"PEN\">59.00</cbc:TaxInclusiveAmount>"),
+			"TaxInclusiveAmount must stay 59.00")
+	})
+}

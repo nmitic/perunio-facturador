@@ -112,6 +112,7 @@ func buildCreditNoteLine(li model.LineItem, cur string) (creditNoteLine, error) 
 		CreditedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
 		PricingReference:    pr,
+		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
 		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
