@@ -679,3 +679,55 @@ func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildDocumentXML_ExoneradoInafectoGratuito(t *testing.T) {
+	// SUNAT fault 3224: a line with a referential price > 0 (PriceTypeCode 02)
+	// must be declared under tributo 9996 at BOTH line and document level —
+	// otherwise the document's fallback IGV (1000) subtotal makes the operation
+	// look onerosa. Covers exonerado-gratuito (21) and inafecto-gratuito (31-37),
+	// which carry a referential base but zero IGV.
+	for _, code := range []string{"21", "31", "32", "33", "34", "35", "36", "37"} {
+		t.Run("code "+code+": referencial>0 is declared as gratuita 9996 with no IGV fallback subtotal", func(t *testing.T) {
+			req := newTestInvoice()
+			req.Items = []model.LineItem{{
+				LineNumber:             1,
+				Description:            "Muestra",
+				Quantity:               "1.0",
+				UnitCode:               "ZZ",
+				UnitPrice:              "0.00",
+				UnitPriceWithTax:       "100.00",
+				TaxExemptionReasonCode: code,
+				IGVAmount:              "0.00",
+				ISCAmount:              "0.00",
+				DiscountAmount:         "0.00",
+				LineTotal:              "0.00",
+				PriceTypeCode:          "02",
+			}}
+			req.Subtotal = "0.00"
+			req.TotalIGV = "0.00"
+			req.TotalISC = "0.00"
+			req.TotalAmount = "0.00"
+			req.TaxInclusiveAmount = "0.00"
+			req.Notes = nil
+
+			xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+			is.NotError(t, err)
+			xml := string(xmlBytes)
+
+			// Line: value == base imponience == referential, scheme 9996.
+			is.True(t, strings.Contains(xml, `<cbc:LineExtensionAmount currencyID="PEN">100.00</cbc:LineExtensionAmount>`),
+				"line LineExtensionAmount must equal the referential base 100.00")
+			is.True(t, strings.Contains(xml, ">9996</cbc:ID>"),
+				"line/doc tributo must be 9996 (GRA) when a referential price > 0 exists")
+			// Document must NOT fall back to an IGV (1000) subtotal — that is what
+			// triggers fault 3224 for gratuitas.
+			is.True(t, !strings.Contains(xml, ">1000</cbc:ID>"),
+				"a pure-gratuito document must not emit a 1000 (IGV) tax subtotal")
+			// The rate tag must be present (fault 2992) but zero — never 18%.
+			is.True(t, strings.Contains(xml, "<cbc:Percent>0.00</cbc:Percent>"),
+				"the 9996 tributo must carry a 0.00 rate tag (SUNAT fault 2992)")
+			is.True(t, !strings.Contains(xml, "<cbc:Percent>18.00</cbc:Percent>"),
+				"exonerado/inafecto gratuito must not declare an 18% rate")
+		})
+	}
+}
