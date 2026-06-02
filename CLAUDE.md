@@ -140,6 +140,17 @@ SUNAT_GRE_PRODUCTION_URL=   # default: https://api-cpe.sunat.gob.pe
 - NC on boletas: codes 04, 05, 08 are forbidden
 - RC deadline: 7 calendar days, max 500 lines per block
 
+### Line discounts (descuento por ítem, Cat.53 "00")
+- Keep `cac:Price/cbc:PriceAmount` at the **gross** valor unitario and emit a line `cac:AllowanceCharge` (`ChargeIndicator=false`, reason `00`, `MultiplierFactorNumeric`, `Amount`, `BaseAmount`). SUNAT recomputes `LineExtensionAmount = Price × Qty − Amount`; omitting the AllowanceCharge → **fault 3271**.
+- Per-line discounts are already in each line's `LineExtensionAmount`; do **not** also declare them as a document `cbc:AllowanceTotalAmount` (that's for global discounts only).
+
+### Gratuito / free items (Cat.07 codes 11-16, 21, 31-37) — all verified against accepted SUNAT CDRs
+- Every gratuito line uses **tributo 9996 (GRA/FRE)**, `cac:Price/PriceAmount = 0`, and `PricingReference/AlternativeConditionPrice` PriceTypeCode **02** carrying the IGV-**exclusive** per-unit referencial (not the IGV-inclusive price → **fault 3272**).
+- Line `cbc:LineExtensionAmount` must equal the line's base imponible (the referencial base), **not** 0 → otherwise **fault 3272**. The document `LegalMonetaryTotal` totals stay 0 (customer pays nothing).
+- The document `cac:TaxTotal` **must** include a `9996` subtotal aggregating the gratuito base + would-be IGV; document `cbc:TaxAmount` excludes gratuito IGV. Falling back to a `1000` (IGV) subtotal makes the op look onerosa → **fault 3224**.
+- Both line and document `9996` subtotals must carry a `cbc:Percent` rate tag (**fault 2992**): `18.00` for gravado-gratuito (11-16, IGV at 18%), `0.00` for exonerado/inafecto gratuito (21, 31-37, no IGV).
+- Reference: greenter's `Factura-Gratuita` output is the source of truth this matches.
+
 ## Reference
 
 See `SKILL.md` for complete UBL/XML/SOAP/signing specification.
