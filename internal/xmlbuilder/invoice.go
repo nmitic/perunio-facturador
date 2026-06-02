@@ -178,8 +178,10 @@ func buildPaymentTerms(req model.IssueRequest) []paymentTerms {
 }
 
 // docTaxBuckets is the per-Cat.05 breakdown of a document's lines, computed
-// from req.Items. Gratuito lines are excluded — SUNAT only allows gratuita
-// taxes at line level (cac:InvoiceLine/cac:TaxTotal), not at document level.
+// from req.Items. Gravado-gratuito lines (codes 11-16) contribute their
+// referential base + would-be IGV to the gratuita (9996) bucket so the document
+// can declare a matching cac:TaxSubtotal — SUNAT reconciles the line gratuita
+// base against this document subtotal (faults 3272/3306).
 type docTaxBuckets struct {
 	regularBase float64
 	regularIGV  float64
@@ -188,6 +190,8 @@ type docTaxBuckets struct {
 	exoBase     float64
 	inafBase    float64
 	expBase     float64
+	gratBase    float64
+	gratIGV     float64
 }
 
 func sumLineBuckets(items []model.LineItem) docTaxBuckets {
@@ -195,6 +199,13 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 	for _, li := range items {
 		taxCode := model.TaxCodeForAffectation(li.TaxExemptionReasonCode)
 		if isGratuitoCode(li.TaxExemptionReasonCode) {
+			// Only gravado-gratuito carries a non-zero base/IGV; exonerado- and
+			// inafecto-gratuito (21, 31-37) declare 0 at line level and are left
+			// out of the document tax breakdown.
+			if isGravadoGratuitoCode(li.TaxExemptionReasonCode) {
+				b.gratBase += gratuitoReferentialBase(li)
+				b.gratIGV += parseDecimal(li.IGVAmount)
+			}
 			continue
 		}
 		base := parseDecimal(li.LineTotal)
@@ -253,8 +264,18 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		})
 	}
 
-	// Gratuita: emitted only at line level (cac:InvoiceLine/cac:TaxTotal).
-	// SUNAT rejects a document-level Gratuita subtotal.
+	// Gratuita (9996) subtotal — gravado-gratuito lines. The document cbc:TaxAmount
+	// is NOT increased (the customer pays no tax on gratuitas, so it stays the sum
+	// of onerosa IGV/IVAP), but SUNAT requires the referential base + would-be IGV
+	// to be consigned here under the GRA scheme so it reconciles with each line's
+	// gratuita TaxSubtotal. Matches greenter's Factura-Gratuita output.
+	if buckets.gratBase > 0 || buckets.gratIGV > 0 {
+		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
+			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.gratBase), cur),
+			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.gratIGV), cur),
+			TaxCategory:   newTaxCategory(model.TaxGratuita.TaxCategoryID, "18.00", model.TaxGratuita),
+		})
+	}
 
 	// ISC subtotal (document-level total comes from req.TotalISC).
 	if !isZeroAmount(req.TotalISC) {
@@ -323,14 +344,9 @@ func buildLegalMonetaryTotal(req model.IssueRequest) legalMonetaryTotal {
 }
 
 func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
-	// For gratuito lines: cbc:LineExtensionAmount and cac:Price/PriceAmount
-	// are both 0 (rules 2640, 3271). The referential base (100) and IGV (18)
-	// only live in cac:TaxSubtotal and in cac:PricingReference. SUNAT's 3272
-	// has a gratuito-specific path keyed on TaxScheme/ID=9996, so the
-	// LineExtensionAmount/TaxableAmount divergence is allowed; FreeOfChargeIndicator
-	// is intentionally NOT emitted (greenter doesn't, and it's not what SUNAT
-	// keys on for the carve-out).
-	// SUNAT rule 3271: gratuito lines must emit cac:Price/PriceAmount = 0.
+	// SUNAT rule 3271: gratuito lines emit cac:Price/PriceAmount = 0 (the
+	// customer is charged nothing). FreeOfChargeIndicator is intentionally NOT
+	// emitted (greenter doesn't, and it's not what SUNAT keys on).
 	unitPrice := li.UnitPrice
 	if isGratuitoCode(li.TaxExemptionReasonCode) {
 		unitPrice = "0.00"
@@ -344,7 +360,7 @@ func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
 	return invoiceLine{
 		ID:                  strconv.Itoa(li.LineNumber),
 		InvoicedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
-		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
+		LineExtensionAmount: newCurrencyAmount(lineExtensionAmountFor(li), cur),
 		PricingReference:    pr,
 		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),
@@ -390,15 +406,28 @@ var validPriceTypeCodes = map[string]struct{}{
 
 func buildPricingReference(li model.LineItem, cur string) (*pricingReference, error) {
 	// SUNAT requires cac:PricingReference / cac:AlternativeConditionPrice on
-	// every line, including gratuito (fault 2028 fires otherwise). For
-	// gratuito lines the PriceTypeCode is "02" (referencial) and the
-	// PriceAmount is the IGV-inclusive referential value.
+	// every line, including gratuito (fault 2028 fires otherwise).
 	if _, ok := validPriceTypeCodes[li.PriceTypeCode]; !ok {
 		return nil, fmt.Errorf("xmlbuilder: line %d has invalid Cat.16 PriceTypeCode %q", li.LineNumber, li.PriceTypeCode)
 	}
+
+	// The referential PriceAmount carries a unit price whose meaning depends on
+	// the Cat.16 code. For onerosa (01) it is the IGV-INCLUSIVE precio de venta,
+	// which is exactly unitPriceWithTax. For gratuito (02) SUNAT instead reads it
+	// as the IGV-EXCLUSIVE valor referencial — the per-unit base imponible — and
+	// cross-checks it against cac:TaxSubtotal/cbc:TaxableAmount (fault 3272).
+	// Reusing the IGV-inclusive price for gravado-gratuito (codes 11-16, IGV > 0)
+	// makes the two diverge, so derive the IGV-exclusive per-unit base instead.
+	refPrice := li.UnitPriceWithTax
+	if isGratuitoCode(li.TaxExemptionReasonCode) {
+		if qty := parseDecimal(li.Quantity); qty != 0 {
+			refPrice = formatDecimal(gratuitoReferentialBase(li) / qty)
+		}
+	}
+
 	return &pricingReference{
 		AlternativeConditionPrice: []alternativeConditionPrice{{
-			PriceAmount: newCurrencyAmount(li.UnitPriceWithTax, cur),
+			PriceAmount: newCurrencyAmount(refPrice, cur),
 			PriceTypeCode: priceTypeCode{
 				Value:          li.PriceTypeCode,
 				ListName:       "Tipo de Precio",
@@ -418,6 +447,23 @@ func buildPricingReference(li model.LineItem, cur string) (*pricingReference, er
 func gratuitoReferentialBase(li model.LineItem) float64 {
 	gross := parseDecimal(li.UnitPriceWithTax) * parseDecimal(li.Quantity)
 	return gross - parseDecimal(li.IGVAmount)
+}
+
+// lineExtensionAmountFor returns the cbc:LineExtensionAmount for a line.
+//
+// SUNAT fault 3272 ("la base imponible a nivel de línea difiere…") fires when a
+// line's value differs from its declared base imponible. For gravado-gratuito
+// (Cat.07 codes 11-16) the base imponible is the IGV-exclusive referential —
+// NOT the zero amount the customer pays — so LineExtensionAmount must equal that
+// referential and match cac:TaxSubtotal/cbc:TaxableAmount (greenter's
+// Factura-Gratuita emits both as the same value). Exonerado/inafecto gratuito
+// (21, 31-37) keep a zero base, and onerosa lines use the ordinary valor de
+// venta (li.LineTotal); both already match their TaxableAmount.
+func lineExtensionAmountFor(li model.LineItem) string {
+	if isGravadoGratuitoCode(li.TaxExemptionReasonCode) {
+		return formatDecimal(gratuitoReferentialBase(li))
+	}
+	return li.LineTotal
 }
 
 // buildAdditionalMonetaryTotals emits sac:AdditionalMonetaryTotal entries.

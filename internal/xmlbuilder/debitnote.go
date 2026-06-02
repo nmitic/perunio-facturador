@@ -117,7 +117,7 @@ func buildDebitNoteLine(li model.LineItem, cur string) (debitNoteLine, error) {
 	return debitNoteLine{
 		ID:                  strconv.Itoa(li.LineNumber),
 		DebitedQuantity:     quantity{Value: li.Quantity, UnitCode: li.UnitCode},
-		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
+		LineExtensionAmount: newCurrencyAmount(lineExtensionAmountFor(li), cur),
 		PricingReference:    pr,
 		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),

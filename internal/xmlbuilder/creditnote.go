@@ -110,7 +110,7 @@ func buildCreditNoteLine(li model.LineItem, cur string) (creditNoteLine, error) 
 	return creditNoteLine{
 		ID:                  strconv.Itoa(li.LineNumber),
 		CreditedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
-		LineExtensionAmount: newCurrencyAmount(li.LineTotal, cur),
+		LineExtensionAmount: newCurrencyAmount(lineExtensionAmountFor(li), cur),
 		PricingReference:    pr,
 		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),

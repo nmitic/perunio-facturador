@@ -422,8 +422,11 @@ func TestBuildDocumentXML_Gratuito(t *testing.T) {
 			"sac namespace must be declared on root")
 		is.True(t, strings.Contains(xml, "<cac:AlternativeConditionPrice>"),
 			"gratuito line must emit cac:AlternativeConditionPrice (SUNAT fault 2028)")
-		is.True(t, strings.Contains(xml, `<cbc:PriceAmount currencyID="PEN">118.00</cbc:PriceAmount>`),
-			"AlternativeConditionPrice must carry the IGV-inclusive referential price 118.00")
+		// For gravado-gratuito the referencial (PriceTypeCode 02) is the
+		// IGV-EXCLUSIVE per-unit base; SUNAT cross-checks it against the line
+		// TaxableAmount (fault 3272). (118 − 18) / 1 = 100.00.
+		is.True(t, strings.Contains(xml, `<cbc:PriceAmount currencyID="PEN">100.00</cbc:PriceAmount>`),
+			"AlternativeConditionPrice must carry the IGV-exclusive referential base 100.00")
 		is.True(t, strings.Contains(xml, ">02</cbc:PriceTypeCode>"),
 			"PriceTypeCode must be 02 (referencial gratuita) on gratuito lines")
 		is.True(t, strings.Contains(xml, "<sac:AdditionalMonetaryTotal>"),
@@ -615,4 +618,64 @@ func TestBuildDocumentXML_LineDiscount(t *testing.T) {
 		is.True(t, strings.Contains(xml, "<cbc:TaxInclusiveAmount currencyID=\"PEN\">59.00</cbc:TaxInclusiveAmount>"),
 			"TaxInclusiveAmount must stay 59.00")
 	})
+}
+
+func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {
+	// SUNAT fault 3272: for gravado-gratuito (Cat.07 codes 11-16) the
+	// cac:PricingReference referencial (PriceTypeCode 02) is the IGV-EXCLUSIVE
+	// per-unit base and must equal cac:TaxSubtotal/cbc:TaxableAmount. Mirrors the
+	// real failing payload: gross 118.00, IGV 18.00, base 100.00, qty 1.
+	for _, code := range []string{"11", "12", "13", "14", "15", "16"} {
+		t.Run("code "+code+": referencial equals the IGV-exclusive base (100.00), not the gross price (118.00)", func(t *testing.T) {
+			req := newTestInvoice()
+			req.Items = []model.LineItem{{
+				LineNumber:             1,
+				Description:            "Contabilidad",
+				Quantity:               "1.0",
+				UnitCode:               "ZZ",
+				UnitPrice:              "0.00",
+				UnitPriceWithTax:       "118.00",
+				TaxExemptionReasonCode: code,
+				IGVAmount:              "18.00",
+				ISCAmount:              "0.00",
+				DiscountAmount:         "0.00",
+				LineTotal:              "0.00",
+				PriceTypeCode:          "02",
+			}}
+			req.Subtotal = "0.00"
+			req.TotalIGV = "0.00"
+			req.TotalISC = "0.00"
+			req.TotalAmount = "0.00"
+			req.TaxInclusiveAmount = "0.00"
+			req.Notes = nil
+
+			xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+			is.NotError(t, err)
+			xml := string(xmlBytes)
+
+			is.True(t, strings.Contains(xml, `<cbc:PriceAmount currencyID="PEN">100.00</cbc:PriceAmount>`),
+				"PricingReference must carry the IGV-exclusive referential base 100.00")
+			is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>`),
+				"line TaxableAmount must be 100.00, matching the referencial")
+			// The IGV-inclusive price must no longer leak into the referencial.
+			is.True(t, !strings.Contains(xml, `>118.00</cbc:PriceAmount>`),
+				"the IGV-inclusive 118.00 must not appear as a referencial price")
+
+			// SUNAT fault 3272: the line value (cbc:LineExtensionAmount) must
+			// equal the base imponible — greenter emits both as the referential.
+			// The line value must equal the base imponible (greenter emits both
+			// as the referential). The document LegalMonetaryTotal still carries
+			// LineExtensionAmount 0.00 — the customer pays nothing.
+			is.True(t, strings.Contains(xml, `<cbc:LineExtensionAmount currencyID="PEN">100.00</cbc:LineExtensionAmount>`),
+				"line LineExtensionAmount must equal the referential base 100.00, not 0.00")
+
+			// The document must consign the gratuita under the GRA (9996) scheme
+			// so SUNAT can reconcile it with the line, while the document
+			// cbc:TaxAmount stays 0.00 (no tax is payable on gratuitas).
+			is.True(t, strings.Contains(xml, ">9996</cbc:ID>"),
+				"document TaxTotal must include a 9996 (GRA) gratuita subtotal")
+			is.True(t, strings.Contains(xml, `<cac:TaxTotal><cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>`),
+				"document-level TaxAmount must remain 0.00 for a pure-gratuito invoice")
+		})
+	}
 }
