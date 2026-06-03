@@ -664,6 +664,97 @@ func TestBuildDocumentXML_LineDiscount(t *testing.T) {
 	}
 }
 
+func TestBuildDocumentXML_GlobalDiscount(t *testing.T) {
+	// Descuento global Cat.53 code 02 (afecta base imponible). One gravado line
+	// of 1000 base; a 100 global discount reduces the gravado base to 900, so
+	// IGV = 162. SUNAT factura guide: //Invoice/cac:AllowanceCharge + a
+	// cbc:AllowanceTotalAmount, with the LegalMonetaryTotal LineExtensionAmount
+	// reported NET (900) and PayableAmount = net LineExtension + IGV = 900 + 162
+	// = 1062. (Lines keep their gross 1000; SUNAT reads the discount as the delta.)
+	newGlobalDiscountInvoice := func(docType, series string) model.IssueRequest {
+		req := newTestInvoice()
+		req.DocType = docType
+		req.Series = series
+		req.Notes = nil
+		req.Subtotal = "1000.00"
+		req.TotalIGV = "162.00"
+		req.GlobalDiscount = "100.00"
+		req.TotalAmount = "1062.00"
+		req.TaxInclusiveAmount = "1062.00"
+		req.Items = []model.LineItem{{
+			LineNumber: 1, Description: "Servicio", Quantity: "1", UnitCode: "NIU",
+			UnitPrice: "1000.00", UnitPriceWithTax: "1180.00", TaxExemptionReasonCode: "10",
+			IGVAmount: "180.00", ISCAmount: "0.00", DiscountAmount: "0.00",
+			LineTotal: "1000.00", PriceTypeCode: "01",
+		}}
+		return req
+	}
+
+	for _, tc := range []struct{ name, docType, series string }{
+		{"factura (01)", "01", "F001"},
+		{"boleta (03)", "03", "B001"},
+	} {
+		t.Run(tc.name+" emits a document AllowanceCharge (code 02) and reduces the IGV base", func(t *testing.T) {
+			xmlBytes, err := xmlbuilder.BuildDocumentXML(newGlobalDiscountInvoice(tc.docType, tc.series))
+			is.NotError(t, err)
+			xml := string(xmlBytes)
+
+			is.True(t, strings.Contains(xml, "<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>02</cbc:AllowanceChargeReasonCode><cbc:MultiplierFactorNumeric>0.10000</cbc:MultiplierFactorNumeric><cbc:Amount currencyID=\"PEN\">100.00</cbc:Amount><cbc:BaseAmount currencyID=\"PEN\">1000.00</cbc:BaseAmount></cac:AllowanceCharge>"),
+				"must emit a document-level Cat.53 '02' AllowanceCharge with the gravado base")
+			// IGV base reduced: 1000 − 100 = 900, IGV 162.
+			is.True(t, strings.Contains(xml, "<cbc:TaxableAmount currencyID=\"PEN\">900.00</cbc:TaxableAmount><cbc:TaxAmount currencyID=\"PEN\">162.00</cbc:TaxAmount>"),
+				"gravado TaxSubtotal must reduce the base to 900 with IGV 162")
+			// SUNAT fault 3300: a Cat.53 '02' (afecta base) discount must NOT be
+			// reported in cbc:AllowanceTotalAmount — that node carries only NON-afecta
+			// (01/03) discounts, so it stays absent. The discount is realised by the
+			// reduced base above and the NET LineExtensionAmount (1000 − 100 = 900).
+			is.True(t, !strings.Contains(xml, "<cbc:AllowanceTotalAmount"),
+				"an afecta-base global discount must NOT emit AllowanceTotalAmount (fault 3300)")
+			is.True(t, strings.Contains(xml, "<cbc:LineExtensionAmount currencyID=\"PEN\">900.00</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID=\"PEN\">1062.00</cbc:TaxInclusiveAmount>"),
+				"LineExtensionAmount must be net of the global discount (900); TaxInclusive = 900 + 162 = 1062")
+		})
+	}
+
+	t.Run("nota de crédito (07) motivo 04 bakes the discount into the line, no doc AllowanceCharge", func(t *testing.T) {
+		// NC con descuento global (motivo 04): SUNAT does NOT honour a doc-level
+		// cac:AllowanceCharge on a CreditNote — it reconciles Σ line valor de venta
+		// against the document gravado total (fault 3277). So the 100 discount is
+		// baked into the line (1000 → 900) and there is NO document AllowanceCharge.
+		req := newGlobalDiscountInvoice("07", "FC01")
+		req.ReferenceDocType = "01"
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "04"
+		req.ReasonDescription = "Descuento global"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `<CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"`), "should be a CreditNote")
+		is.True(t, strings.Contains(xml, `<cac:CreditNoteLine>`), "should keep the referenced line(s)")
+		// The discount lives in the lines, never as a document-level AllowanceCharge.
+		is.True(t, !strings.Contains(xml, "<cac:AllowanceCharge>"),
+			"a CreditNote must NOT emit a document-level AllowanceCharge (SUNAT ignores it → fault 3277)")
+		// Line valor de venta is net (900) and matches the document gravado total
+		// (900/162) so Σ line == total — the cure for fault 3277.
+		is.True(t, strings.Contains(xml, "<cbc:CreditedQuantity unitCode=\"NIU\">1</cbc:CreditedQuantity><cbc:LineExtensionAmount currencyID=\"PEN\">900.00</cbc:LineExtensionAmount>"),
+			"line valor de venta must be net of the global discount (900)")
+		is.True(t, strings.Contains(xml, "<cbc:TaxableAmount currencyID=\"PEN\">900.00</cbc:TaxableAmount><cbc:TaxAmount currencyID=\"PEN\">162.00</cbc:TaxAmount>"),
+			"gravado TaxSubtotal must be the reduced base 900 with IGV 162")
+		is.True(t, strings.Contains(xml, "<cbc:LineExtensionAmount currencyID=\"PEN\">900.00</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID=\"PEN\">1062.00</cbc:TaxInclusiveAmount>"),
+			"document LineExtensionAmount must be net (900); TaxInclusive = 900 + 162 = 1062")
+	})
+
+	t.Run("no AllowanceCharge or AllowanceTotalAmount when there is no global discount", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newTestInvoice())
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, !strings.Contains(xml, "<cbc:AllowanceTotalAmount"),
+			"a document without a global discount must not emit AllowanceTotalAmount")
+	})
+}
+
 func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {
 	// SUNAT fault 3272: for gravado-gratuito (Cat.07 codes 11-16) the
 	// cac:PricingReference referencial (PriceTypeCode 02) is the IGV-EXCLUSIVE

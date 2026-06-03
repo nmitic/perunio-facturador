@@ -84,11 +84,24 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 		})
 	}
 
-	cn.TaxTotal = buildDocumentTaxTotal(req)
-	cn.LegalMonetaryTotal = buildLegalMonetaryTotal(req)
+	// Descuento global (Cat.53 code 02). Unlike an Invoice, SUNAT does NOT honour
+	// a document-level cac:AllowanceCharge on a CreditNote: it reconciles the sum
+	// of the line valores de venta against the document gravado total (fault 3277
+	// otherwise). So the discount is baked into the gravado line net prices and
+	// the document totals are recomputed from those reduced lines — no doc-level
+	// AllowanceCharge is emitted.
+	docReq := req
+	if gd := globalDiscountValue(req); gd > 0 {
+		docReq.Items = distributeGlobalDiscountToNoteLines(req.Items, gd)
+		docReq.GlobalDiscount = "0"
+		docReq.Subtotal = formatDecimal(parseDecimal(req.Subtotal) - gd)
+	}
 
-	for _, li := range req.Items {
-		line, err := buildCreditNoteLine(li, req.CurrencyCode)
+	cn.TaxTotal = buildDocumentTaxTotal(docReq)
+	cn.LegalMonetaryTotal = buildLegalMonetaryTotal(docReq)
+
+	for _, li := range docReq.Items {
+		line, err := buildCreditNoteLine(li, docReq.CurrencyCode)
 		if err != nil {
 			return nil, err
 		}
@@ -96,6 +109,71 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 	}
 
 	return marshalISO8859(&cn)
+}
+
+// distributeGlobalDiscountToNoteLines bakes a descuento global (Cat.53 02) into
+// the gravado (IGV/IVAP) line valores de venta of a nota, proportionally to each
+// line's base. SUNAT's CreditNote has no honoured document-level
+// cac:AllowanceCharge — it reconciles Σ line valor de venta against the document
+// gravado total (fault 3277) — so the discount must live in the lines.
+//
+// Each gravado line's LineTotal, IGVAmount and per-unit prices are scaled by
+// factor = (base − share) / base. The shares are rounded to 2 decimals and the
+// LAST gravado line absorbs the rounding remainder so Σ share == discount
+// exactly. Non-gravado lines (exonerado/inafecto/gratuito/export) are untouched.
+func distributeGlobalDiscountToNoteLines(items []model.LineItem, discount float64) []model.LineItem {
+	if discount <= 0 {
+		return items
+	}
+
+	var gravadoGross float64
+	var gravadoIdx []int
+	for i, li := range items {
+		if isGratuitoCode(li.TaxExemptionReasonCode) {
+			continue
+		}
+		switch model.TaxCodeForAffectation(li.TaxExemptionReasonCode) {
+		case "1000", "1016":
+			gravadoGross += parseDecimal(li.LineTotal)
+			gravadoIdx = append(gravadoIdx, i)
+		}
+	}
+	if gravadoGross <= 0 || len(gravadoIdx) == 0 {
+		return items
+	}
+
+	out := make([]model.LineItem, len(items))
+	copy(out, items)
+
+	var allocated float64
+	for n, idx := range gravadoIdx {
+		li := out[idx]
+		base := parseDecimal(li.LineTotal)
+		var share float64
+		if n == len(gravadoIdx)-1 {
+			share = discount - allocated // last line absorbs the rounding remainder
+		} else {
+			share = parseDecimal(formatDecimal(discount * base / gravadoGross))
+			allocated += share
+		}
+		newBase := base - share
+		if newBase < 0 {
+			newBase = 0
+		}
+		var factor float64
+		if base != 0 {
+			factor = newBase / base
+		}
+		// Scale the value, the (would-be) IGV and the per-unit prices by the same
+		// factor so the line stays internally consistent regardless of rate/ISC.
+		li.LineTotal = formatDecimal(newBase)
+		li.IGVAmount = formatDecimal(parseDecimal(li.IGVAmount) * factor)
+		li.ISCAmount = formatDecimal(parseDecimal(li.ISCAmount) * factor)
+		li.UnitPrice = formatDecimal(parseDecimal(li.UnitPrice) * factor)
+		li.UnitPriceWithTax = formatDecimal(parseDecimal(li.UnitPriceWithTax) * factor)
+		out[idx] = li
+	}
+	return out
 }
 
 func buildCreditNoteLine(li model.LineItem, cur string) (creditNoteLine, error) {

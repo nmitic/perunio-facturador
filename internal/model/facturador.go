@@ -46,6 +46,7 @@ type IssuedDocument struct {
 	TotalIsc           *string `json:"totalIsc"`
 	TotalOtherTaxes    *string `json:"totalOtherTaxes"`
 	TotalDiscount      *string `json:"totalDiscount"`
+	GlobalDiscount     *string `json:"globalDiscount"`
 	TotalAmount        string  `json:"totalAmount"`
 	TaxInclusiveAmount *string `json:"taxInclusiveAmount"`
 	Notes              *string `json:"notes"`

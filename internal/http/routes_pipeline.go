@@ -202,6 +202,7 @@ func buildIssueRequestFromDoc(
 		TotalISC:           derefString(doc.TotalIsc, "0.00"),
 		TotalOtherTaxes:    derefString(doc.TotalOtherTaxes, "0.00"),
 		TotalDiscount:      derefString(doc.TotalDiscount, "0.00"),
+		GlobalDiscount:     derefString(doc.GlobalDiscount, "0.00"),
 		TotalAmount:        doc.TotalAmount,
 		TaxInclusiveAmount: derefString(doc.TaxInclusiveAmount, doc.TotalAmount),
 

@@ -153,6 +153,7 @@ type createDocumentBody struct {
 	TotalIsc                *string                  `json:"totalIsc,omitempty"`
 	TotalOtherTaxes         *string                  `json:"totalOtherTaxes,omitempty"`
 	TotalDiscount           *string                  `json:"totalDiscount,omitempty"`
+	GlobalDiscount          *string                  `json:"globalDiscount,omitempty"`
 	TotalAmount             string                   `json:"totalAmount"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
@@ -202,6 +203,9 @@ func (b *createDocumentBody) validate() string {
 		if !decimalRegex.MatchString(f.val) {
 			return f.name + " inválido"
 		}
+	}
+	if b.GlobalDiscount != nil && *b.GlobalDiscount != "" && !decimalRegex.MatchString(*b.GlobalDiscount) {
+		return "globalDiscount inválido"
 	}
 	if len(b.Items) == 0 {
 		return "items requerido"
@@ -266,6 +270,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		TotalIsc:                b.TotalIsc,
 		TotalOtherTaxes:         b.TotalOtherTaxes,
 		TotalDiscount:           b.TotalDiscount,
+		GlobalDiscount:          b.GlobalDiscount,
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,
@@ -356,6 +361,7 @@ type updateDocumentBody struct {
 	TotalIsc                *string                  `json:"totalIsc,omitempty"`
 	TotalOtherTaxes         *string                  `json:"totalOtherTaxes,omitempty"`
 	TotalDiscount           *string                  `json:"totalDiscount,omitempty"`
+	GlobalDiscount          *string                  `json:"globalDiscount,omitempty"`
 	TotalAmount             *string                  `json:"totalAmount,omitempty"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
@@ -385,6 +391,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		TotalIsc:                b.TotalIsc,
 		TotalOtherTaxes:         b.TotalOtherTaxes,
 		TotalDiscount:           b.TotalDiscount,
+		GlobalDiscount:          b.GlobalDiscount,
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,

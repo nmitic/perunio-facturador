@@ -306,6 +306,37 @@ func validateIGVTolerance(li model.LineItem, rate float64, includeISCInBase bool
 	return errs
 }
 
+// validateGlobalDiscount guards the descuento global (Cat.53 code 02). It
+// applies to facturas/boletas and to notas de crédito (motivo 04, the discount
+// is credited as a document-level cac:AllowanceCharge over the referenced
+// lines), and may not exceed the gravado base imponible it reduces — a larger
+// discount would drive the IGV base negative (SUNAT 3271/3206).
+func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	gd, _ := strconv.ParseFloat(req.GlobalDiscount, 64)
+	if gd <= 0 {
+		return errs
+	}
+	if req.DocType != model.DocTypeFactura && req.DocType != model.DocTypeBoleta && req.DocType != model.DocTypeNotaCredito {
+		return append(errs, model.ValidationError{Code: 2800, Message: "descuento global solo aplica a factura/boleta/nota de crédito", Field: "globalDiscount"})
+	}
+	var gravado float64
+	for _, li := range req.Items {
+		if isGratuitoLineCode(li.TaxExemptionReasonCode) {
+			continue
+		}
+		switch model.TaxCodeForAffectation(li.TaxExemptionReasonCode) {
+		case "1000", "1016":
+			v, _ := strconv.ParseFloat(li.LineTotal, 64)
+			gravado += v
+		}
+	}
+	if gd > gravado+0.01 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "descuento global no puede exceder la base gravada", Field: "globalDiscount"})
+	}
+	return errs
+}
+
 func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 

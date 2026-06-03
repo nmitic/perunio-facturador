@@ -38,6 +38,7 @@ type CreateDocumentInput struct {
 	TotalIsc           *string
 	TotalOtherTaxes    *string
 	TotalDiscount      *string
+	GlobalDiscount     *string
 	TotalAmount        string
 	TaxInclusiveAmount *string
 	Notes              *string
@@ -92,6 +93,7 @@ type UpdateDocumentInput struct {
 	TotalIsc           *string
 	TotalOtherTaxes    *string
 	TotalDiscount      *string
+	GlobalDiscount     *string
 	TotalAmount        *string
 	TaxInclusiveAmount *string
 	Notes              *string
@@ -165,7 +167,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				tax_inclusive_amount, notes,
 				forma_pago, cuotas,
 				reference_doc_type, reference_doc_series, reference_doc_correlative,
-				credit_debit_reason_code, credit_debit_reason_desc
+				credit_debit_reason_code, credit_debit_reason_desc,
+				global_discount
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -175,7 +178,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$22, $23,
 				$24, $25,
 				$26, $27, $28,
-				$29, $30
+				$29, $30,
+				$31
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -187,6 +191,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.FormaPago, cuotasJSON,
 			in.ReferenceDocType, in.ReferenceDocSeries, in.ReferenceDocCorrelative,
 			in.CreditDebitReasonCode, in.CreditDebitReasonDesc,
+			in.GlobalDiscount,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -328,6 +333,9 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 	}
 	if in.TotalDiscount != nil {
 		add("total_discount", *in.TotalDiscount)
+	}
+	if in.GlobalDiscount != nil {
+		add("global_discount", *in.GlobalDiscount)
 	}
 	if in.TotalAmount != nil {
 		add("total_amount", *in.TotalAmount)

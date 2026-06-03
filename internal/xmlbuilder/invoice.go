@@ -96,9 +96,12 @@ type invoice struct {
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
 	PaymentTerms         []paymentTerms
-	TaxTotal             taxTotal
-	LegalMonetaryTotal   legalMonetaryTotal
-	InvoiceLines         []invoiceLine
+	// Document-level descuento global (UBL puts cac:AllowanceCharge before
+	// cac:TaxTotal). nil when there is no global discount.
+	AllowanceCharge    *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	TaxTotal           taxTotal
+	LegalMonetaryTotal legalMonetaryTotal
+	InvoiceLines       []invoiceLine
 }
 
 // buildInvoiceXML creates UBL 2.1 Invoice XML bytes from an issue request.
@@ -151,6 +154,9 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 
 	// Forma de pago (SUNAT err 3244): Contado, or Credito + one entry per cuota.
 	inv.PaymentTerms = buildPaymentTerms(req)
+
+	// Descuento global (Cat.53 code 02) — document-level cac:AllowanceCharge.
+	inv.AllowanceCharge = buildGlobalDiscount(req)
 
 	// Tax totals
 	inv.TaxTotal = buildDocumentTaxTotal(req)
@@ -247,9 +253,58 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 	return b
 }
 
+// igvRate is the IGV rate (18%) applied to the gravado base imponible.
+const igvRate = 0.18
+
+// globalDiscountReasonCode is Cat.53 "02" — descuento global que afecta la base
+// imponible del IGV/IVAP, the only global-discount type this service emits.
+const globalDiscountReasonCode = "02"
+
+// globalDiscountValue returns the parsed descuento global amount, or 0 when none.
+func globalDiscountValue(req model.IssueRequest) float64 {
+	return parseDecimal(req.GlobalDiscount)
+}
+
+// buildGlobalDiscount returns the document-level cac:AllowanceCharge for a
+// descuento global (Cat.53 code 02), or nil when there is none. Per the SUNAT
+// factura guide (punto 21/35) it carries ChargeIndicator=false, the gravado base
+// as cbc:BaseAmount and the discount as cbc:Amount; SUNAT then reconciles the
+// gravado cac:TaxSubtotal/cbc:TaxableAmount as BaseAmount − Amount (see
+// buildDocumentTaxTotal) and the totals as LineExtensionAmount −
+// AllowanceTotalAmount + TaxAmount.
+func buildGlobalDiscount(req model.IssueRequest) *lineAllowanceCharge {
+	amt := globalDiscountValue(req)
+	if amt <= 0 {
+		return nil
+	}
+	base := sumLineBuckets(req.Items).regularBase
+	var factor float64
+	if base != 0 {
+		factor = amt / base
+	}
+	return &lineAllowanceCharge{
+		ChargeIndicator:         false,
+		AllowanceChargeReason:   globalDiscountReasonCode,
+		MultiplierFactorNumeric: strconv.FormatFloat(factor, 'f', 5, 64),
+		Amount:                  newCurrencyAmount(formatDecimal(amt), req.CurrencyCode),
+		BaseAmount:              newCurrencyAmount(formatDecimal(base), req.CurrencyCode),
+	}
+}
+
 func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	cur := req.CurrencyCode
 	buckets := sumLineBuckets(req.Items)
+
+	// Descuento global (Cat.53 code 02) reduces the gravado base imponible: the
+	// gravado cac:TaxSubtotal must declare BaseAmount − discount and the IGV is
+	// recomputed at 18% on the reduced base, or SUNAT rejects the IGV total.
+	if gd := globalDiscountValue(req); gd > 0 {
+		buckets.regularBase -= gd
+		if buckets.regularBase < 0 {
+			buckets.regularBase = 0
+		}
+		buckets.regularIGV = parseDecimal(formatDecimal(buckets.regularBase * igvRate))
+	}
 
 	// Document-level cbc:TaxAmount: SUNAT expects the sum of taxes declared
 	// across all subtotals (IGV + IVAP). Gratuita IGV is informativo and lives
@@ -350,16 +405,29 @@ func hasNoteWithCode(notes []noteElement, code string) bool {
 
 func buildLegalMonetaryTotal(req model.IssueRequest) legalMonetaryTotal {
 	cur := req.CurrencyCode
-	// req.TotalDiscount is the sum of per-line descuentos, which are already
-	// itemised as line-level cac:AllowanceCharge and subtracted from each
-	// line's cbc:LineExtensionAmount (and therefore from req.Subtotal). It must
-	// NOT also be declared as a document-level cbc:AllowanceTotalAmount: that
-	// total is reserved for global discounts backed by a document-level
-	// cac:AllowanceCharge, which this service does not model. Counting it twice
-	// breaks the SUNAT total identity (TaxInclusiveAmount = LineExtensionAmount
-	// − AllowanceTotalAmount + TaxAmount).
+	// The descuento global we support is Cat.53 code "02" — afecta la base
+	// imponible del IGV. SUNAT realises such a discount by REDUCING the valor de
+	// venta (base imponible), NOT by cbc:AllowanceTotalAmount. So:
+	//
+	//   - cbc:LineExtensionAmount is reported NET of the global discount
+	//     (req.Subtotal is the GROSS sum of line LineExtensionAmounts; subtract the
+	//     discount). The lines themselves keep their gross value; only this total
+	//     reflects the reduced valor de venta. Matches greenter's valorVenta.
+	//   - cbc:AllowanceTotalAmount is OMITTED. It carries only the sum of discounts
+	//     that do NOT affect the base (Cat.53 01/03), which we don't emit. Putting
+	//     an afecta-base (02) discount here makes SUNAT's "sum of non-afecta global
+	//     discounts" (0) differ from the declared total → fault 3300.
+	//
+	// The descuento itself stays documented as the //Invoice/cac:AllowanceCharge
+	// (code 02) block and as the reduced gravado cac:TaxSubtotal/TaxableAmount.
+	// Per-line descuentos likewise stay inside each line's LineExtensionAmount and
+	// never surface as a document AllowanceTotalAmount.
+	lineExtension := req.Subtotal
+	if gd := globalDiscountValue(req); gd > 0 {
+		lineExtension = formatDecimal(parseDecimal(req.Subtotal) - gd)
+	}
 	return legalMonetaryTotal{
-		LineExtensionAmount: newCurrencyAmount(req.Subtotal, cur),
+		LineExtensionAmount: newCurrencyAmount(lineExtension, cur),
 		TaxInclusiveAmount:  newCurrencyAmount(req.TaxInclusiveAmount, cur),
 		PayableAmount:       newCurrencyAmount(req.TotalAmount, cur),
 	}

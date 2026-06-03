@@ -36,6 +36,13 @@ type IssueRequest struct {
 	TotalAmount        string `json:"totalAmount"`
 	TaxInclusiveAmount string `json:"taxInclusiveAmount"`
 
+	// GlobalDiscount is a document-level descuento global (Cat.53 code 02 —
+	// afecta la base imponible del IGV). Empty/"0" = none. It is emitted as a
+	// document-level cac:AllowanceCharge that reduces the gravado IGV base and
+	// valor de venta. Valid on facturas/boletas and on notas de crédito
+	// (motivo 04, descuento global sobre el comprobante referenciado).
+	GlobalDiscount string `json:"globalDiscount"`
+
 	// Forma de pago (Cat. SUNAT). Empty defaults to "contado" downstream.
 	FormaPago string         `json:"formaPago"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
