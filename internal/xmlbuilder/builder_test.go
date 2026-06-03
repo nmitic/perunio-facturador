@@ -618,6 +618,50 @@ func TestBuildDocumentXML_LineDiscount(t *testing.T) {
 		is.True(t, strings.Contains(xml, "<cbc:TaxInclusiveAmount currencyID=\"PEN\">59.00</cbc:TaxInclusiveAmount>"),
 			"TaxInclusiveAmount must stay 59.00")
 	})
+
+	// SUNAT's CreditNoteLine/DebitNoteLine model has NO line-level
+	// cac:AllowanceCharge (unlike InvoiceLine): per the official guide (punto 29)
+	// it computes the valor de venta del ítem as Quantity × cac:Price with the
+	// descuento already deducted. A discounted note line must therefore bake the
+	// discount into a NET cac:Price and omit the AllowanceCharge, or SUNAT ignores
+	// the discount and rejects with fault 3271. Regression for the motive-05 NC.
+	for _, tc := range []struct {
+		name    string
+		docType string
+		series  string
+		lineTag string
+	}{
+		{"credit note (07)", "07", "FC01", "cac:CreditNoteLine"},
+		{"debit note (08)", "08", "FD01", "cac:DebitNoteLine"},
+	} {
+		t.Run(tc.name+" bakes the discount into a net cac:Price with no line AllowanceCharge", func(t *testing.T) {
+			req := newDiscountInvoice()
+			req.DocType = tc.docType
+			req.Series = tc.series
+			req.ReferenceDocType = "01"
+			req.ReferenceDocSeries = "F001"
+			req.ReferenceDocCorrelative = 1
+			req.ReasonCode = "05"
+			req.ReasonDescription = "Descuento por ítem"
+
+			xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+			is.NotError(t, err)
+			xml := string(xmlBytes)
+
+			start := strings.Index(xml, "<"+tc.lineTag+">")
+			is.True(t, start != -1, "should emit "+tc.lineTag)
+			line := xml[start : strings.Index(xml, "</"+tc.lineTag+">")+len("</"+tc.lineTag+">")]
+
+			is.True(t, !strings.Contains(line, "<cac:AllowanceCharge>"),
+				"SUNAT note line must NOT carry a line-level cac:AllowanceCharge")
+			// Net valor unitario: LineExtensionAmount(50.00) / Qty(1) = 50.00, so
+			// SUNAT's Qty × Price == LineExtensionAmount reconciles.
+			is.True(t, strings.Contains(line, "<cac:Price><cbc:PriceAmount currencyID=\"PEN\">50.00</cbc:PriceAmount></cac:Price>"),
+				"cac:Price must be the NET valor unitario (50.00), discount baked in")
+			is.True(t, strings.Contains(line, "<cbc:LineExtensionAmount currencyID=\"PEN\">50.00</cbc:LineExtensionAmount>"),
+				"LineExtensionAmount must be the net line total (50.00)")
+		})
+	}
 }
 
 func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {

@@ -141,7 +141,8 @@ SUNAT_GRE_PRODUCTION_URL=   # default: https://api-cpe.sunat.gob.pe
 - RC deadline: 7 calendar days, max 500 lines per block
 
 ### Line discounts (descuento por ítem, Cat.53 "00")
-- Keep `cac:Price/cbc:PriceAmount` at the **gross** valor unitario and emit a line `cac:AllowanceCharge` (`ChargeIndicator=false`, reason `00`, `MultiplierFactorNumeric`, `Amount`, `BaseAmount`). SUNAT recomputes `LineExtensionAmount = Price × Qty − Amount`; omitting the AllowanceCharge → **fault 3271**.
+- **Invoices** (`cac:InvoiceLine`): keep `cac:Price/cbc:PriceAmount` at the **gross** valor unitario and emit a line `cac:AllowanceCharge` (`ChargeIndicator=false`, reason `00`, `MultiplierFactorNumeric`, `Amount`, `BaseAmount`). SUNAT recomputes `LineExtensionAmount = Price × Qty − Amount`; omitting the AllowanceCharge → **fault 3271**.
+- **Notes** (`cac:CreditNoteLine` / `cac:DebitNoteLine`): SUNAT's note-line model has **no** line `cac:AllowanceCharge`. It computes `LineExtensionAmount = Quantity × cac:Price` (guía NC, punto 29), so the descuento must be **baked into a NET `cac:Price`** (`= LineExtensionAmount ÷ Quantity`) with no AllowanceCharge. Emitting an InvoiceLine-style AllowanceCharge on a note → SUNAT ignores it and **fault 3271**. (`noteLineUnitPrice` in `invoice.go`.)
 - Per-line discounts are already in each line's `LineExtensionAmount`; do **not** also declare them as a document `cbc:AllowanceTotalAmount` (that's for global discounts only).
 
 ### Gratuito / free items (Cat.07 codes 11-16, 21, 31-37) — all verified against accepted SUNAT CDRs

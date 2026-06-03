@@ -99,22 +99,19 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 }
 
 func buildCreditNoteLine(li model.LineItem, cur string) (creditNoteLine, error) {
-	unitPrice := li.UnitPrice
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
-		unitPrice = "0.00"
-	}
 	pr, err := buildPricingReference(li, cur)
 	if err != nil {
 		return creditNoteLine{}, err
 	}
+	// SUNAT's CreditNoteLine has no line-level cac:AllowanceCharge: the descuento
+	// is baked into the net valor unitario (noteLineUnitPrice). See its doc comment.
 	return creditNoteLine{
 		ID:                  strconv.Itoa(li.LineNumber),
 		CreditedQuantity:    quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(lineExtensionAmountFor(li), cur),
 		PricingReference:    pr,
-		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
-		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
+		Price:               price{PriceAmount: newCurrencyAmount(noteLineUnitPrice(li), cur)},
 	}, nil
 }

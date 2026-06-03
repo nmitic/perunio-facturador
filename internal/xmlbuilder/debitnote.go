@@ -106,22 +106,19 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 }
 
 func buildDebitNoteLine(li model.LineItem, cur string) (debitNoteLine, error) {
-	unitPrice := li.UnitPrice
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
-		unitPrice = "0.00"
-	}
 	pr, err := buildPricingReference(li, cur)
 	if err != nil {
 		return debitNoteLine{}, err
 	}
+	// Like CreditNoteLine, SUNAT's DebitNoteLine has no line-level
+	// cac:AllowanceCharge; the descuento is baked into the net valor unitario.
 	return debitNoteLine{
 		ID:                  strconv.Itoa(li.LineNumber),
 		DebitedQuantity:     quantity{Value: li.Quantity, UnitCode: li.UnitCode},
 		LineExtensionAmount: newCurrencyAmount(lineExtensionAmountFor(li), cur),
 		PricingReference:    pr,
-		AllowanceCharge:     buildLineDiscount(li, cur),
 		TaxTotal:            buildLineTaxTotal(li, cur),
 		Item:                item{Description: li.Description},
-		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
+		Price:               price{PriceAmount: newCurrencyAmount(noteLineUnitPrice(li), cur)},
 	}, nil
 }

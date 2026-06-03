@@ -34,6 +34,22 @@ func formatDecimal(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 
+// formatUnitPrice renders a valor unitario for cac:Price/cbc:PriceAmount, which
+// SUNAT allows at up to 10 decimals (n(12,10)). Trailing zeros are trimmed but
+// at least 2 decimals are kept. The extra precision matters when a net unit
+// price is derived by dividing a line total by a fractional/large quantity, so
+// that Qty × Price reconciles to cbc:LineExtensionAmount within tolerance.
+func formatUnitPrice(v float64) string {
+	s := strconv.FormatFloat(v, 'f', 10, 64)
+	if strings.ContainsRune(s, '.') {
+		s = strings.TrimRight(s, "0")
+		if dot := strings.IndexByte(s, '.'); len(s)-dot-1 < 2 {
+			s += strings.Repeat("0", 2-(len(s)-dot-1))
+		}
+	}
+	return s
+}
+
 // isGratuitoCode reports whether a Cat.07 affectation code marks the line as
 // transferencia/retiro a título gratuito (codes 11-16, 21, 31-37).
 func isGratuitoCode(code string) bool {
@@ -469,6 +485,25 @@ func lineExtensionAmountFor(li model.LineItem) string {
 		return formatDecimal(gratuitoReferentialBase(li))
 	}
 	return li.LineTotal
+}
+
+// noteLineUnitPrice returns cac:Price/cbc:PriceAmount for a CreditNote/DebitNote
+// line. Unlike an InvoiceLine, the SUNAT NC/ND line model has NO line-level
+// cac:AllowanceCharge: per the official guide (punto 29) SUNAT computes the
+// valor de venta del ítem as CreditedQuantity × cac:Price, with the descuento
+// already deducted. So the descuento must be baked into the valor unitario
+// here — the net per-unit price (post-discount LineExtensionAmount ÷ Quantity) —
+// not declared as a separate AllowanceCharge (which SUNAT ignores → fault 3271).
+// Gratuito lines charge nothing, so the price is 0.
+func noteLineUnitPrice(li model.LineItem) string {
+	if isGratuitoCode(li.TaxExemptionReasonCode) {
+		return "0.00"
+	}
+	qty := parseDecimal(li.Quantity)
+	if qty == 0 {
+		return li.UnitPrice
+	}
+	return formatUnitPrice(parseDecimal(lineExtensionAmountFor(li)) / qty)
 }
 
 // buildAdditionalMonetaryTotals emits sac:AdditionalMonetaryTotal entries.

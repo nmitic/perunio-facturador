@@ -290,30 +290,33 @@ type invoiceLine struct {
 	Price               price                `xml:"cac:Price"`
 }
 
-// creditNoteLine represents a single line item (for CreditNote).
+// creditNoteLine represents a single line item (for CreditNote). SUNAT's
+// CreditNoteLine model has NO line-level cac:AllowanceCharge (unlike InvoiceLine):
+// a descuento por ítem is baked into cac:Price/cbc:PriceAmount as the net valor
+// unitario, since SUNAT computes LineExtensionAmount = CreditedQuantity × Price.
 type creditNoteLine struct {
-	XMLName             xml.Name             `xml:"cac:CreditNoteLine"`
-	ID                  string               `xml:"cbc:ID"`
-	CreditedQuantity    quantity             `xml:"cbc:CreditedQuantity"`
-	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
-	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
-	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
-	Item                item                 `xml:"cac:Item"`
-	Price               price                `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:CreditNoteLine"`
+	ID                  string            `xml:"cbc:ID"`
+	CreditedQuantity    quantity          `xml:"cbc:CreditedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
+	Item                item              `xml:"cac:Item"`
+	Price               price             `xml:"cac:Price"`
 }
 
-// debitNoteLine represents a single line item (for DebitNote).
+// debitNoteLine represents a single line item (for DebitNote). Like
+// CreditNoteLine, SUNAT's DebitNoteLine model has no line-level
+// cac:AllowanceCharge; a descuento is baked into the net cac:Price/cbc:PriceAmount.
 type debitNoteLine struct {
-	XMLName             xml.Name             `xml:"cac:DebitNoteLine"`
-	ID                  string               `xml:"cbc:ID"`
-	DebitedQuantity     quantity             `xml:"cbc:DebitedQuantity"`
-	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
-	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
-	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
-	Item                item                 `xml:"cac:Item"`
-	Price               price                `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:DebitNoteLine"`
+	ID                  string            `xml:"cbc:ID"`
+	DebitedQuantity     quantity          `xml:"cbc:DebitedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	TaxTotal            taxTotal          `xml:"cac:TaxTotal"`
+	Item                item              `xml:"cac:Item"`
+	Price               price             `xml:"cac:Price"`
 }
 
 // lineAllowanceCharge represents a line-level cac:AllowanceCharge. SUNAT uses
