@@ -31,8 +31,13 @@ type debitNote struct {
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
 	TaxTotal             taxTotal
-	LegalMonetaryTotal   legalMonetaryTotal
-	DebitNoteLines       []debitNoteLine
+	// UBL 2.1 asymmetry: Invoice and CreditNote name the totals block
+	// cac:LegalMonetaryTotal, but DebitNoteType requires it to be
+	// cac:RequestedMonetaryTotal in that exact slot. Emitting LegalMonetaryTotal
+	// trips SUNAT fault soap-env:Client.0306 (cvc-particle 2.1: next item should
+	// be RequestedMonetaryTotal).
+	RequestedMonetaryTotal legalMonetaryTotal `xml:"cac:RequestedMonetaryTotal"`
+	DebitNoteLines         []debitNoteLine
 }
 
 // buildDebitNoteXML creates UBL 2.1 DebitNote XML bytes.
@@ -92,7 +97,7 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 		lmt.ChargeTotalAmount = lmt.AllowanceTotalAmount
 		lmt.AllowanceTotalAmount = nil
 	}
-	dn.LegalMonetaryTotal = lmt
+	dn.RequestedMonetaryTotal = lmt
 
 	for _, li := range req.Items {
 		line, err := buildDebitNoteLine(li, req.CurrencyCode)

@@ -212,6 +212,11 @@ func TestBuildDocumentXML_DebitNote(t *testing.T) {
 		is.True(t, strings.Contains(xml, `<DebitNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:DebitNote-2"`), "should have DebitNote root")
 		is.True(t, strings.Contains(xml, `<cac:DebitNoteLine>`), "should use DebitNoteLine")
 		is.True(t, strings.Contains(xml, `<cbc:DebitedQuantity`), "should use DebitedQuantity")
+		// DebitNoteType requires cac:RequestedMonetaryTotal for the totals block,
+		// NOT cac:LegalMonetaryTotal (which is what Invoice/CreditNote use). Emitting
+		// the latter trips SUNAT fault soap-env:Client.0306 (cvc-particle 2.1).
+		is.True(t, strings.Contains(xml, `<cac:RequestedMonetaryTotal>`), "should use RequestedMonetaryTotal")
+		is.True(t, !strings.Contains(xml, `cac:LegalMonetaryTotal`), "must NOT use LegalMonetaryTotal on a DebitNote")
 	})
 }
 

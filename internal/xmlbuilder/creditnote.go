@@ -31,7 +31,7 @@ type creditNote struct {
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
 	TaxTotal             taxTotal
-	LegalMonetaryTotal   legalMonetaryTotal
+	LegalMonetaryTotal   legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
 	CreditNoteLines      []creditNoteLine
 }
 

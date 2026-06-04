@@ -100,7 +100,7 @@ type invoice struct {
 	// cac:TaxTotal). nil when there is no global discount.
 	AllowanceCharge    *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
 	TaxTotal           taxTotal
-	LegalMonetaryTotal legalMonetaryTotal
+	LegalMonetaryTotal legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
 	InvoiceLines       []invoiceLine
 }
 

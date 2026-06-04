@@ -259,9 +259,10 @@ type paymentTerms struct {
 	PaymentDueDate string          `xml:"cbc:PaymentDueDate,omitempty"`
 }
 
-// legalMonetaryTotal represents the totals block.
+// legalMonetaryTotal represents the totals block. The element name is supplied
+// by the parent field's tag (cac:LegalMonetaryTotal for Invoice/CreditNote,
+// cac:RequestedMonetaryTotal for DebitNote) rather than hardcoded here.
 type legalMonetaryTotal struct {
-	XMLName              xml.Name        `xml:"cac:LegalMonetaryTotal"`
 	LineExtensionAmount  currencyAmount  `xml:"cbc:LineExtensionAmount"`
 	TaxInclusiveAmount   currencyAmount  `xml:"cbc:TaxInclusiveAmount"`
 	AllowanceTotalAmount *currencyAmount `xml:"cbc:AllowanceTotalAmount,omitempty"`
