@@ -85,26 +85,23 @@ func (p *Pool) CreateVoidRequest(ctx context.Context, companyID, voidID, voidDat
 			return err
 		}
 
-		// Link items.
-		linkRows := make([][]any, 0, len(docs))
+		// Link items. Use a batched INSERT rather than COPY FROM: Postgres
+		// rejects COPY FROM on RLS-protected tables (SQLSTATE 0A000).
+		const insertItemSQL = `
+			INSERT INTO voided_document_items (void_id, document_id, doc_type, series, correlative, reason)
+			VALUES ($1, $2, $3, $4, $5, $6)`
+		batch := &pgx.Batch{}
 		for _, d := range docs {
-			linkRows = append(linkRows, []any{voidDoc.ID, d.id, d.docType, d.series, d.correlative, reason})
+			batch.Queue(insertItemSQL, voidDoc.ID, d.id, d.docType, d.series, d.correlative, reason)
 		}
-		if _, err := tx.CopyFrom(ctx,
-			pgx.Identifier{"voided_document_items"},
-			[]string{"void_id", "document_id", "doc_type", "series", "correlative", "reason"},
-			pgx.CopyFromRows(linkRows),
-		); err != nil {
+		if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 			return err
 		}
 
-		// Mark each doc as voided.
-		if _, err := tx.Exec(ctx,
-			`UPDATE issued_documents SET status = 'voided', updated_at = now() WHERE id = ANY($1)`,
-			documentIDs,
-		); err != nil {
-			return err
-		}
+		// NOTE: documents are NOT marked 'voided' here. A comprobante is only
+		// annulled once SUNAT accepts the RA — that flip happens in
+		// ApplyVoidResult on an accepted poll. Marking it at create time would
+		// wrongly show "Anulado" even if issue/poll fails or SUNAT rejects.
 		return nil
 	})
 	if err != nil {
@@ -167,7 +164,24 @@ func (p *Pool) ApplyVoidResult(ctx context.Context, voidID string, res VoidIssue
 			"UPDATE voided_documents SET %s WHERE id = $%d RETURNING %s",
 			strings.Join(set, ", "), len(args), voidedDocumentColumns,
 		)
-		return scanVoidedDocument(tx.QueryRow(ctx, sql, args...), &v)
+		if err := scanVoidedDocument(tx.QueryRow(ctx, sql, args...), &v); err != nil {
+			return err
+		}
+
+		// SUNAT accepted the baja: the linked comprobantes are now officially
+		// annulled, so flip them to 'voided'. Doing it here (rather than at
+		// create time) keeps the document status honest if issue/poll fails or
+		// SUNAT rejects the RA.
+		if res.MarkAccepted {
+			if _, err := tx.Exec(ctx,
+				`UPDATE issued_documents SET status = 'voided', updated_at = now()
+				 WHERE id IN (SELECT document_id FROM voided_document_items WHERE void_id = $1)`,
+				voidID,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -196,18 +210,31 @@ func scanVoidedDocument(row pgx.Row, v *model.VoidedDocument) error {
 func (p *Pool) ListVoidedDocuments(ctx context.Context, companyID string) ([]model.VoidedDocument, error) {
 	var out []model.VoidedDocument
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx,
-			"SELECT "+voidedDocumentColumns+
-				" FROM voided_documents WHERE company_id = $1 ORDER BY void_date DESC",
-			companyID,
-		)
+		rows, err := tx.Query(ctx, `
+			SELECT vd.id, vd.tenant_id, vd.company_id, vd.void_id, vd.void_date, vd.status,
+				vd.sunat_ticket, vd.sunat_response_code, vd.sunat_response_description,
+				vd.r2_xml_key, vd.r2_signed_xml_key, vd.r2_cdr_key,
+				vd.sent_at, vd.accepted_at, vd.created_at, vd.updated_at,
+				COALESCE(array_agg(vdi.document_id) FILTER (WHERE vdi.document_id IS NOT NULL), '{}')
+			FROM voided_documents vd
+			LEFT JOIN voided_document_items vdi ON vdi.void_id = vd.id
+			WHERE vd.company_id = $1
+			GROUP BY vd.id
+			ORDER BY vd.void_date DESC
+		`, companyID)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var v model.VoidedDocument
-			if err := scanVoidedDocument(rows, &v); err != nil {
+			if err := rows.Scan(
+				&v.ID, &v.TenantID, &v.CompanyID, &v.VoidID, &v.VoidDate, &v.Status,
+				&v.SunatTicket, &v.SunatResponseCode, &v.SunatResponseDescription,
+				&v.R2XmlKey, &v.R2SignedXmlKey, &v.R2CdrKey,
+				&v.SentAt, &v.AcceptedAt, &v.CreatedAt, &v.UpdatedAt,
+				&v.DocumentIDs,
+			); err != nil {
 				return err
 			}
 			out = append(out, v)

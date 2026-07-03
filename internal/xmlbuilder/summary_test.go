@@ -79,8 +79,9 @@ func TestBuildVoidedXML(t *testing.T) {
 		// Root element
 		is.True(t, strings.Contains(xml, `<VoidedDocuments`), "should have VoidedDocuments root")
 
-		// Document ID format: RUC-RA-YYYYMMDD-NNNNN
-		is.True(t, strings.Contains(xml, `<cbc:ID>20100113612-RA-20240116-00001</cbc:ID>`), "should have correct void ID")
+		// cbc:ID carries NO RUC (SUNAT rebuilds the filename as "{RUC}-{ID}";
+		// including the RUC here duplicates it and triggers fault 2220).
+		is.True(t, strings.Contains(xml, `<cbc:ID>RA-20240116-00001</cbc:ID>`), "should have correct void ID")
 
 		// Voided line
 		is.True(t, strings.Contains(xml, `<sac:VoidedDocumentsLine>`), "should have voided line")

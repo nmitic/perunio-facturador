@@ -35,12 +35,17 @@ type voidedDocumentsLine struct {
 	VoidReasonDesc   string `xml:"sac:VoidReasonDescription"`
 }
 
+// voidDocumentID is the cbc:ID of a Comunicacion de Baja (RA-YYYYMMDD-#####).
+// SUNAT rebuilds the expected ZIP filename as "{RUC}-{cbc:ID}", so the ID must
+// NOT itself carry the RUC — otherwise the RUC is duplicated and SUNAT rejects
+// with fault 2220 ("El ID debe coincidir con el nombre del archivo").
+func voidDocumentID(issueDate string, correlative int) string {
+	return fmt.Sprintf("RA-%s-%05d", formatDateCompact(issueDate), correlative)
+}
+
 // BuildVoidedXML creates UBL 2.0 VoidedDocuments XML bytes.
 func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
-	voidID := fmt.Sprintf("%s-RA-%s-%05d",
-		req.SupplierRUC,
-		formatDateCompact(req.IssueDate),
-		req.Correlative)
+	voidID := voidDocumentID(req.IssueDate, req.Correlative)
 
 	doc := voidedDocuments{
 		XMLNS:    NSVoidedDocuments,
@@ -86,7 +91,8 @@ func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
 	return marshalISO8859(&doc)
 }
 
-// VoidFilename returns the filename for a Comunicacion de Baja.
+// VoidFilename returns the filename for a Comunicacion de Baja. It is exactly
+// "{RUC}-{cbc:ID}" so the ID inside the XML always matches the ZIP filename.
 func VoidFilename(ruc, issueDate string, correlative int) string {
-	return fmt.Sprintf("%s-RA-%s-%05d", ruc, formatDateCompact(issueDate), correlative)
+	return fmt.Sprintf("%s-%s", ruc, voidDocumentID(issueDate, correlative))
 }

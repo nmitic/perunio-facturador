@@ -138,6 +138,9 @@ type VoidedDocument struct {
 	AcceptedAt               *time.Time `json:"acceptedAt"`
 	CreatedAt                time.Time  `json:"createdAt"`
 	UpdatedAt                time.Time  `json:"updatedAt"`
+	// DocumentIDs is populated only by the list query (aggregated from
+	// voided_document_items). It's empty on single-get, where Items is used.
+	DocumentIDs []string `json:"documentIds,omitempty"`
 }
 
 // VoidedDocumentItem represents one document inside a void communication.
