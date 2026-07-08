@@ -23,7 +23,7 @@ func TestBuildSummaryXML(t *testing.T) {
 					LineNumber: 1, DocType: "03", Series: "B001",
 					StartCorrelative: 1, EndCorrelative: 10,
 					ConditionCode: "1", CurrencyCode: "PEN",
-					TotalAmount: "1180.00", TotalIGV: "180.00",
+					TotalAmount: "1180.00", TotalGravada: "1000.00", TotalIGV: "180.00",
 					CustomerDocType: "1", CustomerDocNumber: "12345678",
 				},
 			},
@@ -41,8 +41,9 @@ func TestBuildSummaryXML(t *testing.T) {
 		is.True(t, strings.Contains(xml, `<SummaryDocuments`), "should have SummaryDocuments root")
 		is.True(t, strings.Contains(xml, `xmlns:sac="`), "should have sac namespace")
 
-		// Document ID format: RUC-RC-YYYYMMDD-NNNNN
-		is.True(t, strings.Contains(xml, `<cbc:ID>20100113612-RC-20240116-00001</cbc:ID>`), "should have correct summary ID")
+		// cbc:ID format: RC-YYYYMMDD-NNNNN — NO RUC (SUNAT rebuilds the filename as
+		// "{RUC}-{cbc:ID}"; a RUC here duplicates it → fault 2220).
+		is.True(t, strings.Contains(xml, `<cbc:ID>RC-20240116-00001</cbc:ID>`), "should have correct summary ID without RUC")
 
 		// Reference date
 		is.True(t, strings.Contains(xml, `<cbc:ReferenceDate>2024-01-15</cbc:ReferenceDate>`), "should have reference date")
@@ -50,6 +51,16 @@ func TestBuildSummaryXML(t *testing.T) {
 		// Summary line
 		is.True(t, strings.Contains(xml, `<sac:SummaryDocumentsLine>`), "should have summary line")
 		is.True(t, strings.Contains(xml, `<cbc:ConditionCode>1</cbc:ConditionCode>`), "should have condition code")
+
+		// SUNAT SummaryDocumentsLineType sequence: customer + cac:Status precede
+		// sac:TotalAmount, and IGV is a cac:TaxTotal (not sac:TaxTotal).
+		is.True(t, strings.Contains(xml, `<cac:TaxTotal>`), "should have cac:TaxTotal")
+		is.True(t, strings.Contains(xml, `<cbc:ID>1000</cbc:ID>`), "should have IGV tax scheme 1000")
+		customerIdx := strings.Index(xml, `<cac:AccountingCustomerParty>`)
+		statusIdx := strings.Index(xml, `<cac:Status>`)
+		totalIdx := strings.Index(xml, `<sac:TotalAmount`)
+		taxIdx := strings.Index(xml, `<cac:TaxTotal>`)
+		is.True(t, customerIdx < statusIdx && statusIdx < totalIdx && totalIdx < taxIdx, "line elements must be in schema order")
 	})
 }
 

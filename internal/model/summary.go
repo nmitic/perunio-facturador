@@ -34,6 +34,7 @@ type SummaryItem struct {
 	ReferenceCorr     int    `json:"referenceCorrelative"`
 	CurrencyCode      string `json:"currencyCode"`      // Must be PEN
 	TotalAmount       string `json:"totalAmount"`
+	TotalGravada      string `json:"totalGravada"`      // Base imponible gravada (IGV-exclusive)
 	TotalIGV          string `json:"totalIgv"`
 	TotalISC          string `json:"totalIsc"`
 	TotalOtherTaxes   string `json:"totalOtherTaxes"`

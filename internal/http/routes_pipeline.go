@@ -533,6 +533,7 @@ func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 			CustomerDocNumber: it.CustomerDocNumber,
 			CurrencyCode:      it.CurrencyCode,
 			TotalAmount:       it.TotalAmount,
+			TotalGravada:      it.Subtotal,
 			TotalIGV:          it.TotalIgv,
 			TotalISC:          it.TotalIsc,
 			TotalOtherTaxes:   it.TotalOtherTaxes,

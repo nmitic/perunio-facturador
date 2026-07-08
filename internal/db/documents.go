@@ -233,7 +233,29 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 			"UPDATE issued_documents SET %s WHERE id = $%d RETURNING %s",
 			strings.Join(set, ", "), len(args), issuedDocumentColumns,
 		)
-		return scanIssuedDocument(tx.QueryRow(ctx, sql, args...), &doc)
+		if err := scanIssuedDocument(tx.QueryRow(ctx, sql, args...), &doc); err != nil {
+			return err
+		}
+
+		// A SUNAT-accepted Nota de Crédito motivo 01 (Anulación de la operación)
+		// over a boleta fully annuls it — boletas have no Comunicación de Baja, so
+		// this NC is their anulación. Flip the referenced boleta to 'voided' so it
+		// shows as anulada and can't be annulled again. Mirrors the RA path, which
+		// voids its target on acceptance.
+		if res.MarkAccepted && doc.DocType == model.DocTypeNotaCredito &&
+			doc.CreditDebitReasonCode != nil && *doc.CreditDebitReasonCode == "01" &&
+			doc.ReferenceDocType != nil && *doc.ReferenceDocType == model.DocTypeBoleta &&
+			doc.ReferenceDocSeries != nil && doc.ReferenceDocCorrelative != nil {
+			if _, err := tx.Exec(ctx,
+				`UPDATE issued_documents SET status = 'voided', updated_at = now()
+				 WHERE company_id = $1 AND doc_type = $2 AND series = $3 AND correlative = $4
+				   AND status IN ('accepted', 'accepted_with_observations')`,
+				doc.CompanyID, *doc.ReferenceDocType, *doc.ReferenceDocSeries, *doc.ReferenceDocCorrelative,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

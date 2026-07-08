@@ -42,23 +42,49 @@ type summaryPartyLegalEntity struct {
 	RegistrationName string `xml:"cbc:RegistrationName"`
 }
 
+// summaryDocumentsLine follows SUNAT's SummaryDocumentsLineType sequence order
+// exactly: customer + billing reference + cac:Status all precede sac:TotalAmount,
+// then sac:BillingPayment, then cac:TaxTotal. Emitting them out of order triggers
+// schema fault "cvc-complex-type 2.4 ... next item should be end-element".
 type summaryDocumentsLine struct {
 	LineID                  string                  `xml:"cbc:LineID"`
 	DocumentTypeCode        string                  `xml:"cbc:DocumentTypeCode"`
 	DocumentSerialID        string                  `xml:"sac:DocumentSerialID"`
 	StartDocumentNumberID   string                  `xml:"sac:StartDocumentNumberID"`
 	EndDocumentNumberID     string                  `xml:"sac:EndDocumentNumberID"`
-	TotalAmount             currencyAmount          `xml:"sac:TotalAmount"`
-	BillingPayment          []summaryBillingPayment `xml:"sac:BillingPayment"`
 	AccountingCustomerParty *summaryCustomerParty   `xml:"cac:AccountingCustomerParty,omitempty"`
 	BillingReference        *summaryBillingRef      `xml:"cac:BillingReference,omitempty"`
 	ConditionCode           string                  `xml:"cac:Status>cbc:ConditionCode"`
-	TotalTaxAmount          currencyAmount          `xml:"sac:TaxTotal>cbc:TaxAmount"`
+	TotalAmount             currencyAmount          `xml:"sac:TotalAmount"`
+	BillingPayment          []summaryBillingPayment `xml:"sac:BillingPayment"`
+	TaxTotal                []summaryTaxTotal       `xml:"cac:TaxTotal"`
 }
 
 type summaryBillingPayment struct {
 	PaidAmount    currencyAmount `xml:"cbc:PaidAmount"`
 	InstructionID string         `xml:"cbc:InstructionID"`
+}
+
+// summaryTaxTotal is a per-tax cac:TaxTotal on an RC line (IGV, ISC, …), matching
+// greenter's accepted Resumen Diario output.
+type summaryTaxTotal struct {
+	TaxAmount   currencyAmount     `xml:"cbc:TaxAmount"`
+	TaxSubtotal summaryTaxSubtotal `xml:"cac:TaxSubtotal"`
+}
+
+type summaryTaxSubtotal struct {
+	TaxAmount   currencyAmount     `xml:"cbc:TaxAmount"`
+	TaxCategory summaryTaxCategory `xml:"cac:TaxCategory"`
+}
+
+type summaryTaxCategory struct {
+	TaxScheme summaryTaxScheme `xml:"cac:TaxScheme"`
+}
+
+type summaryTaxScheme struct {
+	ID          string `xml:"cbc:ID"`
+	Name        string `xml:"cbc:Name"`
+	TaxTypeCode string `xml:"cbc:TaxTypeCode"`
 }
 
 type summaryCustomerParty struct {
@@ -77,8 +103,11 @@ type summaryInvoiceRef struct {
 
 // BuildSummaryXML creates UBL 2.0 SummaryDocuments XML bytes.
 func BuildSummaryXML(req model.SummaryRequest) ([]byte, error) {
-	summaryID := fmt.Sprintf("%s-RC-%s-%05d",
-		req.SupplierRUC,
+	// cbc:ID carries NO RUC. SUNAT rebuilds the expected filename as
+	// "{RUC}-{cbc:ID}", so prefixing the RUC here duplicates it and triggers
+	// fault 2220 ("El ID debe coincidir con el nombre del archivo"). The RUC
+	// lives only in SummaryFilename. Mirrors voidDocumentID for the RA path.
+	summaryID := fmt.Sprintf("RC-%s-%05d",
 		formatDateCompact(req.IssueDate),
 		req.Correlative)
 
@@ -126,21 +155,42 @@ func SummaryFilename(ruc, issueDate string, correlative int) string {
 }
 
 func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
+	// Field order below is irrelevant (Go marshals in struct-definition order);
+	// the schema-critical sequence lives in the summaryDocumentsLine type.
 	line := summaryDocumentsLine{
 		LineID:                fmt.Sprint(item.LineNumber),
 		DocumentTypeCode:      item.DocType,
 		DocumentSerialID:      item.Series,
 		StartDocumentNumberID: fmt.Sprint(item.StartCorrelative),
 		EndDocumentNumberID:   fmt.Sprint(item.EndCorrelative),
-		TotalAmount:           newCurrencyAmount(item.TotalAmount, "PEN"), // RC amounts always PEN
 		ConditionCode:         item.ConditionCode,
-		TotalTaxAmount:        newCurrencyAmount(item.TotalIGV, "PEN"),
+		TotalAmount:           newCurrencyAmount(item.TotalAmount, "PEN"), // RC amounts always PEN
 	}
 
-	// Billing payments (tax breakdowns)
-	if !isZeroAmount(item.TotalIGV) {
+	// Customer (optional) — must precede cac:Status per the schema sequence.
+	if item.CustomerDocNumber != "" {
+		line.AccountingCustomerParty = &summaryCustomerParty{
+			CustomerAssignedID:  item.CustomerDocNumber,
+			AdditionalAccountID: item.CustomerDocType,
+		}
+	}
+
+	// Billing reference (NC/ND in summary) — also precedes cac:Status.
+	if item.ReferenceSeries != "" {
+		refID := fmt.Sprintf("%s-%d", item.ReferenceSeries, item.ReferenceCorr)
+		line.BillingReference = &summaryBillingRef{
+			InvoiceDocumentReference: summaryInvoiceRef{
+				ID:               refID,
+				DocumentTypeCode: item.ReferenceDocType,
+			},
+		}
+	}
+
+	// BillingPayment: valor de venta por tipo de operación (Cat. via InstructionID).
+	// These are IGV-exclusive bases, not the tax amounts.
+	if !isZeroAmount(item.TotalGravada) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalIGV, "PEN"),
+			PaidAmount:    newCurrencyAmount(item.TotalGravada, "PEN"),
 			InstructionID: "01", // Gravado
 		})
 	}
@@ -163,26 +213,36 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 		})
 	}
 
-	// Customer (if present)
-	if item.CustomerDocNumber != "" {
-		line.AccountingCustomerParty = &summaryCustomerParty{
-			CustomerAssignedID:  item.CustomerDocNumber,
-			AdditionalAccountID: item.CustomerDocType,
-		}
+	// TaxTotal: one cac:TaxTotal per tributo present (IGV, ISC, otros).
+	if !isZeroAmount(item.TotalIGV) {
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, "1000", "IGV", "VAT"))
 	}
-
-	// Billing reference (for NC/ND in summary)
-	if item.ReferenceSeries != "" {
-		refID := fmt.Sprintf("%s-%d", item.ReferenceSeries, item.ReferenceCorr)
-		line.BillingReference = &summaryBillingRef{
-			InvoiceDocumentReference: summaryInvoiceRef{
-				ID:               refID,
-				DocumentTypeCode: item.ReferenceDocType,
-			},
-		}
+	if !isZeroAmount(item.TotalISC) {
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, "2000", "ISC", "EXC"))
+	}
+	if !isZeroAmount(item.TotalOtherTaxes) {
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalOtherTaxes, "9999", "OTROS", "OTH"))
 	}
 
 	return line
+}
+
+// newSummaryTax builds a cac:TaxTotal for an RC line from a tax amount and its
+// SUNAT catalog-05 scheme (IGV 1000/VAT, ISC 2000/EXC, otros 9999/OTH).
+func newSummaryTax(amount, schemeID, schemeName, taxTypeCode string) summaryTaxTotal {
+	return summaryTaxTotal{
+		TaxAmount: newCurrencyAmount(amount, "PEN"),
+		TaxSubtotal: summaryTaxSubtotal{
+			TaxAmount: newCurrencyAmount(amount, "PEN"),
+			TaxCategory: summaryTaxCategory{
+				TaxScheme: summaryTaxScheme{
+					ID:          schemeID,
+					Name:        schemeName,
+					TaxTypeCode: taxTypeCode,
+				},
+			},
+		},
+	}
 }
 
 // formatDateCompact converts "2024-01-15" to "20240115".
