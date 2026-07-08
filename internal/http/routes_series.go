@@ -45,7 +45,9 @@ func (s *server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.DocType {
-	case "01", "03", "07", "08":
+	// Invoice/note types plus GRE despatch types (09=Remitente, 31=Transportista,
+	// EV=por Eventos) — GRE series (e.g. T001, V001) live in document_series too.
+	case "01", "03", "07", "08", "09", "31", "EV":
 	default:
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "docType inválido")
 		return

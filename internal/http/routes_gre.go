@@ -231,12 +231,8 @@ func (b *createDespatchBody) validate() string {
 	if b.DocType == "" {
 		return "docType requerido"
 	}
-	if b.Series == "" {
-		return "series requerido"
-	}
-	if b.Correlative <= 0 {
-		return "correlative inválido"
-	}
+	// series/correlative are optional: when correlative <= 0 the DB reserves the
+	// next value from the series row and takes the canonical series code from it.
 	if b.RecipientDocNumber == "" {
 		return "recipientDocNumber requerido"
 	}
@@ -334,6 +330,10 @@ func (s *server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 
 	d, err := s.pool.CreateDespatch(r.Context(), body.toInput(companyID))
 	if err != nil {
+		if errors.Is(err, db.ErrSeriesInactive) {
+			writeError(w, http.StatusBadRequest, "SERIES_NOT_FOUND", "La serie no existe o está inactiva")
+			return
+		}
 		s.log.Error("create despatch", "error", err, "companyId", companyID)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		return

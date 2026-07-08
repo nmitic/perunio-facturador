@@ -242,6 +242,26 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 	}
 	var out model.Despatch
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		// Correlative reservation. When the caller passes correlative <= 0 we
+		// atomically allocate the next value from the series row (and take the
+		// canonical series code from it), mirroring CreateDocumentWithItems.
+		// A positive correlative is honoured verbatim (explicit numbering).
+		correlative := in.Correlative
+		series := in.Series
+		if correlative <= 0 {
+			err := tx.QueryRow(ctx, `
+				UPDATE document_series
+				SET next_correlative = next_correlative + 1, updated_at = now()
+				WHERE id = $1 AND company_id = $2 AND is_active = true
+				RETURNING next_correlative - 1, series
+			`, in.SeriesID, in.CompanyID).Scan(&correlative, &series)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return ErrSeriesInactive
+				}
+				return err
+			}
+		}
 		row := tx.QueryRow(ctx, `
 			INSERT INTO despatches (
 				tenant_id, company_id, series_id, doc_type, series, correlative, status,
@@ -268,7 +288,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				$32,$33,
 				$34,$35,$36
 			) RETURNING `+despatchColumns,
-			tenantID, in.CompanyID, in.SeriesID, in.DocType, in.Series, in.Correlative,
+			tenantID, in.CompanyID, in.SeriesID, in.DocType, series, correlative,
 			in.IssueDate, in.IssueTime,
 			in.RecipientDocType, in.RecipientDocNumber, in.RecipientName, in.RecipientAddress,
 			in.TransportModality, in.TransferReason, in.TransferReasonDesc, in.StartDate,
