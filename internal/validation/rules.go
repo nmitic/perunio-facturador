@@ -337,6 +337,60 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 	return errs
 }
 
+// validateDetraccion guards the detracción (SPOT). It is nil for the vast
+// majority of documents. When present it must sit on a factura, or on a nota de
+// crédito/débito that references a factura (SUNAT allows detracción only on
+// operations that a factura documents — never on boletas). It requires
+// operationType 1001/1002, a resolved cuenta BN, and — for PEN documents — a
+// monto within ±1 cent of porcentaje × total.
+func validateDetraccion(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	d := req.Detraccion
+	if d == nil {
+		return errs
+	}
+
+	// Document scope: factura, or nota referencing a factura.
+	switch req.DocType {
+	case model.DocTypeFactura:
+	case model.DocTypeNotaCredito, model.DocTypeNotaDebito:
+		if req.ReferenceDocType != model.DocTypeFactura {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "detracción solo aplica a notas que referencian una factura", Field: "detraccion"})
+		}
+	default:
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "detracción solo aplica a facturas (no boletas)", Field: "detraccion"})
+	}
+
+	if req.OperationType != model.OpDetraccion && req.OperationType != model.OpDetraccionTransporte {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "operationType debe ser 1001/1002 para operación sujeta a detracción", Field: "operationType"})
+	}
+	if strings.TrimSpace(d.Codigo) == "" {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "código de detracción requerido (Cat.54)", Field: "detraccion.codigo"})
+	}
+	if strings.TrimSpace(d.CuentaBN) == "" {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "configure la cuenta de detracción de la empresa o especifíquela en el comprobante", Field: "detraccion.cuentaBN"})
+	}
+
+	monto, _ := strconv.ParseFloat(d.Monto, 64)
+	if monto <= 0 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "monto de detracción debe ser mayor a 0", Field: "detraccion.monto"})
+	}
+
+	// Arithmetic check only for PEN — detracción monto is always in soles, so a
+	// non-PEN document declares a converted amount we can't reconcile here
+	// (handled upstream). Guard against false negatives by skipping it.
+	if req.CurrencyCode == "PEN" {
+		pct, _ := strconv.ParseFloat(d.Porcentaje, 64)
+		total, _ := strconv.ParseFloat(req.TotalAmount, 64)
+		expected := total * pct / 100
+		if diff := monto - expected; diff > 0.01 || diff < -0.01 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f no coincide con %s%% de %.2f", monto, d.Porcentaje, total), Field: "detraccion.monto"})
+		}
+	}
+
+	return errs
+}
+
 func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 

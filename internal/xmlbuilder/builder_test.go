@@ -168,6 +168,62 @@ func TestBuildDocumentXML_PaymentTerms(t *testing.T) {
 	})
 }
 
+func TestBuildDocumentXML_Detraccion(t *testing.T) {
+	det := &model.Detraccion{
+		Codigo:     "019",
+		Porcentaje: "12.00",
+		Monto:      "141.60", // 12% of 1180.00
+		CuentaBN:   "00-123-456789",
+	}
+
+	assertDetraccion := func(t *testing.T, xml string) {
+		t.Helper()
+		// Legend text carries accents (valid ISO-8859-1 but not byte-equal to a
+		// UTF-8 literal here), so assert only on the leyenda code.
+		is.True(t, strings.Contains(xml, `<cbc:Note languageLocaleID="2006">`), "should emit leyenda 2006")
+		is.True(t, strings.Contains(xml, `<cac:PaymentMeans><cbc:ID>Detraccion</cbc:ID><cbc:PaymentMeansCode>999</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>00-123-456789</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>`), "should emit cuenta BN PaymentMeans")
+		is.True(t, strings.Contains(xml, `<cac:PaymentTerms><cbc:ID>Detraccion</cbc:ID><cbc:PaymentMeansID>019</cbc:PaymentMeansID><cbc:PaymentPercent>12.00</cbc:PaymentPercent><cbc:Amount currencyID="PEN">141.60</cbc:Amount></cac:PaymentTerms>`), "should emit detracción PaymentTerms")
+	}
+
+	t.Run("factura sujeta a detracción emits PaymentMeans + PaymentTerms + leyenda 2006", func(t *testing.T) {
+		req := newTestInvoice()
+		req.OperationType = "1001"
+		req.FormaPago = "contado"
+		req.Detraccion = det
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		assertDetraccion(t, xml)
+		// The forma de pago Contado entry must still be present alongside detracción.
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>`), "should keep Contado entry")
+	})
+
+	t.Run("nota de crédito de una factura sujeta a detracción mirrors the detracción", func(t *testing.T) {
+		req := newTestInvoice()
+		req.DocType = "07"
+		req.Series = "FC01"
+		req.OperationType = "1001"
+		req.ReferenceDocType = "01"
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
+		req.ReasonDescription = "Anulación de la operación"
+		req.Detraccion = det
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		assertDetraccion(t, string(xmlBytes))
+	})
+
+	t.Run("document without detracción emits no detracción markup", func(t *testing.T) {
+		req := newTestInvoice()
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, !strings.Contains(xml, `<cbc:ID>Detraccion</cbc:ID>`), "should not emit detracción block")
+		is.True(t, !strings.Contains(xml, `languageLocaleID="2006"`), "should not emit leyenda 2006")
+	})
+}
+
 func TestBuildDocumentXML_CreditNote(t *testing.T) {
 	t.Run("should generate valid UBL 2.1 CreditNote with discrepancy and billing reference", func(t *testing.T) {
 		req := newTestInvoice()

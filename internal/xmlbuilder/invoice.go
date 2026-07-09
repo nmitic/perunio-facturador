@@ -95,7 +95,10 @@ type invoice struct {
 	Signature            cacSignature
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
-	PaymentTerms         []paymentTerms
+	// Detracción cuenta BN (cac:PaymentMeans) — UBL places it before
+	// cac:PaymentTerms. nil when the document is not subject to detracción.
+	PaymentMeans *paymentMeans
+	PaymentTerms []paymentTerms
 	// Document-level descuento global (UBL puts cac:AllowanceCharge before
 	// cac:TaxTotal). nil when there is no global discount.
 	AllowanceCharge    *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
@@ -152,8 +155,19 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		})
 	}
 
+	// SUNAT leyenda 2006 — operación sujeta a detracción.
+	inv.Notes = appendDetraccionLegend(inv.Notes, req)
+
+	// Detracción cuenta BN (cac:PaymentMeans) — emitted before PaymentTerms.
+	inv.PaymentMeans = buildDetraccionPaymentMeans(req)
+
 	// Forma de pago (SUNAT err 3244): Contado, or Credito + one entry per cuota.
 	inv.PaymentTerms = buildPaymentTerms(req)
+
+	// Detracción código/porcentaje/monto — extra cac:PaymentTerms entry.
+	if pt := buildDetraccionPaymentTerms(req); pt != nil {
+		inv.PaymentTerms = append(inv.PaymentTerms, *pt)
+	}
 
 	// Descuento global (Cat.53 code 02) — document-level cac:AllowanceCharge.
 	inv.AllowanceCharge = buildGlobalDiscount(req)

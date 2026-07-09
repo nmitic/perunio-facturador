@@ -154,12 +154,14 @@ const (
 
 // Cat51 — Operation Types
 const (
-	OpVentaInterna   = "0101"
-	OpExportBienes   = "0102"
-	OpNoDomiciliados = "0103"
-	OpAnticipos      = "0104"
-	OpExportBienes2  = "0200"
-	OpExportServ     = "0201"
+	OpVentaInterna         = "0101"
+	OpExportBienes         = "0102"
+	OpNoDomiciliados       = "0103"
+	OpAnticipos            = "0104"
+	OpExportBienes2        = "0200"
+	OpExportServ           = "0201"
+	OpDetraccion           = "1001" // Operación sujeta a detracción
+	OpDetraccionTransporte = "1002" // Operación sujeta a detracción — transporte de carga
 )
 
 // Cat52 — Legends
@@ -167,8 +169,12 @@ const (
 	LegendMontoLetras    = "1000"
 	LegendTransfGratuita = "1002"
 	LegendPercepcion     = "2000"
+	LegendDetraccion     = "2006" // Operación sujeta a detracción
 	LegendCodInterno     = "3000"
 )
+
+// LegendDetraccionText is the fixed legend text SUNAT expects for a detracción.
+const LegendDetraccionText = "Operación sujeta a detracción"
 
 // IGVRate is the IGV rate as a decimal (18%).
 const IGVRate = "0.18"

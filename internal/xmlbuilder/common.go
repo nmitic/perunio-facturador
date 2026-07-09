@@ -1,6 +1,10 @@
 package xmlbuilder
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+
+	"github.com/perunio/perunio-facturador/internal/model"
+)
 
 const (
 	nsDS        = "http://www.w3.org/2000/09/xmldsig#"
@@ -251,12 +255,73 @@ type taxSchemeID struct {
 
 // paymentTerms represents cac:PaymentTerms (forma de pago, Cat.SUNAT).
 // Required on Factura/Boleta since 2018; SUNAT error 3244 fires when missing.
+// The same element also carries the detracción block (ID="Detraccion"), which
+// additionally sets PaymentPercent. Field order matters: SUNAT expects
+// ID, PaymentMeansID, PaymentPercent, Amount.
 type paymentTerms struct {
 	XMLName        xml.Name        `xml:"cac:PaymentTerms"`
 	ID             string          `xml:"cbc:ID"`
 	PaymentMeansID string          `xml:"cbc:PaymentMeansID"`
+	PaymentPercent string          `xml:"cbc:PaymentPercent,omitempty"`
 	Amount         *currencyAmount `xml:"cbc:Amount,omitempty"`
 	PaymentDueDate string          `xml:"cbc:PaymentDueDate,omitempty"`
+}
+
+// paymentMeans represents cac:PaymentMeans. SUNAT uses it only to carry the
+// detracción's Banco de la Nación account (PaymentMeansCode 999 = "otros").
+type paymentMeans struct {
+	XMLName               xml.Name              `xml:"cac:PaymentMeans"`
+	ID                    string                `xml:"cbc:ID"`
+	PaymentMeansCode      string                `xml:"cbc:PaymentMeansCode"`
+	PayeeFinancialAccount payeeFinancialAccount `xml:"cac:PayeeFinancialAccount"`
+}
+
+type payeeFinancialAccount struct {
+	ID string `xml:"cbc:ID"`
+}
+
+// buildDetraccionPaymentMeans returns the cac:PaymentMeans carrying the cuenta
+// de detracción, or nil when the document is not subject to detracción.
+func buildDetraccionPaymentMeans(req model.IssueRequest) *paymentMeans {
+	d := req.Detraccion
+	if d == nil {
+		return nil
+	}
+	return &paymentMeans{
+		ID:                    "Detraccion",
+		PaymentMeansCode:      "999",
+		PayeeFinancialAccount: payeeFinancialAccount{ID: d.CuentaBN},
+	}
+}
+
+// buildDetraccionPaymentTerms returns the extra cac:PaymentTerms declaring the
+// detracción código, porcentaje and monto (always in PEN), or nil when the
+// document is not subject to detracción.
+func buildDetraccionPaymentTerms(req model.IssueRequest) *paymentTerms {
+	d := req.Detraccion
+	if d == nil {
+		return nil
+	}
+	amt := newCurrencyAmount(d.Monto, "PEN")
+	return &paymentTerms{
+		ID:             "Detraccion",
+		PaymentMeansID: d.Codigo,
+		PaymentPercent: d.Porcentaje,
+		Amount:         &amt,
+	}
+}
+
+// appendDetraccionLegend appends the SUNAT leyenda 2006 ("Operación sujeta a
+// detracción") when the document is subject to detracción and the note is not
+// already present. Shared by Invoice, CreditNote and DebitNote builders.
+func appendDetraccionLegend(notes []noteElement, req model.IssueRequest) []noteElement {
+	if req.Detraccion == nil || hasNoteWithCode(notes, model.LegendDetraccion) {
+		return notes
+	}
+	return append(notes, noteElement{
+		Value:            model.LegendDetraccionText,
+		LanguageLocaleID: model.LegendDetraccion,
+	})
 }
 
 // legalMonetaryTotal represents the totals block. The element name is supplied

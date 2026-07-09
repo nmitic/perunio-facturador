@@ -1,6 +1,7 @@
 package validation_test
 
 import (
+	"strings"
 	"testing"
 
 	"maragu.dev/is"
@@ -206,4 +207,92 @@ func hasErrorCode(errs []model.ValidationError, code int) bool {
 		}
 	}
 	return false
+}
+
+func hasErrorField(errs []model.ValidationError, field string) bool {
+	for _, e := range errs {
+		if strings.HasPrefix(e.Field, field) {
+			return true
+		}
+	}
+	return false
+}
+
+func newDetraccion() *model.Detraccion {
+	// 12% of 1180.00 = 141.60
+	return &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "141.60", CuentaBN: "00-123-456789"}
+}
+
+func TestValidateDetraccion(t *testing.T) {
+	t.Run("valid factura sujeta a detracción passes", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1001"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "should have no detracción errors")
+	})
+
+	t.Run("missing cuenta BN is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1001"
+		d := newDetraccion()
+		d.CuentaBN = ""
+		req.Detraccion = d
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.cuentaBN"), "should require cuenta BN")
+	})
+
+	t.Run("detracción on a boleta is rejected", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.OperationType = "1001"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "should reject detracción on boleta")
+	})
+
+	t.Run("nota de crédito referencing a factura is allowed", func(t *testing.T) {
+		req := newValidInvoice()
+		req.DocType = "07"
+		req.Series = "FC01"
+		req.OperationType = "1001"
+		req.ReferenceDocType = "01"
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on NC referencing a factura")
+	})
+
+	t.Run("nota de crédito referencing a boleta is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.DocType = "07"
+		req.Series = "BC01"
+		req.OperationType = "1001"
+		req.ReferenceDocType = "03"
+		req.ReferenceDocSeries = "B001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "should reject detracción on NC referencing a boleta")
+	})
+
+	t.Run("monto not matching porcentaje × total is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1001"
+		d := newDetraccion()
+		d.Monto = "100.00" // should be 141.60
+		req.Detraccion = d
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.monto"), "should reject mismatched monto")
+	})
+
+	t.Run("operationType not 1001/1002 is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "0101"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "operationType"), "should require operationType 1001/1002")
+	})
 }

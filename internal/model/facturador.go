@@ -54,6 +54,14 @@ type IssuedDocument struct {
 	FormaPago *string         `json:"formaPago,omitempty"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
 
+	// Detracción (SPOT). All nil = not subject to detracción. DetraccionCuentaBN
+	// is the per-document override; when empty the company default is used at
+	// issue time.
+	DetraccionCodigo     *string `json:"detraccionCodigo"`
+	DetraccionPorcentaje *string `json:"detraccionPorcentaje"`
+	DetraccionMonto      *string `json:"detraccionMonto"`
+	DetraccionCuentaBN   *string `json:"detraccionCuentaBn"`
+
 	ReferenceDocType        *string `json:"referenceDocType"`
 	ReferenceDocSeries      *string `json:"referenceDocSeries"`
 	ReferenceDocCorrelative *int    `json:"referenceDocCorrelative"`

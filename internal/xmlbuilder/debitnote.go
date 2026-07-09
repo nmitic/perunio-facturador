@@ -30,6 +30,10 @@ type debitNote struct {
 	Signature            cacSignature
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
+	// Detracción (cac:PaymentMeans + cac:PaymentTerms) — present only when the
+	// nota references a factura sujeta a detracción. nil/empty otherwise.
+	PaymentMeans         *paymentMeans
+	PaymentTerms         []paymentTerms
 	TaxTotal             taxTotal
 	// UBL 2.1 asymmetry: Invoice and CreditNote name the totals block
 	// cac:LegalMonetaryTotal, but DebitNoteType requires it to be
@@ -87,6 +91,14 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 			Value:            n.Text,
 			LanguageLocaleID: n.Code,
 		})
+	}
+
+	// Detracción (SPOT) — leyenda 2006 + cuenta BN + código/porcentaje/monto,
+	// mirrored from the referenced factura.
+	dn.Notes = appendDetraccionLegend(dn.Notes, req)
+	dn.PaymentMeans = buildDetraccionPaymentMeans(req)
+	if pt := buildDetraccionPaymentTerms(req); pt != nil {
+		dn.PaymentTerms = append(dn.PaymentTerms, *pt)
 	}
 
 	dn.TaxTotal = buildDocumentTaxTotal(req)

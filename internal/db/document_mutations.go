@@ -46,6 +46,11 @@ type CreateDocumentInput struct {
 	FormaPago *string
 	Cuotas    []model.CuotaCredito
 
+	DetraccionCodigo     *string
+	DetraccionPorcentaje *string
+	DetraccionMonto      *string
+	DetraccionCuentaBN   *string
+
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
 	ReferenceDocCorrelative *int
@@ -101,6 +106,11 @@ type UpdateDocumentInput struct {
 	FormaPago    *string
 	Cuotas       []model.CuotaCredito
 	CuotasIsSet  bool // true to overwrite (including with nil/empty); false leaves column untouched
+
+	DetraccionCodigo     *string
+	DetraccionPorcentaje *string
+	DetraccionMonto      *string
+	DetraccionCuentaBN   *string
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -168,7 +178,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				forma_pago, cuotas,
 				reference_doc_type, reference_doc_series, reference_doc_correlative,
 				credit_debit_reason_code, credit_debit_reason_desc,
-				global_discount
+				global_discount,
+				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -179,7 +190,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$24, $25,
 				$26, $27, $28,
 				$29, $30,
-				$31
+				$31,
+				$32, $33, $34, $35
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -192,6 +204,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.ReferenceDocType, in.ReferenceDocSeries, in.ReferenceDocCorrelative,
 			in.CreditDebitReasonCode, in.CreditDebitReasonDesc,
 			in.GlobalDiscount,
+			in.DetraccionCodigo, in.DetraccionPorcentaje, in.DetraccionMonto, in.DetraccionCuentaBN,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -356,6 +369,18 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 			b, _ := json.Marshal(in.Cuotas)
 			add("cuotas", b)
 		}
+	}
+	if in.DetraccionCodigo != nil {
+		add("detraccion_codigo", *in.DetraccionCodigo)
+	}
+	if in.DetraccionPorcentaje != nil {
+		add("detraccion_porcentaje", *in.DetraccionPorcentaje)
+	}
+	if in.DetraccionMonto != nil {
+		add("detraccion_monto", *in.DetraccionMonto)
+	}
+	if in.DetraccionCuentaBN != nil {
+		add("detraccion_cuenta_bn", *in.DetraccionCuentaBN)
 	}
 	if in.ReferenceDocType != nil {
 		add("reference_doc_type", *in.ReferenceDocType)

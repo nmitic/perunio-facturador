@@ -47,6 +47,13 @@ type IssueRequest struct {
 	FormaPago string         `json:"formaPago"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
 
+	// Detraccion is the SPOT (Sistema de Pago de Obligaciones Tributarias)
+	// withholding. nil = the operation is not subject to detracción. When set,
+	// OperationType must be "1001"/"1002" and the document emits the detracción
+	// cac:PaymentMeans + cac:PaymentTerms + legend 2006. It does not alter the
+	// document totals — it is a payment instruction, not a discount.
+	Detraccion *Detraccion `json:"detraccion,omitempty"`
+
 	// Notes
 	Notes []Note `json:"notes"`
 
@@ -75,6 +82,19 @@ type CuotaCredito struct {
 	Numero           int    `json:"numero"`
 	Monto            string `json:"monto"`             // decimal as string
 	FechaVencimiento string `json:"fechaVencimiento"` // YYYY-MM-DD
+}
+
+// Detraccion is the detracción (SPOT) declared on a document. Codigo is the
+// Cat.54 bien/servicio code, Porcentaje the withholding rate and Monto the
+// amount (always in PEN, decimal as string). CuentaBN is the supplier's Banco
+// de la Nación detracción account; it is resolved at issue time (per-document
+// override, else the company default) so the request always carries the
+// effective value.
+type Detraccion struct {
+	Codigo     string `json:"codigo"`     // Cat.54
+	Porcentaje string `json:"porcentaje"` // decimal as string
+	Monto      string `json:"monto"`      // decimal as string, PEN
+	CuentaBN   string `json:"cuentaBN"`   // Banco de la Nación account
 }
 
 // Note is a legend/note attached to the document.

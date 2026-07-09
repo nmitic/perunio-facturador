@@ -174,7 +174,7 @@ func (s *server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, compan
 func buildIssueRequestFromDoc(
 	doc *model.IssuedDocument,
 	items []model.IssuedDocumentItem,
-	supplierRUC, supplierName, supplierAddress string,
+	supplierRUC, supplierName, supplierAddress, defaultCuentaDetraccion string,
 ) model.IssueRequest {
 	req := model.IssueRequest{
 		SupplierRUC:       supplierRUC,
@@ -228,6 +228,17 @@ func buildIssueRequestFromDoc(
 	}
 	if doc.CreditDebitReasonDesc != nil {
 		req.ReasonDescription = *doc.CreditDebitReasonDesc
+	}
+
+	// Detracción: present iff the doc row carries a código. The cuenta BN is the
+	// per-document override, falling back to the company default.
+	if doc.DetraccionCodigo != nil && *doc.DetraccionCodigo != "" {
+		req.Detraccion = &model.Detraccion{
+			Codigo:     *doc.DetraccionCodigo,
+			Porcentaje: derefString(doc.DetraccionPorcentaje, "0"),
+			Monto:      derefString(doc.DetraccionMonto, "0.00"),
+			CuentaBN:   derefString(doc.DetraccionCuentaBN, defaultCuentaDetraccion),
+		}
 	}
 
 	for _, it := range items {
@@ -329,7 +340,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 
 	// 4. Build the IssueRequest and run the compliance pipeline. These are
 	// the same pure functions the old stateless handler used.
-	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address)
+	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address, deps.company.CuentaDetraccion)
 	issueReq.Environment = env
 
 	// Pre-submission validation — fail fast before calling SUNAT.

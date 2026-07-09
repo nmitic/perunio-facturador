@@ -119,6 +119,8 @@ var (
 	dateRegex      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	timeRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
 	docUUIDRegex   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+	detraccionCodigoRegex = regexp.MustCompile(`^\d{3}$`) // Cat.54 bien/servicio
 )
 
 type createDocumentItemBody struct {
@@ -135,6 +137,16 @@ type createDocumentItemBody struct {
 	DiscountAmount         *string `json:"discountAmount,omitempty"`
 	LineTotal              string  `json:"lineTotal"`
 	PriceTypeCode          *string `json:"priceTypeCode,omitempty"`
+}
+
+// detraccionBody is the detracción (SPOT) object on the create/update wire
+// contract. CuentaBN is the optional per-document override — when absent the
+// company's default cuenta is used at issue time.
+type detraccionBody struct {
+	Codigo     string  `json:"codigo"`
+	Porcentaje string  `json:"porcentaje"`
+	Monto      string  `json:"monto"`
+	CuentaBN   *string `json:"cuentaBN,omitempty"`
 }
 
 type createDocumentBody struct {
@@ -164,7 +176,27 @@ type createDocumentBody struct {
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
+	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
 	Items                   []createDocumentItemBody `json:"items"`
+}
+
+// validate checks a detracción wire object's field formats. Returns "" when nil
+// or valid. Business rules (doc type, cuenta BN presence, monto ≈ % × total)
+// are enforced by validation.validateDetraccion at issue time.
+func (d *detraccionBody) validate() string {
+	if d == nil {
+		return ""
+	}
+	if !detraccionCodigoRegex.MatchString(d.Codigo) {
+		return "detraccion.codigo inválido"
+	}
+	if !decimalRegex.MatchString(d.Porcentaje) {
+		return "detraccion.porcentaje inválido"
+	}
+	if !decimalRegex.MatchString(d.Monto) {
+		return "detraccion.monto inválido"
+	}
+	return ""
 }
 
 func (b *createDocumentBody) validate() string {
@@ -206,6 +238,9 @@ func (b *createDocumentBody) validate() string {
 	}
 	if b.GlobalDiscount != nil && *b.GlobalDiscount != "" && !decimalRegex.MatchString(*b.GlobalDiscount) {
 		return "globalDiscount inválido"
+	}
+	if msg := b.Detraccion.validate(); msg != "" {
+		return msg
 	}
 	if len(b.Items) == 0 {
 		return "items requerido"
@@ -254,7 +289,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 			PriceTypeCode:          it.PriceTypeCode,
 		})
 	}
-	return db.CreateDocumentInput{
+	in := db.CreateDocumentInput{
 		SeriesID:                b.SeriesID,
 		IssueDate:               b.IssueDate,
 		IssueTime:               b.IssueTime,
@@ -283,6 +318,13 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		CreditDebitReasonDesc:   b.CreditDebitReasonDesc,
 		Items:                   items,
 	}
+	if d := b.Detraccion; d != nil {
+		in.DetraccionCodigo = &d.Codigo
+		in.DetraccionPorcentaje = &d.Porcentaje
+		in.DetraccionMonto = &d.Monto
+		in.DetraccionCuentaBN = d.CuentaBN
+	}
+	return in
 }
 
 // createDocumentHandler inserts a draft issued_document after checking the
@@ -372,6 +414,7 @@ type updateDocumentBody struct {
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
+	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
 	Items                   []createDocumentItemBody `json:"items,omitempty"`
 }
 
@@ -405,6 +448,12 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 	if b.Cuotas != nil {
 		in.CuotasIsSet = true
 		in.Cuotas = *b.Cuotas
+	}
+	if d := b.Detraccion; d != nil {
+		in.DetraccionCodigo = &d.Codigo
+		in.DetraccionPorcentaje = &d.Porcentaje
+		in.DetraccionMonto = &d.Monto
+		in.DetraccionCuentaBN = d.CuentaBN
 	}
 	if b.Items != nil {
 		items := make([]db.CreateDocumentItemInput, 0, len(b.Items))

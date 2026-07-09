@@ -30,6 +30,10 @@ type creditNote struct {
 	Signature            cacSignature
 	SupplierParty        accountingSupplierParty
 	CustomerParty        accountingCustomerParty
+	// Detracción (cac:PaymentMeans + cac:PaymentTerms) — present only when the
+	// nota references a factura sujeta a detracción. nil/empty otherwise.
+	PaymentMeans         *paymentMeans
+	PaymentTerms         []paymentTerms
 	TaxTotal             taxTotal
 	LegalMonetaryTotal   legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
 	CreditNoteLines      []creditNoteLine
@@ -82,6 +86,14 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 			Value:            n.Text,
 			LanguageLocaleID: n.Code,
 		})
+	}
+
+	// Detracción (SPOT) — leyenda 2006 + cuenta BN + código/porcentaje/monto,
+	// mirrored from the referenced factura.
+	cn.Notes = appendDetraccionLegend(cn.Notes, req)
+	cn.PaymentMeans = buildDetraccionPaymentMeans(req)
+	if pt := buildDetraccionPaymentTerms(req); pt != nil {
+		cn.PaymentTerms = append(cn.PaymentTerms, *pt)
 	}
 
 	// Descuento global (Cat.53 code 02). Unlike an Invoice, SUNAT does NOT honour
