@@ -51,7 +51,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			       username, password,
 			       client_id, client_secret,
 			       COALESCE(is_active, true),
-			       COALESCE(sunat_environment::text, 'beta'),
+			       COALESCE(sunat_environment::text, 'production'),
 			       COALESCE(brand_color, ''),
 			       COALESCE(logo_base64, ''),
 			       COALESCE(cuenta_detraccion, '')

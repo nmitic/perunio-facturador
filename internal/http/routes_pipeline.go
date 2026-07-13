@@ -52,7 +52,7 @@ func readPipelineEnv(r *http.Request) string {
 
 // resolvePipelineEnv picks the SUNAT environment for this pipeline run. An
 // explicit override from the request body wins; otherwise the per-company
-// default wins; otherwise we fall back to "beta".
+// default wins; otherwise we fall back to "production".
 func resolvePipelineEnv(override, companyDefault string) string {
 	if override == "beta" || override == "production" {
 		return override
@@ -60,7 +60,7 @@ func resolvePipelineEnv(override, companyDefault string) string {
 	if companyDefault == "beta" || companyDefault == "production" {
 		return companyDefault
 	}
-	return "beta"
+	return "production"
 }
 
 // trailingDigits pulls the trailing integer from a string like "RC-20240115-001".
