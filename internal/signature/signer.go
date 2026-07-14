@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/beevik/etree"
 	"golang.org/x/text/encoding/charmap"
@@ -35,17 +37,60 @@ func SignXML(xmlBytes, privateKeyPEM, certPEM []byte) ([]byte, error) {
 	}
 	defer os.Remove(xmlFile)
 
+	args := []string{"sign"}
+	// xmlsec1 1.3.0 made key search strict: it tries to match the loaded key
+	// against the (empty) ds:KeyInfo/X509Data in our signature template and
+	// refuses to fall back to the single provided key, failing with
+	// KEY-NOT-FOUND. --lax-key-search restores the 1.2.x behavior of using the
+	// key we hand it. The flag does not exist before 1.3.0, so it is only added
+	// when the installed xmlsec1 supports it.
+	if laxKeySearchSupported() {
+		args = append(args, "--lax-key-search")
+	}
+	args = append(args, "--privkey-pem", keyFile+","+certFile, xmlFile)
+
 	var stderr bytes.Buffer
-	cmd := exec.Command("xmlsec1", "sign",
-		"--privkey-pem", keyFile+","+certFile,
-		xmlFile,
-	)
+	cmd := exec.Command("xmlsec1", args...)
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("xmlsec1 sign: %w; stderr: %s", err, stderr.String())
 	}
 	return out, nil
+}
+
+var laxKeySearch struct {
+	sync.Once
+	supported bool
+}
+
+// laxKeySearchSupported reports whether the installed xmlsec1 accepts the
+// --lax-key-search flag, i.e. its version is >= 1.3.0. The result is probed
+// once (via `xmlsec1 --version`) and cached. On any parsing failure we assume
+// unsupported, which keeps the pre-1.3 command line intact.
+func laxKeySearchSupported() bool {
+	laxKeySearch.Do(func() {
+		out, err := exec.Command("xmlsec1", "--version").Output()
+		if err != nil {
+			return
+		}
+		// Output looks like: "xmlsec1 1.3.7 (openssl)".
+		fields := strings.Fields(string(out))
+		if len(fields) < 2 {
+			return
+		}
+		parts := strings.SplitN(fields[1], ".", 3)
+		if len(parts) < 2 {
+			return
+		}
+		major, err1 := strconv.Atoi(parts[0])
+		minor, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil {
+			return
+		}
+		laxKeySearch.supported = major > 1 || (major == 1 && minor >= 3)
+	})
+	return laxKeySearch.supported
 }
 
 // shmDir returns /dev/shm when available, otherwise os.TempDir().
