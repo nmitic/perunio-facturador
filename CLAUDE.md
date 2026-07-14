@@ -12,6 +12,7 @@ It talks directly to the shared PostgreSQL DB (RLS-isolated by tenant), Cloudfla
 make build          # Build binary to bin/facturador
 make run            # Run with go run
 make test           # go test -shuffle on ./...
+make test-prod      # signing tests against prod's exact xmlsec (Docker)
 make lint           # golangci-lint run
 make fmt            # gofmt -w .
 ```
@@ -20,6 +21,24 @@ Run a specific test:
 ```bash
 go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
 ```
+
+### Testing signing against the production xmlsec
+
+`make test` uses whatever `xmlsec1` is on your host. That version can differ
+from production and behave differently: xmlsec >=1.3 made key search strict
+(KEY-NOT-FOUND on our empty `ds:KeyInfo` template — `signer.go` adds
+`--lax-key-search` to compensate). Ubuntu's apt ships 1.2.x, so `make test`
+locally never exercises the 1.3.x path that runs in prod.
+
+`make test-prod` closes that gap. It builds `Dockerfile.test`, which compiles
+the signature test binary and runs it inside the **exact** runtime prod ships
+(`alpine:3.21` + `xmlsec=1.3.7-r0`). The test binary is run *during the image
+build*, so a failing test aborts the build with a non-zero exit — no volume
+mounts, no changes to your host xmlsec.
+
+Run it before shipping any change to `internal/signature`, `internal/xmlbuilder`
+(signature template), or the xmlsec pin in `Dockerfile`. Keep the alpine tag and
+xmlsec pin in `Dockerfile.test` in sync with `Dockerfile`.
 
 ## Architecture
 
