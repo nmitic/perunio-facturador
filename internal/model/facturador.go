@@ -28,6 +28,11 @@ type IssuedDocument struct {
 	Series   string `json:"series"`
 	Correlative int    `json:"correlative"`
 	Status      string `json:"status"`
+	// SunatEnvironment ("beta" | "production") this document belongs to, stamped
+	// at draft creation from the company's environment. Listings are filtered to
+	// the company's current environment so sandbox/test docs don't pollute the
+	// production historial.
+	SunatEnvironment string `json:"sunatEnvironment"`
 
 	IssueDate time.Time `json:"issueDate"`
 	IssueTime *string   `json:"issueTime"`

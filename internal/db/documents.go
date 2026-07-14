@@ -30,6 +30,7 @@ type DocumentListResult struct {
 
 const issuedDocumentColumns = `
 	id, tenant_id, company_id, series_id, doc_type, series, correlative, status,
+	sunat_environment,
 	issue_date, issue_time, due_date,
 	currency_code, operation_type,
 	customer_doc_type, customer_doc_number, customer_name, customer_address,
@@ -49,6 +50,7 @@ func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
 	var cuotasRaw, observationsRaw []byte
 	if err := row.Scan(
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
+		&d.SunatEnvironment,
 		&d.IssueDate, &d.IssueTime, &d.DueDate,
 		&d.CurrencyCode, &d.OperationType,
 		&d.CustomerDocType, &d.CustomerDocNumber, &d.CustomerName, &d.CustomerAddress,
@@ -92,7 +94,15 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 	offset := (page - 1) * limit
 
 	args := []any{companyID}
-	conditions := []string{"company_id = $1"}
+	// Only surface documents belonging to the company's *current* SUNAT
+	// environment. Sandbox/test documents (issued while the company was in
+	// "beta") are retained in the table but disappear from the historial once
+	// the company switches to "production", and vice-versa. Correlated subquery
+	// so a switch needs no rewrite of existing rows.
+	conditions := []string{
+		"company_id = $1",
+		"sunat_environment = (SELECT sunat_environment FROM companies WHERE id = $1)",
+	}
 	if filter.DocType != "" {
 		args = append(args, filter.DocType)
 		conditions = append(conditions, fmt.Sprintf("doc_type = $%d", len(args)))

@@ -132,15 +132,35 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 
 	var doc model.IssuedDocument
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
-		// 1. Atomically bump the correlative and read back the previous value.
+		// 0. Resolve the company's current SUNAT environment. The document is
+		// stamped with it and draws its correlative from that environment's
+		// counter, so beta (sandbox) and production keep independent sequences.
+		var environment string
+		if err := tx.QueryRow(ctx,
+			`SELECT COALESCE(sunat_environment::text, 'production') FROM companies WHERE id = $1`,
+			companyID,
+		).Scan(&environment); err != nil {
+			return err
+		}
+		if environment != "beta" {
+			environment = "production"
+		}
+		correlativeCol := "next_correlative"
+		if environment == "beta" {
+			correlativeCol = "next_correlative_beta"
+		}
+
+		// 1. Atomically bump the environment's correlative and read back the
+		// previous value. The column name is a fixed, validated identifier
+		// (never client input), so interpolating it is safe.
 		var correlative int
 		var seriesCode, docType string
-		err := tx.QueryRow(ctx, `
+		err := tx.QueryRow(ctx, fmt.Sprintf(`
 			UPDATE document_series
-			SET next_correlative = next_correlative + 1, updated_at = now()
+			SET %[1]s = %[1]s + 1, updated_at = now()
 			WHERE id = $1 AND company_id = $2 AND is_active = true
-			RETURNING next_correlative - 1, series, doc_type
-		`, in.SeriesID, companyID).Scan(&correlative, &seriesCode, &docType)
+			RETURNING %[1]s - 1, series, doc_type
+		`, correlativeCol), in.SeriesID, companyID).Scan(&correlative, &seriesCode, &docType)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrSeriesInactive
@@ -179,7 +199,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				reference_doc_type, reference_doc_series, reference_doc_correlative,
 				credit_debit_reason_code, credit_debit_reason_desc,
 				global_discount,
-				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn
+				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
+				sunat_environment
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -191,7 +212,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$26, $27, $28,
 				$29, $30,
 				$31,
-				$32, $33, $34, $35
+				$32, $33, $34, $35,
+				$36
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -205,6 +227,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.CreditDebitReasonCode, in.CreditDebitReasonDesc,
 			in.GlobalDiscount,
 			in.DetraccionCodigo, in.DetraccionPorcentaje, in.DetraccionMonto, in.DetraccionCuentaBN,
+			environment,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError

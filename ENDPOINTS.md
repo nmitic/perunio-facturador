@@ -17,7 +17,7 @@ Who actually calls each endpoint at runtime (see `ARCHITECTURE.md` for the full 
 | Marker | Meaning |
 |---|---|
 | 🟢 **frontend (live)** | `perunio-frontend` calls it today via `facturadorClient` (`VITE_FACTURADOR_BASE_URL`). |
-| 🟡 **implemented, not wired** | Handler exists & works, but no client points here yet — the frontend still uses the equivalent `perunio-backend` endpoint. Migration target. |
+| 🟡 **implemented, not wired** | Handler exists & works, but no client points here yet — the frontend still uses the equivalent `perunio-backend` endpoint. Migration target. (Only **summaries** remain here.) |
 | ⚪ **infra** | Called by platform infra (load balancer / uptime), not a product client. |
 
 `perunio-admin` does **not** call this service at all (no facturador URL in its env).
@@ -107,7 +107,7 @@ Batch-reports accepted boletas to SUNAT via UBL **2.0** `SummaryDocuments`, usin
 
 ## Voids — Comunicaciones de Baja (RA)
 
-Cancels already-issued facturas (UBL **2.0** `VoidedDocuments`), enforcing SUNAT's **7-day window** at the DB layer. Same async ticket flow as summaries. **Status: 🟡 implemented, not wired.**
+Cancels already-issued facturas (UBL **2.0** `VoidedDocuments`), enforcing SUNAT's **7-day window** at the DB layer. Same async ticket flow as summaries. **Status: 🟢 frontend (live)** via `voidsApi`. A `poll` response is either the finished void (has `status`) or, while SUNAT is still processing the ticket, `{ statusCode }` (e.g. `"98"`).
 
 | Method & path | Purpose | Contract |
 |---|---|---|
@@ -121,7 +121,7 @@ Cancels already-issued facturas (UBL **2.0** `VoidedDocuments`), enforcing SUNAT
 
 ## GRE — Guías de Remisión Electrónica (REST, not SOAP)
 
-Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed by `(companyID, environment)`; credentials AES-encrypted on the `companies` row). Doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). Status: `draft → signed → sent → accepted/rejected/error`. **Status: 🟡 implemented, not wired** — the frontend's `greApi` currently calls `perunio-backend`'s `/gre/*`, which talks to SUNAT directly; this Go implementation is the migration target.
+Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed by `(companyID, environment)`; credentials AES-encrypted on the `companies` row). Doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). Status: `draft → signed → sent → accepted/rejected/error`. **Status: 🟢 frontend (live)** via `despatchesApi` — the despatch *emission* pipeline (create draft → issue → poll → files). **Not** to be confused with the frontend's `greApi`, which is GRE *consulta* (search / detail / download) and still calls `perunio-backend`'s `/gre/*`. As with voids, a `poll` response is either the finished despatch (has `status`) or `{ statusCode }` while the ticket is still processing.
 
 | Method & path | Purpose | Contract |
 |---|---|---|
@@ -144,8 +144,10 @@ Every `issue` / `poll` endpoint accepts an **optional** `{ "environment": "beta"
 
 | Resource | Endpoints | Used by today |
 |---|---|---|
-| usage, series, documents | `/usage`, `/series/*`, `/documents/*` | 🟢 `perunio-frontend` via `facturadorClient` |
-| summaries, voids, gre | `/summaries/*`, `/voids/*`, `/gre/*` | 🟡 implemented here; frontend still hits `perunio-backend` |
+| usage, series, documents | `/usage`, `/series/*`, `/documents/*` | 🟢 `perunio-frontend` via `facturadorClient` (`documentsApi`, `seriesApi`) |
+| voids | `/voids/*` | 🟢 `perunio-frontend` via `voidsApi` |
+| gre (emission) | `/gre/*` | 🟢 `perunio-frontend` via `despatchesApi` (despatch emission). GRE *consulta* is a separate `greApi` → `perunio-backend`. |
+| summaries | `/summaries/*` | 🟡 implemented here; frontend still hits `perunio-backend` |
 | certificates | *(none — kept in backend)* | `perunio-backend` (`/companies/{id}/certificates`); the Go signing pipeline reads the active cert straight from the DB |
 | health | `/health` | ⚪ infra / uptime |
 

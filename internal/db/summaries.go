@@ -33,6 +33,9 @@ func (p *Pool) CreateDailySummary(ctx context.Context, companyID, referenceDate,
 			  AND d.issue_date = $2
 			  AND d.status = 'accepted'
 			  AND dsi.id IS NULL
+			  -- Only the company's current environment: a production resumen must
+			  -- never sweep up sandbox/beta boletas (and vice-versa).
+			  AND d.sunat_environment = (SELECT sunat_environment FROM companies WHERE id = $1)
 		`, companyID, referenceDate)
 		if err != nil {
 			return err
