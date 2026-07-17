@@ -2,25 +2,20 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/cdr"
-	facturadorCrypto "github.com/perunio/perunio-facturador/internal/crypto"
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/model"
 	"github.com/perunio/perunio-facturador/internal/r2"
 	"github.com/perunio/perunio-facturador/internal/signature"
 	"github.com/perunio/perunio-facturador/internal/soap"
-	"github.com/perunio/perunio-facturador/internal/validation"
 	"github.com/perunio/perunio-facturador/internal/xmlbuilder"
 	"github.com/perunio/perunio-facturador/internal/zipper"
 )
@@ -89,80 +84,19 @@ type pipelineDeps struct {
 	parsedCert    *signature.ParsedCertificate
 }
 
-// loadPipelineDeps performs the three lookups every pipeline handler needs:
-//  1. Tenant ID from JWT context
-//  2. Company row + decrypted SUNAT SOL password
-//  3. Active certificate (PFX fetched from R2, password decrypted, PKCS#12 parsed)
+// loadPipelineDeps is the HTTP-facing wrapper around resolvePipelineDeps: it
+// writes the error response itself and reports success as a bool, which is the
+// shape the summary/void/GRE handlers expect.
 //
-// Returns (nil, statusCode, errorCode, message) on failure; the caller writes
-// the response directly. The helper never panics on missing data.
-func (s *server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, companyID string) (*pipelineDeps, bool) {
-	tenantID, ok := auth.TenantIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "No autenticado")
+// The context-only core lives in pipeline_core.go so the background scheduler can
+// share it.
+func (s *Server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, companyID string) (*pipelineDeps, bool) {
+	deps, pErr := s.resolvePipelineDeps(r.Context(), companyID)
+	if pErr != nil {
+		writePipelineError(w, pErr)
 		return nil, false
 	}
-
-	company, err := s.pool.GetCompany(r.Context(), companyID)
-	if err != nil {
-		s.log.Error("get company", "error", err, "companyId", companyID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-		return nil, false
-	}
-	if company == nil {
-		writeError(w, http.StatusNotFound, "COMPANY_NOT_FOUND", "Empresa no encontrada")
-		return nil, false
-	}
-	if company.Username == nil || company.EncryptedPassword == nil {
-		writeError(w, http.StatusBadRequest, "SUNAT_CREDENTIALS_MISSING",
-			"Credenciales SOL no configuradas para esta empresa")
-		return nil, false
-	}
-
-	sunatPassword, err := facturadorCrypto.DecryptAES256GCM(*company.EncryptedPassword, s.cfg.EncryptionKey)
-	if err != nil {
-		ivHex := strings.SplitN(*company.EncryptedPassword, ":", 2)[0]
-		s.log.Error("decrypt sunat password", "error", err, "companyId", companyID, "ivHexLen", len(ivHex))
-		writeError(w, http.StatusInternalServerError, "SUNAT_DECRYPT_ERROR",
-			"No se pudo descifrar la contraseña SOL")
-		return nil, false
-	}
-
-	activeCert, err := s.pool.GetActiveCertificateForSigning(r.Context(), companyID)
-	if err != nil {
-		s.log.Error("get active certificate", "error", err, "companyId", companyID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-		return nil, false
-	}
-	if activeCert == nil {
-		writeError(w, http.StatusBadRequest, "CERTIFICATE_MISSING",
-			"No hay un certificado activo para esta empresa")
-		return nil, false
-	}
-
-	parsed, err := s.certCache.GetOrLoad(activeCert.CertID, func() (*signature.ParsedCertificate, error) {
-		privateKeyPEM, decryptErr := facturadorCrypto.DecryptAES256GCM(activeCert.EncryptedPrivateKeyPEM, s.cfg.EncryptionKey)
-		if decryptErr != nil {
-			return nil, fmt.Errorf("decrypt private key: %w", decryptErr)
-		}
-		return signature.ParsePEMKeyAndCert([]byte(privateKeyPEM), []byte(activeCert.CertificatePEM))
-	})
-	if err != nil {
-		s.log.Error("load active certificate", "error", err, "companyId", companyID, "certId", activeCert.CertID)
-		writeError(w, http.StatusInternalServerError, "CERT_LOAD_ERROR",
-			"No se pudo cargar el certificado activo")
-		return nil, false
-	}
-
-	// SUNAT WS-Security UsernameToken: {RUC}{usuario_sol} concatenated, no
-	// separator. companies.username stores the SOL secondary user only.
-	return &pipelineDeps{
-		tenantID:      tenantID,
-		company:       company,
-		sunatUsername: company.RUC + *company.Username,
-		sunatPassword: sunatPassword,
-		parsedCert:    parsed,
-	}, true
+	return deps, true
 }
 
 // buildIssueRequestFromDoc materializes a model.IssueRequest from the DB row +
@@ -290,189 +224,18 @@ func parseCDRNotes(notes []string) []model.Observation {
 // issueDocumentPipelineHandler runs the full issue pipeline against a draft
 // issued_documents row loaded from the DB. This replaces the legacy stateless
 // POST /api/v1/documents/issue endpoint.
-func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Request) {
+//
+// The pipeline itself lives in runIssuePipeline (pipeline_core.go) so the
+// background scheduler emits through exactly the same code path; this handler is
+// only param parsing and the HTTP projection of the result.
+func (s *Server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	docID := chi.URLParam(r, "docId")
 	envOverride := readPipelineEnv(r)
 
-	// 1. Load the draft document + items.
-	doc, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
-	if err != nil {
-		s.log.Error("get document for issue", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-		return
-	}
-	if doc == nil {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "Documento no encontrado")
-		return
-	}
-	if doc.Status == "accepted" || doc.Status == "accepted_with_observations" {
-		writeError(w, http.StatusBadRequest, "ALREADY_ACCEPTED",
-			"El documento ya fue aceptado por SUNAT")
-		return
-	}
-
-	items, err := s.pool.GetIssuedDocumentItems(r.Context(), docID)
-	if err != nil {
-		s.log.Error("get document items for issue", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-		return
-	}
-	if len(items) == 0 {
-		writeError(w, http.StatusBadRequest, "NO_ITEMS", "El documento no tiene líneas")
-		return
-	}
-
-	// 2. Load company + SUNAT creds + active certificate.
-	deps, ok := s.loadPipelineDeps(w, r, companyID)
-	if !ok {
-		return
-	}
-	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
-
-	// 3. Fiscal address from the company row (populated during onboarding from
-	// the SUNAT RUC scrape), falling back to a placeholder when missing so the
-	// pipeline still runs and SUNAT doesn't reject the invoice.
-	address := deps.company.FiscalAddress
-	if address == "" {
-		address = "-"
-	}
-
-	// 4. Build the IssueRequest and run the compliance pipeline. These are
-	// the same pure functions the old stateless handler used.
-	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address, deps.company.CuentaDetraccion)
-	issueReq.Environment = env
-
-	// Pre-submission validation — fail fast before calling SUNAT.
-	if vErrs := validation.Validate(issueReq); len(vErrs) > 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"success":          false,
-			"code":             "VALIDATION_ERROR",
-			"error":            "Documento no pasa validación pre-SUNAT",
-			"validationErrors": vErrs,
-		})
-		return
-	}
-
-	xmlBytes, err := xmlbuilder.BuildDocumentXML(issueReq)
-	if err != nil {
-		s.log.Error("build document xml", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "XML_BUILD_ERROR", err.Error())
-		return
-	}
-
-	signedXML, err := signature.SignXML(xmlBytes, deps.parsedCert.PrivateKeyPEM, deps.parsedCert.CertPEM)
-	if err != nil {
-		s.log.Error("sign document xml", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "SIGN_ERROR", err.Error())
-		return
-	}
-
-	filename := xmlbuilder.Filename(issueReq.SupplierRUC, issueReq.DocType, issueReq.Series, issueReq.Correlative)
-	zipBytes, err := zipper.CreateZIP(filename, signedXML)
-	if err != nil {
-		s.log.Error("create zip", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "ZIP_ERROR", err.Error())
-		return
-	}
-
-	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
-	sendStart := time.Now()
-	sendResult, err := soapClient.SendBill(deps.sunatUsername, deps.sunatPassword, filename, zipBytes)
-	sendDurationMs := int(time.Since(sendStart).Milliseconds())
-	if err != nil {
-		s.log.Error("send bill", "error", err, "docId", docID)
-		docRef := docID
-		errDesc := err.Error()
-		if logErr := s.pool.InsertSubmissionLog(r.Context(), db.SubmissionLogEntry{
-			CompanyID: companyID, DocumentID: &docRef, Action: "sendBill",
-			ResponseDescription: &errDesc, DurationMs: &sendDurationMs,
-		}); logErr != nil {
-			s.log.Warn("write submission log", "error", logErr, "docId", docID)
-		}
-		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
-		return
-	}
-
-	parsedCDR, err := cdr.Parse(sendResult.ApplicationResponse)
-	if err != nil {
-		s.log.Error("parse cdr", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "CDR_PARSE_ERROR", err.Error())
-		return
-	}
-
-	{
-		docRef := docID
-		resCode := parsedCDR.ResponseCode
-		resDesc := parsedCDR.Description
-		if logErr := s.pool.InsertSubmissionLog(r.Context(), db.SubmissionLogEntry{
-			CompanyID:           companyID,
-			DocumentID:          &docRef,
-			Action:              "sendBill",
-			ResponseCode:        &resCode,
-			ResponseDescription: &resDesc,
-			DurationMs:          &sendDurationMs,
-		}); logErr != nil {
-			s.log.Warn("write submission log", "error", logErr, "docId", docID)
-		}
-	}
-
-	// Build QR data (rendered client-side from this string when the user downloads the PDF).
-	digestVal, _ := signature.DigestValue(signedXML)
-	qrData := fmt.Sprintf("%s|%s|%s|%08d|%s|%s|%s|%s|%s|%s|",
-		issueReq.SupplierRUC, issueReq.DocType, issueReq.Series, issueReq.Correlative,
-		issueReq.TotalIGV, issueReq.TotalAmount, issueReq.IssueDate,
-		issueReq.CustomerDocType, issueReq.CustomerDocNumber, digestVal)
-
-	// 5. Upload artifacts to R2 under the canonical documents/{tenantId}/...
-	// layout. Failures here are fatal — the DB row must not claim R2 keys
-	// that don't exist.
-	signedKey := r2.DocumentKey(deps.tenantID, companyID, docID, r2.FileSignedXML)
-	if err := s.r2.UploadDocumentFile(r.Context(), signedKey, r2.FileSignedXML, signedXML); err != nil {
-		s.log.Error("upload signed xml", "error", err, "key", signedKey)
-		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", err.Error())
-		return
-	}
-	zipKey := r2.DocumentKey(deps.tenantID, companyID, docID, r2.FileZIP)
-	if err := s.r2.UploadDocumentFile(r.Context(), zipKey, r2.FileZIP, zipBytes); err != nil {
-		s.log.Error("upload zip", "error", err, "key", zipKey)
-		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", err.Error())
-		return
-	}
-	cdrKey := r2.DocumentKey(deps.tenantID, companyID, docID, r2.FileCDR)
-	if err := s.r2.UploadDocumentFile(r.Context(), cdrKey, r2.FileCDR, sendResult.ApplicationResponse); err != nil {
-		s.log.Error("upload cdr", "error", err, "key", cdrKey)
-		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", err.Error())
-		return
-	}
-
-	// 6. Update the DB row with the pipeline outcome.
-	observations := parseCDRNotes(parsedCDR.Notes)
-	status := "rejected"
-	if parsedCDR.Accepted {
-		if len(observations) > 0 {
-			status = "accepted_with_observations"
-		} else {
-			status = "accepted"
-		}
-	}
-
-	dbResult := db.IssuedDocumentResult{
-		Status:                   status,
-		SunatResponseCode:        &parsedCDR.ResponseCode,
-		SunatResponseDescription: &parsedCDR.Description,
-		SunatObservations:        observations,
-		R2SignedXmlKey:           &signedKey,
-		R2ZipKey:                 &zipKey,
-		R2CdrKey:                 &cdrKey,
-		QRData:                   &qrData,
-		MarkSent:                 true,
-		MarkAccepted:             parsedCDR.Accepted,
-	}
-	updated, err := s.pool.ApplyIssueResult(r.Context(), docID, dbResult)
-	if err != nil {
-		s.log.Error("apply issue result", "error", err, "docId", docID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+	updated, pErr := s.runIssuePipeline(r.Context(), companyID, docID, envOverride)
+	if pErr != nil {
+		writePipelineError(w, pErr)
 		return
 	}
 
@@ -482,7 +245,7 @@ func (s *server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Req
 // issueSummaryPipelineHandler signs a Resumen Diario (RC) and ships it off to
 // SUNAT, storing the returned ticket on the daily_summaries row for later
 // polling.
-func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	summaryID := chi.URLParam(r, "summaryId")
 	envOverride := readPipelineEnv(r)
@@ -607,7 +370,7 @@ func (s *server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 
 // pollSummaryPipelineHandler calls SUNAT's getStatus with the stored ticket and
 // writes the result back to the daily_summaries row.
-func (s *server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	summaryID := chi.URLParam(r, "summaryId")
 	envOverride := readPipelineEnv(r)
@@ -688,7 +451,7 @@ func (s *server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Reque
 
 // issueVoidPipelineHandler signs a Comunicacion de Baja (RA) and sends it to
 // SUNAT, storing the returned ticket on the voided_documents row.
-func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	voidID := chi.URLParam(r, "voidId")
 	envOverride := readPipelineEnv(r)
@@ -799,7 +562,7 @@ func (s *server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 
 // pollVoidPipelineHandler calls SUNAT's getStatus with the stored ticket and
 // writes the result back to the voided_documents row.
-func (s *server) pollVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) pollVoidPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	voidID := chi.URLParam(r, "voidId")
 	envOverride := readPipelineEnv(r)

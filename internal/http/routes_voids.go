@@ -11,7 +11,7 @@ import (
 )
 
 // listVoidsHandler returns every void communication for a company.
-func (s *server) listVoidsHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listVoidsHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	voids, err := s.pool.ListVoidedDocuments(r.Context(), companyID)
@@ -33,7 +33,7 @@ type voidDetailResponse struct {
 }
 
 // getVoidHandler returns one void communication with its line items.
-func (s *server) getVoidHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getVoidHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	voidID := chi.URLParam(r, "voidId")
 
@@ -70,7 +70,7 @@ type createVoidBody struct {
 
 // createVoidHandler groups existing accepted documents into a void request,
 // enforcing the 7-day SUNAT void window in the DB layer.
-func (s *server) createVoidHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createVoidHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	var body createVoidBody

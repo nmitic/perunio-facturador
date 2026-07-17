@@ -6,7 +6,7 @@ import (
 )
 
 // requestLogger logs each request with method, path, status, and duration.
-func (s *server) requestLogger(next http.Handler) http.Handler {
+func (s *Server) requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		wrapped := &statusWriter{ResponseWriter: w, status: http.StatusOK}
@@ -24,7 +24,7 @@ func (s *server) requestLogger(next http.Handler) http.Handler {
 // handles preflight OPTIONS requests. Browsers require an exact origin match
 // (not "*") when credentials are sent, so we only set Access-Control-Allow-Origin
 // when the request's Origin header is in the allowlist.
-func (s *server) cors(allowed []string) func(http.Handler) http.Handler {
+func (s *Server) cors(allowed []string) func(http.Handler) http.Handler {
 	allowSet := make(map[string]struct{}, len(allowed))
 	for _, o := range allowed {
 		allowSet[o] = struct{}{}

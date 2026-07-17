@@ -11,7 +11,7 @@ import (
 )
 
 // listSummariesHandler returns every daily summary for a company.
-func (s *server) listSummariesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listSummariesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	summaries, err := s.pool.ListDailySummaries(r.Context(), companyID)
@@ -34,7 +34,7 @@ type summaryDetailResponse struct {
 }
 
 // getSummaryHandler returns one daily summary with its linked documents.
-func (s *server) getSummaryHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	summaryID := chi.URLParam(r, "summaryId")
 
@@ -69,7 +69,7 @@ type createSummaryBody struct {
 
 // createSummaryHandler groups every un-summarized accepted boleta for a date
 // into a new daily summary row.
-func (s *server) createSummaryHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	var body createSummaryBody

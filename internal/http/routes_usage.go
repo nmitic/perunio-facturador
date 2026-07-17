@@ -17,7 +17,7 @@ type usageResponse struct {
 
 // usageHandler returns the current period's facturador document count for the
 // authenticated tenant.
-func (s *server) usageHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) usageHandler(w http.ResponseWriter, r *http.Request) {
 	payload, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Autenticación requerida")

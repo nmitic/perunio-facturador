@@ -127,6 +127,11 @@ Despatch doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). 
 PORT=8080                        # HTTP port
 DATABASE_URL=                    # Shared PostgreSQL (required)
 
+# Comprobante scheduler (recurrentes / programados). Off unless explicitly enabled,
+# so local dev and one-off runs never emit to SUNAT unattended.
+SCHEDULER_ENABLED=false          # "true" starts the ticker
+DATABASE_ADMIN_URL=              # perunio_admin (BYPASSRLS); REQUIRED when SCHEDULER_ENABLED=true
+
 # AWS Secrets Manager (source of truth for JWT + encryption keys)
 AWS_SECRET_NAME=                 # Empty -> falls back to JWT_SECRET / ENCRYPTION_KEY env vars (dev)
 AWS_REGION=

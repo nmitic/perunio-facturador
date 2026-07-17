@@ -22,6 +22,20 @@ type Config struct {
 	// DatabaseURL is the PostgreSQL connection string for the shared DB.
 	DatabaseURL string
 
+	// DatabaseAdminURL connects as perunio_admin (BYPASSRLS). Used only by the
+	// scheduler, which must enumerate due schedules across every tenant — RLS
+	// would hide all but the current one, and a background tick has no current
+	// tenant. Mirrors DATABASE_ADMIN_URL in perunio-backend (src/db/admin.ts).
+	//
+	// Deliberately has no fallback to DatabaseURL: the app role would find zero due
+	// schedules and the service would look healthy while emitting nothing. Load
+	// fails instead when the scheduler is enabled without it.
+	DatabaseAdminURL string
+
+	// SchedulerEnabled turns the comprobantes recurrentes/programados ticker on.
+	// Off by default so local dev and one-off runs never emit to SUNAT unattended.
+	SchedulerEnabled bool
+
 	// AWS secrets bootstrap. AWSSecretName empty -> awssecrets falls back to
 	// individual env vars (dev/CI mode).
 	AWSSecretName string
@@ -63,14 +77,16 @@ func Load() (Config, error) {
 	_ = godotenv.Load() // dev only; no-ops when .env is absent or vars already set
 
 	c := Config{
-		Port:                env("PORT", "3002"),
-		DatabaseURL:         env("DATABASE_URL", ""),
-		AWSSecretName:       env("AWS_SECRET_NAME", ""),
-		AWSRegion:           env("AWS_REGION", ""),
-		R2AccountID:       env("R2_ACCOUNT_ID", ""),
-		R2AccessKeyID:     env("R2_ACCESS_KEY_ID", ""),
-		R2SecretAccessKey: env("R2_SECRET_ACCESS_KEY", ""),
-		R2DocumentsBucket: env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
+		Port:                  env("PORT", "3002"),
+		DatabaseURL:           env("DATABASE_URL", ""),
+		DatabaseAdminURL:      env("DATABASE_ADMIN_URL", ""),
+		SchedulerEnabled:      env("SCHEDULER_ENABLED", "") == "true",
+		AWSSecretName:         env("AWS_SECRET_NAME", ""),
+		AWSRegion:             env("AWS_REGION", ""),
+		R2AccountID:           env("R2_ACCOUNT_ID", ""),
+		R2AccessKeyID:         env("R2_ACCESS_KEY_ID", ""),
+		R2SecretAccessKey:     env("R2_SECRET_ACCESS_KEY", ""),
+		R2DocumentsBucket:     env("R2_DOCUMENTS_BUCKET", "perunio-facturador"),
 		SunatBetaURL:          env("SUNAT_BETA_URL", "https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"),
 		SunatProductionURL:    env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
 		SunatConsultURL:       env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
@@ -89,6 +105,11 @@ func Load() (Config, error) {
 	}
 	if c.R2AccessKeyID == "" || c.R2SecretAccessKey == "" {
 		return Config{}, fmt.Errorf("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required")
+	}
+	// The scheduler cannot see other tenants' rows through the RLS-bound app role,
+	// so running it without an admin URL would silently emit nothing at all.
+	if c.SchedulerEnabled && c.DatabaseAdminURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_ADMIN_URL is required when SCHEDULER_ENABLED=true")
 	}
 
 	return c, nil

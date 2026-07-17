@@ -34,7 +34,7 @@ type greDeps struct {
 // loadGREDeps wraps loadPipelineDeps with the extra lookups the GRE
 // pipeline needs: decrypted client_id + client_secret from the
 // companies row. Returns (nil, false) after writing the error.
-func (s *server) loadGREDeps(w http.ResponseWriter, r *http.Request, companyID string) (*greDeps, bool) {
+func (s *Server) loadGREDeps(w http.ResponseWriter, r *http.Request, companyID string) (*greDeps, bool) {
 	deps, ok := s.loadPipelineDeps(w, r, companyID)
 	if !ok {
 		return nil, false
@@ -80,7 +80,7 @@ type despatchListResponse struct {
 	Pagination documentListPagination `json:"pagination"`
 }
 
-func (s *server) listDespatchesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listDespatchesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	q := r.URL.Query()
 
@@ -129,7 +129,7 @@ type despatchDetailResponse struct {
 	Lines []model.DespatchLine `json:"lines"`
 }
 
-func (s *server) getDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
 
@@ -311,7 +311,7 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 	}
 }
 
-func (s *server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	if _, ok := auth.TenantIDFromContext(r.Context()); !ok {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "No autenticado")
@@ -437,7 +437,7 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 	return in
 }
 
-func (s *server) updateDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) updateDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	despatchID := chi.URLParam(r, "despatchId")
 
 	var body updateDespatchBody
@@ -463,7 +463,7 @@ func (s *server) updateDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, d)
 }
 
-func (s *server) deleteDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
 
@@ -485,7 +485,7 @@ func (s *server) deleteDespatchHandler(w http.ResponseWriter, r *http.Request) {
 // issueDespatchHandler runs the full GRE pipeline: validate → build XML →
 // sign → zip → send to SUNAT's REST API, persisting the ticket on the
 // despatches row for later polling.
-func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
 	envOverride := readPipelineEnv(r)
@@ -632,7 +632,7 @@ func (s *server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 // pollDespatchHandler queries SUNAT for the status of a previously-sent
 // GRE ticket, decodes the base64 CDR (when present), persists it, and
 // writes the outcome back to the despatches row.
-func (s *server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
 	envOverride := readPipelineEnv(r)
@@ -747,7 +747,7 @@ func (s *server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 
 // ---------- files ----------
 
-func (s *server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	despatchID := chi.URLParam(r, "despatchId")
 	fileType := chi.URLParam(r, "fileType")

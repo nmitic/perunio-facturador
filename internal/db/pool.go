@@ -17,14 +17,29 @@ type Pool struct {
 	pool *pgxpool.Pool
 }
 
-// New opens a connection pool against the given DATABASE_URL. Pings the
-// database before returning so misconfiguration fails fast at startup.
+// New opens a connection pool against the given DATABASE_URL, sized for request
+// traffic. Pings the database before returning so misconfiguration fails fast at
+// startup.
 func New(ctx context.Context, databaseURL string) (*Pool, error) {
+	return newPool(ctx, databaseURL, 20)
+}
+
+// NewAdmin opens a deliberately small pool for the BYPASSRLS role.
+//
+// Its only caller is the comprobante scheduler, which runs two indexed queries a
+// minute and is not latency-sensitive — sizing it like the request pool would
+// reserve 20 connection slots to do almost nothing. Mirrors the `max: 5` on
+// adminDb in perunio-backend/src/db/admin.ts.
+func NewAdmin(ctx context.Context, databaseURL string) (*Pool, error) {
+	return newPool(ctx, databaseURL, 5)
+}
+
+func newPool(ctx context.Context, databaseURL string, maxConns int32) (*Pool, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
 	}
-	cfg.MaxConns = 20
+	cfg.MaxConns = maxConns
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

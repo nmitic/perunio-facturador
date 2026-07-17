@@ -18,14 +18,27 @@ type Series struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
+// ScheduleOrigin identifies which kind of schedule emitted a comprobante.
+//
+// Single source of the vocabulary: the scheduler uses it to say which table a due
+// run came from, and the historial uses it to report a comprobante's provenance.
+// Lives in model so both the db and http layers can name it without an import
+// cycle — db imports model, never the reverse.
+type ScheduleOrigin string
+
+const (
+	ScheduleOriginRecurrente ScheduleOrigin = "recurrente"
+	ScheduleOriginProgramado ScheduleOrigin = "programado"
+)
+
 // IssuedDocument is a row in issued_documents (without items).
 type IssuedDocument struct {
-	ID       string `json:"id"`
-	TenantID string `json:"tenantId"`
-	CompanyID string `json:"companyId"`
-	SeriesID string `json:"seriesId"`
-	DocType  string `json:"docType"`
-	Series   string `json:"series"`
+	ID          string `json:"id"`
+	TenantID    string `json:"tenantId"`
+	CompanyID   string `json:"companyId"`
+	SeriesID    string `json:"seriesId"`
+	DocType     string `json:"docType"`
+	Series      string `json:"series"`
 	Correlative int    `json:"correlative"`
 	Status      string `json:"status"`
 	// SunatEnvironment ("beta" | "production") this document belongs to, stamped
@@ -34,8 +47,8 @@ type IssuedDocument struct {
 	// production historial.
 	SunatEnvironment string `json:"sunatEnvironment"`
 
-	IssueDate time.Time `json:"issueDate"`
-	IssueTime *string   `json:"issueTime"`
+	IssueDate time.Time  `json:"issueDate"`
+	IssueTime *string    `json:"issueTime"`
 	DueDate   *time.Time `json:"dueDate"`
 
 	CurrencyCode  string  `json:"currencyCode"`
@@ -56,7 +69,7 @@ type IssuedDocument struct {
 	TaxInclusiveAmount *string `json:"taxInclusiveAmount"`
 	Notes              *string `json:"notes"`
 
-	FormaPago *string         `json:"formaPago,omitempty"`
+	FormaPago *string        `json:"formaPago,omitempty"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
 
 	// Detracción (SPOT). All nil = not subject to detracción. DetraccionCuentaBN
@@ -85,6 +98,12 @@ type IssuedDocument struct {
 	R2PdfKey       *string `json:"r2PdfKey"`
 
 	QrData *string `json:"qrData"`
+
+	// ScheduleOrigin says which kind of schedule emitted this comprobante; nil when
+	// a user issued it by hand. Derived from comprobante_schedule_runs at read time
+	// — there is no column on issued_documents, so it can't drift from the run
+	// history that is the actual record of what emitted what.
+	ScheduleOrigin *ScheduleOrigin `json:"scheduleOrigin"`
 
 	SentAt     *time.Time `json:"sentAt"`
 	AcceptedAt *time.Time `json:"acceptedAt"`

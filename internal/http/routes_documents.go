@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
@@ -30,7 +29,7 @@ type documentListPagination struct {
 
 // listDocumentsHandler returns a paginated, filterable slice of issued
 // documents for the company.
-func (s *server) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	q := r.URL.Query()
 
@@ -85,7 +84,7 @@ type documentDetailResponse struct {
 }
 
 // getDocumentHandler returns one issued document with its line items.
-func (s *server) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	docID := chi.URLParam(r, "docId")
 
@@ -329,13 +328,11 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 
 // createDocumentHandler inserts a draft issued_document after checking the
 // tenant's monthly quota, then atomically bumps the issued-document counter.
-func (s *server) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
+//
+// The quota check and insert live in createDocumentDraft (pipeline_core.go) so the
+// background scheduler creates drafts through the same path.
+func (s *Server) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
-	tenantID, ok := auth.TenantIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "No autenticado")
-		return
-	}
 
 	var body createDocumentBody
 	if err := decodeBody(r, &body); err != nil {
@@ -347,40 +344,10 @@ func (s *server) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quota, err := s.pool.CheckDocumentQuota(r.Context(), tenantID, 1)
-	if err != nil {
-		s.log.Error("check document quota", "error", err, "tenantId", tenantID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+	doc, pErr := s.createDocumentDraft(r.Context(), companyID, body.toInput())
+	if pErr != nil {
+		writePipelineError(w, pErr)
 		return
-	}
-	if !quota.Allowed {
-		limitStr := "ilimitado"
-		if quota.Limit != nil {
-			limitStr = strconv.Itoa(*quota.Limit)
-		}
-		writeError(w, http.StatusForbidden, "DOCUMENT_QUOTA_EXCEEDED",
-			"Límite mensual de documentos alcanzado ("+limitStr+")")
-		return
-	}
-
-	doc, err := s.pool.CreateDocumentWithItems(r.Context(), companyID, body.toInput())
-	if err != nil {
-		switch {
-		case errors.Is(err, db.ErrSeriesInactive):
-			writeError(w, http.StatusBadRequest, "SERIES_NOT_FOUND", "Serie no encontrada o inactiva")
-		case errors.Is(err, db.ErrDuplicate):
-			writeError(w, http.StatusConflict, "DOCUMENT_DUPLICATE", "Documento duplicado")
-		default:
-			s.log.Error("create document", "error", err, "companyId", companyID)
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-		}
-		return
-	}
-
-	if err := s.pool.IncrementDocumentUsage(r.Context(), 1); err != nil {
-		// Usage is best-effort at this point — the draft already exists. Log
-		// so we can investigate drift.
-		s.log.Error("increment document usage", "error", err, "tenantId", tenantID)
 	}
 
 	writeSuccessStatus(w, http.StatusCreated, doc)
@@ -483,7 +450,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 }
 
 // updateDocumentHandler patches a draft document.
-func (s *server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	docID := chi.URLParam(r, "docId")
 
 	var body updateDocumentBody
@@ -510,7 +477,7 @@ func (s *server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteDocumentHandler removes a draft document.
-func (s *server) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	docID := chi.URLParam(r, "docId")
 
 	if err := s.pool.DeleteDraftDocument(r.Context(), docID); err != nil {
@@ -531,7 +498,7 @@ func (s *server) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
 
 // documentFileHandler returns a presigned R2 URL for the requested file type.
 // Valid fileType values: xml, signed_xml, zip, cdr, pdf.
-func (s *server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	docID := chi.URLParam(r, "docId")
 	fileType := chi.URLParam(r, "fileType")

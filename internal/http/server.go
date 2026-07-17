@@ -31,30 +31,43 @@ type Deps struct {
 	Secrets *awssecrets.Service
 	Pool    *db.Pool
 	R2      *r2.Client
+	// AdminPool connects as perunio_admin (BYPASSRLS) and is used only by the
+	// comprobante scheduler, which enumerates due schedules across every tenant.
+	// Nil when the scheduler is disabled.
+	AdminPool *db.Pool
 }
 
-// server is the HTTP server for the facturador service.
-type server struct {
+// Server is the HTTP server for the facturador service. It also hosts the
+// comprobante scheduler (see StartScheduler), which shares the emission pipeline
+// with the HTTP handlers.
+type Server struct {
 	mux       *chi.Mux
 	cfg       config.Config
 	log       *slog.Logger
 	secrets   *awssecrets.Service
 	pool      *db.Pool
+	adminPool *db.Pool
 	r2        *r2.Client
 	greClient *greclient.Client
 	authMW    *auth.Middleware
 	certCache *signature.Cache
 }
 
-// NewServer creates a new HTTP handler with routes configured.
-func NewServer(deps Deps) http.Handler {
-	s := &server{
-		mux:     chi.NewRouter(),
-		cfg:     deps.Config,
-		log:     deps.Log,
-		secrets: deps.Secrets,
-		pool:    deps.Pool,
-		r2:      deps.R2,
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
+}
+
+// NewServer creates a new HTTP server with routes configured.
+func NewServer(deps Deps) *Server {
+	s := &Server{
+		mux:       chi.NewRouter(),
+		cfg:       deps.Config,
+		log:       deps.Log,
+		secrets:   deps.Secrets,
+		pool:      deps.Pool,
+		adminPool: deps.AdminPool,
+		r2:        deps.R2,
 		greClient: greclient.NewClient(
 			deps.Config.SunatGRESecurityURL,
 			deps.Config.SunatGREBetaURL,
@@ -126,10 +139,10 @@ func NewServer(deps Deps) http.Handler {
 		r.Get("/gre/{companyId}/{despatchId}/files/{fileType}", s.despatchFileHandler)
 	})
 
-	return s.mux
+	return s
 }
 
-func (s *server) healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

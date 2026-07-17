@@ -59,6 +59,19 @@ func run(log *slog.Logger) error {
 	defer pool.Close()
 	log.Info("database connected")
 
+	// The comprobante scheduler needs a second pool on the BYPASSRLS role: a
+	// background tick has no current tenant, so the RLS-bound app role would see no
+	// due schedules at all. Only opened when the scheduler is on.
+	var adminPool *db.Pool
+	if cfg.SchedulerEnabled {
+		adminPool, err = db.NewAdmin(ctx, cfg.DatabaseAdminURL)
+		if err != nil {
+			return fmt.Errorf("connect admin database: %w", err)
+		}
+		defer adminPool.Close()
+		log.Info("admin database connected (scheduler)")
+	}
+
 	r2Client, err := r2.New(ctx, r2.Config{
 		AccountID:       cfg.R2AccountID,
 		AccessKeyID:     cfg.R2AccessKeyID,
@@ -73,12 +86,17 @@ func run(log *slog.Logger) error {
 	)
 
 	srv := facturadorhttp.NewServer(facturadorhttp.Deps{
-		Config:   cfg,
-		Log:      log,
-		Secrets:  secrets,
-		Pool:     pool,
-		R2:       r2Client,
+		Config:    cfg,
+		Log:       log,
+		Secrets:   secrets,
+		Pool:      pool,
+		AdminPool: adminPool,
+		R2:        r2Client,
 	})
+
+	// Emits due comprobantes recurrentes/programados. Shares the HTTP handlers'
+	// emission pipeline; stops on the same shutdown signal via ctx.
+	go srv.StartScheduler(ctx)
 
 	httpServer := &http.Server{
 		Addr:         net.JoinHostPort("", cfg.Port),

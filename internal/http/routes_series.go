@@ -12,7 +12,7 @@ import (
 )
 
 // listSeriesHandler returns every document_series row for a company.
-func (s *server) listSeriesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listSeriesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	series, err := s.pool.ListSeries(r.Context(), companyID)
@@ -36,7 +36,7 @@ type createSeriesRequest struct {
 var seriesCodeRegex = regexp.MustCompile(`^[A-Z0-9]{1,4}$`)
 
 // createSeriesHandler inserts a new document_series row.
-func (s *server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 
 	var req createSeriesRequest
@@ -84,7 +84,7 @@ type updateSeriesRequest struct {
 }
 
 // updateSeriesHandler patches description / isActive.
-func (s *server) updateSeriesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) updateSeriesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	seriesID := chi.URLParam(r, "seriesId")
 
@@ -115,7 +115,7 @@ func (s *server) updateSeriesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteSeriesHandler removes a series row if it has no documents.
-func (s *server) deleteSeriesHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteSeriesHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	seriesID := chi.URLParam(r, "seriesId")
 

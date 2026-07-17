@@ -43,7 +43,25 @@ const issuedDocumentColumns = `
 	sunat_response_code, sunat_response_description, sunat_ticket, sunat_observations,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key, r2_pdf_key,
 	qr_data,
-	sent_at, accepted_at, created_at, updated_at
+	sent_at, accepted_at, created_at, updated_at,
+	-- Provenance: which kind of schedule emitted this comprobante, NULL when a user
+	-- issued it by hand.
+	--
+	-- A scalar subquery rather than a LEFT JOIN so the historial can never show the
+	-- same comprobante twice; uq_comprobante_schedule_runs_document enforces the
+	-- one-run-one-document invariant that makes the single match deterministic.
+	--
+	-- Both arms are tested explicitly instead of using ELSE: an ELSE would infer
+	-- "programado" from "not recurrente", so a third kind of schedule added later
+	-- would silently mislabel every one of its comprobantes. Naming each arm makes
+	-- an unhandled kind read as NULL, which is visibly missing rather than wrong.
+	(SELECT CASE
+	          WHEN r.recurrente_id IS NOT NULL THEN 'recurrente'
+	          WHEN r.programado_id IS NOT NULL THEN 'programado'
+	        END
+	   FROM comprobante_schedule_runs r
+	  WHERE r.document_id = issued_documents.id
+	  LIMIT 1) AS schedule_origin
 `
 
 func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
@@ -64,6 +82,7 @@ func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
 		&d.QrData,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.ScheduleOrigin,
 	); err != nil {
 		return err
 	}
