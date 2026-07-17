@@ -189,7 +189,11 @@ func (s *Server) emitSchedule(ctx context.Context, sched db.DueSchedule) (*docRe
 		return nil, 1, newPipelineError(400, "VALIDATION_ERROR", msg)
 	}
 
-	draft, pErr := s.createDocumentDraft(ctx, sched.CompanyID, body.toInput())
+	in := body.toInput()
+	// Stamp the provenance on the row so it survives deletion of this schedule.
+	// sched.Kind is a model.ScheduleOrigin ("recurrente"/"programado").
+	in.Origin = string(sched.Kind)
+	draft, pErr := s.createDocumentDraft(ctx, sched.CompanyID, in)
 	if pErr != nil {
 		return nil, 1, pErr
 	}

@@ -27,6 +27,10 @@ type Series struct {
 type ScheduleOrigin string
 
 const (
+	// ScheduleOriginManual is the stored origin of a hand-issued comprobante. It is
+	// never surfaced on the wire — the historial reports manual emissions as a nil
+	// ScheduleOrigin (see issuedDocumentColumns) so the UI renders no badge.
+	ScheduleOriginManual     ScheduleOrigin = "manual"
 	ScheduleOriginRecurrente ScheduleOrigin = "recurrente"
 	ScheduleOriginProgramado ScheduleOrigin = "programado"
 )

@@ -21,6 +21,11 @@ import (
 type CreateDocumentInput struct {
 	SeriesID string
 
+	// Origin is the comprobante's provenance, stamped on the row at creation. Empty
+	// means a manual (hand-issued) emission; the scheduler sets it to the kind of
+	// schedule ("recurrente"/"programado") that produced the document.
+	Origin string
+
 	IssueDate string
 	IssueTime *string
 	DueDate   *string
@@ -103,9 +108,9 @@ type UpdateDocumentInput struct {
 	TaxInclusiveAmount *string
 	Notes              *string
 
-	FormaPago    *string
-	Cuotas       []model.CuotaCredito
-	CuotasIsSet  bool // true to overwrite (including with nil/empty); false leaves column untouched
+	FormaPago   *string
+	Cuotas      []model.CuotaCredito
+	CuotasIsSet bool // true to overwrite (including with nil/empty); false leaves column untouched
 
 	DetraccionCodigo     *string
 	DetraccionPorcentaje *string
@@ -200,7 +205,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				credit_debit_reason_code, credit_debit_reason_desc,
 				global_discount,
 				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
-				sunat_environment
+				sunat_environment,
+				origin
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -213,7 +219,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$29, $30,
 				$31,
 				$32, $33, $34, $35,
-				$36
+				$36,
+				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -228,6 +235,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.GlobalDiscount,
 			in.DetraccionCodigo, in.DetraccionPorcentaje, in.DetraccionMonto, in.DetraccionCuentaBN,
 			environment,
+			in.Origin,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
