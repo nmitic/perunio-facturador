@@ -24,6 +24,13 @@ type Company struct {
 	FiscalAddress         string
 	Username              *string
 	EncryptedPassword     *string
+	// EmissionUsername / EmissionPassword are the dedicated SUNAT SOL secondary-user
+	// credentials used for emission (SOAP WS-Security). They are required to emit —
+	// resolvePipelineDeps rejects with EMISSION_CREDENTIALS_MISSING when unset — and are
+	// distinct from Username/EncryptedPassword (which the backend uses for downloads).
+	// EmissionPassword is AES-GCM encrypted with the same key as EncryptedPassword.
+	EmissionUsername      *string
+	EmissionPassword      *string
 	EncryptedClientID     *string
 	EncryptedClientSecret *string
 	IsActive              bool
@@ -49,6 +56,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			SELECT id, tenant_id, ruc, COALESCE(company_name, ''),
 			       COALESCE(fiscal_address, ''),
 			       username, password,
+			       emission_username, emission_password,
 			       client_id, client_secret,
 			       COALESCE(is_active, true),
 			       COALESCE(sunat_environment::text, 'production'),
@@ -63,6 +71,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 		if err := row.Scan(&got.ID, &got.TenantID, &got.RUC, &got.CompanyName,
 			&got.FiscalAddress,
 			&got.Username, &got.EncryptedPassword,
+			&got.EmissionUsername, &got.EmissionPassword,
 			&got.EncryptedClientID, &got.EncryptedClientSecret,
 			&got.IsActive, &got.SunatEnvironment,
 			&got.BrandColor, &got.LogoBase64,

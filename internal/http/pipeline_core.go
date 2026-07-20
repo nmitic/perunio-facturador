@@ -88,17 +88,23 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	if company == nil {
 		return nil, newPipelineError(http.StatusNotFound, "COMPANY_NOT_FOUND", "Empresa no encontrada")
 	}
-	if company.Username == nil || company.EncryptedPassword == nil {
-		return nil, newPipelineError(http.StatusBadRequest, "SUNAT_CREDENTIALS_MISSING",
-			"Credenciales SOL no configuradas para esta empresa")
+	// Emission requires the dedicated SUNAT SOL secondary-user credential (with the
+	// emisor-electrónico profile). We do NOT fall back to the download credential
+	// (companies.username/password): that user often lacks the emission profile, which is
+	// exactly what SUNAT rejects with fault 0111. The UI gates on this too; this is the
+	// server-side enforcement covering every emit path (comprobantes, GRE, scheduler).
+	if company.EmissionUsername == nil || *company.EmissionUsername == "" ||
+		company.EmissionPassword == nil || *company.EmissionPassword == "" {
+		return nil, newPipelineError(http.StatusBadRequest, "EMISSION_CREDENTIALS_MISSING",
+			"Configura el usuario secundario SOL de emisión para esta empresa")
 	}
 
-	sunatPassword, err := facturadorCrypto.DecryptAES256GCM(*company.EncryptedPassword, s.cfg.EncryptionKey)
+	sunatPassword, err := facturadorCrypto.DecryptAES256GCM(*company.EmissionPassword, s.cfg.EncryptionKey)
 	if err != nil {
-		ivHex := strings.SplitN(*company.EncryptedPassword, ":", 2)[0]
-		s.log.Error("decrypt sunat password", "error", err, "companyId", companyID, "ivHexLen", len(ivHex))
+		ivHex := strings.SplitN(*company.EmissionPassword, ":", 2)[0]
+		s.log.Error("decrypt emission sunat password", "error", err, "companyId", companyID, "ivHexLen", len(ivHex))
 		return nil, newPipelineError(http.StatusInternalServerError, "SUNAT_DECRYPT_ERROR",
-			"No se pudo descifrar la contraseña SOL")
+			"No se pudo descifrar la contraseña SOL de emisión")
 	}
 
 	activeCert, err := s.pool.GetActiveCertificateForSigning(ctx, companyID)
@@ -125,11 +131,12 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	}
 
 	// SUNAT WS-Security UsernameToken: {RUC}{usuario_sol} concatenated, no
-	// separator. companies.username stores the SOL secondary user only.
+	// separator. companies.emission_username stores the SOL secondary user used for
+	// emission.
 	return &pipelineDeps{
 		tenantID:      tenantID,
 		company:       company,
-		sunatUsername: company.RUC + *company.Username,
+		sunatUsername: company.RUC + *company.EmissionUsername,
 		sunatPassword: sunatPassword,
 		parsedCert:    parsed,
 	}, nil
