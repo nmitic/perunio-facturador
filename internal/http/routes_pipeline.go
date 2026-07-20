@@ -338,7 +338,7 @@ func (s *Server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	sendResult, err := soapClient.SendSummary(deps.sunatUsername, deps.sunatPassword, filename, zipBytes)
 	if err != nil {
-		s.log.Error("send summary", "error", err, "summaryId", summaryID)
+		s.log.Error("send summary", "error", err, "summaryId", summaryID, "env", env, "solUser", deps.sunatUsername)
 		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 		return
 	}
@@ -400,7 +400,7 @@ func (s *Server) pollSummaryPipelineHandler(w http.ResponseWriter, r *http.Reque
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	result, err := soapClient.GetStatus(deps.sunatUsername, deps.sunatPassword, *summary.SunatTicket)
 	if err != nil {
-		s.log.Error("get status summary", "error", err, "summaryId", summaryID)
+		s.log.Error("get status summary", "error", err, "summaryId", summaryID, "env", env, "solUser", deps.sunatUsername)
 		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 		return
 	}
@@ -532,7 +532,7 @@ func (s *Server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	sendResult, err := soapClient.SendSummary(deps.sunatUsername, deps.sunatPassword, filename, zipBytes)
 	if err != nil {
-		s.log.Error("send void", "error", err, "voidId", voidID)
+		s.log.Error("send void", "error", err, "voidId", voidID, "env", env, "solUser", deps.sunatUsername)
 		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 		return
 	}
@@ -592,7 +592,7 @@ func (s *Server) pollVoidPipelineHandler(w http.ResponseWriter, r *http.Request)
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
 	result, err := soapClient.GetStatus(deps.sunatUsername, deps.sunatPassword, *voidDoc.SunatTicket)
 	if err != nil {
-		s.log.Error("get status void", "error", err, "voidId", voidID)
+		s.log.Error("get status void", "error", err, "voidId", voidID, "env", env, "solUser", deps.sunatUsername)
 		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 		return
 	}

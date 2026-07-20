@@ -270,11 +270,15 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	}
 
 	soapClient := soap.NewClient(env, s.cfg.SunatBetaURL, s.cfg.SunatProductionURL, s.cfg.SunatConsultURL, s.cfg.SunatTimeoutSeconds)
+	// Log the WS-Security user (never the password) and the target environment: SUNAT
+	// authorization faults such as 0111 ("no tiene el perfil") only say the user lacks a
+	// permission, not which user was presented, which makes them undiagnosable otherwise.
+	s.log.Info("send bill", "docId", docID, "env", env, "solUser", deps.sunatUsername)
 	sendStart := time.Now()
 	sendResult, err := soapClient.SendBill(deps.sunatUsername, deps.sunatPassword, filename, zipBytes)
 	sendDurationMs := int(time.Since(sendStart).Milliseconds())
 	if err != nil {
-		s.log.Error("send bill", "error", err, "docId", docID)
+		s.log.Error("send bill", "error", err, "docId", docID, "env", env, "solUser", deps.sunatUsername)
 		docRef := docID
 		errDesc := err.Error()
 		if logErr := s.pool.InsertSubmissionLog(ctx, db.SubmissionLogEntry{
