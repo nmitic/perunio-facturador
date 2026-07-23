@@ -124,6 +124,7 @@ var (
 
 type createDocumentItemBody struct {
 	LineNumber             *int    `json:"lineNumber,omitempty"`
+	ProductoID             *string `json:"productoId,omitempty"`
 	Description            string  `json:"description"`
 	Quantity               string  `json:"quantity"`
 	UnitCode               string  `json:"unitCode"`
@@ -274,6 +275,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		}
 		items = append(items, db.CreateDocumentItemInput{
 			LineNumber:             line,
+			ProductoID:             it.ProductoID,
 			Description:            it.Description,
 			Quantity:               it.Quantity,
 			UnitCode:               it.UnitCode,
@@ -431,6 +433,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 			}
 			items = append(items, db.CreateDocumentItemInput{
 				LineNumber:             line,
+				ProductoID:             it.ProductoID,
 				Description:            it.Description,
 				Quantity:               it.Quantity,
 				UnitCode:               it.UnitCode,

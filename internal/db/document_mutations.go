@@ -68,6 +68,7 @@ type CreateDocumentInput struct {
 // CreateDocumentItemInput is one line of a new document.
 type CreateDocumentItemInput struct {
 	LineNumber             int
+	ProductoID             *string // catálogo producto link; nil for manual lines
 	Description            string
 	Quantity               string
 	UnitCode               string
@@ -437,10 +438,10 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 	}
 	const insertSQL = `
 		INSERT INTO issued_document_items (
-			document_id, line_number, description, quantity, unit_code,
+			document_id, line_number, producto_id, description, quantity, unit_code,
 			unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
 
 	batch := &pgx.Batch{}
 	for i, it := range items {
@@ -449,7 +450,7 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 			line = i + 1
 		}
 		batch.Queue(insertSQL,
-			docID, line, it.Description, it.Quantity, it.UnitCode,
+			docID, line, it.ProductoID, it.Description, it.Quantity, it.UnitCode,
 			it.UnitPrice, it.UnitPriceWithTax, it.TaxExemptionReasonCode,
 			it.IgvAmount, it.IscAmount, it.IscTierRange, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
 		)

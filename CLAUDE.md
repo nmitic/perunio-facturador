@@ -88,6 +88,19 @@ All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS
 - `DELETE /documents/{companyId}/{docId}` — delete draft
 - `POST /documents/{companyId}/{docId}/issue` — run full pipeline against draft
 - `GET /documents/{companyId}/{docId}/files/{fileType}` — presigned R2 URL (`xml|signed_xml|zip|cdr|pdf`)
+- `GET|POST /documents/{companyId}/{docId}/payments` — list/record installment (cuota) payments
+- `DELETE /documents/{companyId}/{docId}/payments/{paymentId}` — delete a recorded payment
+
+### Reports (aggregations over issued documents / items)
+Read-only GROUP BY reports. Reuse the historial's company+environment scope (`docScope` in `internal/db/documents.go`) so reports and historial never disagree. Sign convention: facturas/boletas `+`, notas de crédito `−`, notas de débito `+`. Shared query params: `from`, `to` (default current month), `currency` (default PEN).
+- `GET /reports/{companyId}/sales/summary` — revenue, IGV, per-type counts, average sale
+- `GET /reports/{companyId}/sales/series` — net sales by `?bucket=day|month|year`
+- `GET /reports/{companyId}/customers` — customer ranking (`?orderBy=revenue|count|average`)
+- `GET /reports/{companyId}/products` — product ranking (`?orderBy=quantity|revenue`); groups by `issued_document_items.producto_id`, falls back to description
+- `GET /reports/{companyId}/tax/breakdown` — base+IGV per afectación category + document tax totals
+- `GET /reports/{companyId}/tax/notes` — notas grouped by reason code (`?docType=07|08`)
+- `GET /reports/{companyId}/installments` — cuotas rollup per credit document (`?status=paid|partial|pending|overdue`)
+- `GET /reports/{companyId}/sunat/submissions` — document counts by SUNAT status
 
 ### Summaries
 - `GET /summaries/{companyId}`

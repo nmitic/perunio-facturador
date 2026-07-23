@@ -28,6 +28,26 @@ type DocumentListResult struct {
 	Total     int                    `json:"total"`
 }
 
+// docScope restricts a query over issued_documents to one company AND its
+// *current* SUNAT environment. `$1` must be the company id. `alias` is the
+// table alias in the query (""for an unaliased `FROM issued_documents`, "d" in a
+// join) so the column references never go ambiguous against a joined table that
+// also has a company_id (e.g. productos). Sandbox/test documents (issued while
+// the company was in "beta") stay in the table but disappear from the historial
+// and every report once the company switches to "production", and vice-versa —
+// a correlated subquery so switching needs no row rewrite. Shared by
+// ListIssuedDocuments and the reports so the historial and the reports can never
+// disagree about which documents exist.
+func docScope(alias string) string {
+	if alias != "" {
+		alias += "."
+	}
+	return fmt.Sprintf(
+		"%[1]scompany_id = $1 AND %[1]ssunat_environment = (SELECT sunat_environment FROM companies WHERE id = $1)",
+		alias,
+	)
+}
+
 const issuedDocumentColumns = `
 	id, tenant_id, company_id, series_id, doc_type, series, correlative, status,
 	sunat_environment,
@@ -103,15 +123,9 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 	offset := (page - 1) * limit
 
 	args := []any{companyID}
-	// Only surface documents belonging to the company's *current* SUNAT
-	// environment. Sandbox/test documents (issued while the company was in
-	// "beta") are retained in the table but disappear from the historial once
-	// the company switches to "production", and vice-versa. Correlated subquery
-	// so a switch needs no rewrite of existing rows.
-	conditions := []string{
-		"company_id = $1",
-		"sunat_environment = (SELECT sunat_environment FROM companies WHERE id = $1)",
-	}
+	// Company + current-environment scope, shared with every report (see
+	// docScope) so the historial and the reports agree on which documents exist.
+	conditions := []string{docScope("")}
 	if filter.DocType != "" {
 		args = append(args, filter.DocType)
 		conditions = append(conditions, fmt.Sprintf("doc_type = $%d", len(args)))
@@ -290,7 +304,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 	var out []model.IssuedDocumentItem
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, document_id, line_number, description, quantity, unit_code,
+			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       created_at
@@ -305,7 +319,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 
 		for rows.Next() {
 			var it model.IssuedDocumentItem
-			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.Description,
+			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode, &it.CreatedAt); err != nil {

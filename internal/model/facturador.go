@@ -120,6 +120,7 @@ type IssuedDocumentItem struct {
 	ID                     string    `json:"id"`
 	DocumentID             string    `json:"documentId"`
 	LineNumber             int       `json:"lineNumber"`
+	ProductoID             *string   `json:"productoId"`
 	Description            string    `json:"description"`
 	Quantity               string    `json:"quantity"`
 	UnitCode               string    `json:"unitCode"`
@@ -133,6 +134,21 @@ type IssuedDocumentItem struct {
 	LineTotal              string    `json:"lineTotal"`
 	PriceTypeCode          *string   `json:"priceTypeCode"`
 	CreatedAt              time.Time `json:"createdAt"`
+}
+
+// InstallmentPayment is one payment recorded against a credit document's cuota.
+// CuotaNumero matches the cuotas[].numero on the parent issued_documents row.
+type InstallmentPayment struct {
+	ID          string    `json:"id"`
+	DocumentID  string    `json:"documentId"`
+	CuotaNumero int       `json:"cuotaNumero"`
+	Amount      string    `json:"amount"`
+	PaidAt      time.Time `json:"paidAt"`
+	Method      *string   `json:"method"`
+	Reference   *string   `json:"reference"`
+	Notes       *string   `json:"notes"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // DailySummary is a row in daily_summaries (without items).

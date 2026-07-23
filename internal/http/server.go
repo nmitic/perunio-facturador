@@ -114,6 +114,21 @@ func NewServer(deps Deps) *Server {
 		r.Post("/documents/{companyId}/{docId}/issue", s.issueDocumentPipelineHandler)
 		r.Get("/documents/{companyId}/{docId}/files/{fileType}", s.documentFileHandler)
 
+		// Installment payments (cuotas) recorded against a credit document.
+		r.Get("/documents/{companyId}/{docId}/payments", s.listPaymentsHandler)
+		r.Post("/documents/{companyId}/{docId}/payments", s.createPaymentHandler)
+		r.Delete("/documents/{companyId}/{docId}/payments/{paymentId}", s.deletePaymentHandler)
+
+		// Reports (aggregations over issued_documents / items).
+		r.Get("/reports/{companyId}/sales/summary", s.salesSummaryHandler)
+		r.Get("/reports/{companyId}/sales/series", s.salesSeriesHandler)
+		r.Get("/reports/{companyId}/customers", s.customerRankingHandler)
+		r.Get("/reports/{companyId}/products", s.productRankingHandler)
+		r.Get("/reports/{companyId}/tax/breakdown", s.taxBreakdownHandler)
+		r.Get("/reports/{companyId}/tax/notes", s.taxNotesHandler)
+		r.Get("/reports/{companyId}/installments", s.installmentsReportHandler)
+		r.Get("/reports/{companyId}/sunat/submissions", s.sunatSubmissionsHandler)
+
 		// Summaries.
 		r.Get("/summaries/{companyId}", s.listSummariesHandler)
 		r.Post("/summaries/{companyId}", s.createSummaryHandler)

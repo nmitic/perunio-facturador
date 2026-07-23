@@ -89,6 +89,35 @@ The core: draft → issue pipeline (validate → UBL XML → sign → ZIP → SO
 **Purpose:** hand the browser a **presigned R2 URL** for a generated file. `fileType` ∈ `xml | signed_xml | zip | cdr` (PDF is generated in-pipeline; valid file keys come from the document row).
 **Response:** `{ url, fileType }`. `400 INVALID_FILE_TYPE`, `404 FILE_NOT_FOUND` (artifact not yet generated).
 
+### Installment payments — cuotas recorded against a credit document
+
+Records the actual payments applied to a credit document's cuotas. The cuotas *schedule* lives as jsonb on the document; these rows are the *actuals*. Cuota status (pagada / parcial / vencida / pendiente) is always **derived** from `sum(amount)` vs the scheduled `monto` vs `fechaVencimiento` — never stored. **All 🟢 frontend (live)** via `documentsApi.listPayments/createPayment/deletePayment`.
+
+| Method & path | Purpose | Contract |
+|---|---|---|
+| `GET /documents/{companyId}/{docId}/payments` | List recorded payments for a document. | → `InstallmentPayment[]` (ordered by cuota, then date). |
+| `POST /documents/{companyId}/{docId}/payments` | Record one payment against a cuota. Guarded by an EXISTS check so a payment can't attach to a document outside the company/tenant. | Body `{ cuotaNumero, amount, paidAt, method?, reference?, notes? }` → `201 InstallmentPayment`. `404 NOT_FOUND`. |
+| `DELETE /documents/{companyId}/{docId}/payments/{paymentId}` | Delete a recorded payment. | → `{message}`. `404 NOT_FOUND`. |
+
+---
+
+## Reports — aggregations over issued documents
+
+Read-only GROUP BY aggregations over `issued_documents` / `issued_document_items`. Every report reuses the same company + current-SUNAT-environment scope as the historial (`docScope`), so the two can never disagree about which documents exist. Money reports add `status IN ('accepted','accepted_with_observations')` + `issue_date BETWEEN from AND to` + `currency_code`. Sign convention: facturas/boletas (01/03) `+`, notas de crédito (07) `−`, notas de débito (08) `+`. **All 🟢 frontend (live)** via `reportesFacturadorApi`.
+
+Shared query params (`parseReportFilter`): `from`, `to` (YYYY-MM-DD, default current month), `currency` (default `PEN`).
+
+| Method & path | Purpose |
+|---|---|
+| `GET /reports/{companyId}/sales/summary` | Revenue, IGV, per-type counts, average sale. |
+| `GET /reports/{companyId}/sales/series` | Net sales bucketed by `?bucket=day\|month\|year` (default month). |
+| `GET /reports/{companyId}/customers` | Customer ranking, `?orderBy=revenue\|count\|average`, `?limit=`. |
+| `GET /reports/{companyId}/products` | Product ranking, `?orderBy=quantity\|revenue`, `?limit=`. Groups by producto link, falls back to normalized description. |
+| `GET /reports/{companyId}/tax/breakdown` | Base+IGV per afectación category (gravado/exonerado/inafecto/exportación/gratuito) from items + document tax totals (IGV/ISC/other/total). |
+| `GET /reports/{companyId}/tax/notes` | Notas de crédito/débito grouped by reason code. `?docType=07\|08`. |
+| `GET /reports/{companyId}/installments` | Per-credit-document cuotas rollup (paid/balance/next due/status). `?status=paid\|partial\|pending\|overdue`. |
+| `GET /reports/{companyId}/sunat/submissions` | Document counts by SUNAT status (all statuses, currency-agnostic). |
+
 ---
 
 ## Summaries — Resúmenes Diarios de Boletas (RC)
@@ -145,6 +174,8 @@ Every `issue` / `poll` endpoint accepts an **optional** `{ "environment": "beta"
 | Resource | Endpoints | Used by today |
 |---|---|---|
 | usage, series, documents | `/usage`, `/series/*`, `/documents/*` | 🟢 `perunio-frontend` via `facturadorClient` (`documentsApi`, `seriesApi`) |
+| installment payments | `/documents/*/payments` | 🟢 `perunio-frontend` via `documentsApi` (cuotas payment tracking) |
+| reports | `/reports/*` | 🟢 `perunio-frontend` via `reportesFacturadorApi` |
 | voids | `/voids/*` | 🟢 `perunio-frontend` via `voidsApi` |
 | gre (emission) | `/gre/*` | 🟢 `perunio-frontend` via `despatchesApi` (despatch emission). GRE *consulta* is a separate `greApi` → `perunio-backend`. |
 | summaries | `/summaries/*` | 🟡 implemented here; frontend still hits `perunio-backend` |
