@@ -22,19 +22,19 @@ type SummaryRequest struct {
 // SummaryItem is a single boleta/NC/ND in a Resumen Diario.
 type SummaryItem struct {
 	LineNumber        int    `json:"lineNumber"`
-	DocType           string `json:"docType"`           // "03","07","08"
+	DocType           string `json:"docType"` // "03","07","08"
 	Series            string `json:"series"`
 	StartCorrelative  int    `json:"startCorrelative"`
 	EndCorrelative    int    `json:"endCorrelative"`
-	ConditionCode     string `json:"conditionCode"`     // "1"=add, "2"=modify, "3"=void
+	ConditionCode     string `json:"conditionCode"` // "1"=add, "2"=modify, "3"=void
 	CustomerDocType   string `json:"customerDocType"`
 	CustomerDocNumber string `json:"customerDocNumber"`
 	ReferenceDocType  string `json:"referenceDocType"`
 	ReferenceSeries   string `json:"referenceSeries"`
 	ReferenceCorr     int    `json:"referenceCorrelative"`
-	CurrencyCode      string `json:"currencyCode"`      // Must be PEN
+	CurrencyCode      string `json:"currencyCode"` // ISO 4217 of the boleta (PEN/USD/EUR)
 	TotalAmount       string `json:"totalAmount"`
-	TotalGravada      string `json:"totalGravada"`      // Base imponible gravada (IGV-exclusive)
+	TotalGravada      string `json:"totalGravada"` // Base imponible gravada (IGV-exclusive)
 	TotalIGV          string `json:"totalIgv"`
 	TotalISC          string `json:"totalIsc"`
 	TotalOtherTaxes   string `json:"totalOtherTaxes"`

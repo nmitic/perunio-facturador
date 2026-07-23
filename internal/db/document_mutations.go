@@ -30,7 +30,10 @@ type CreateDocumentInput struct {
 	IssueTime *string
 	DueDate   *string
 
-	CurrencyCode  string
+	CurrencyCode string
+	// ExchangeRate is the tipo de cambio to soles for foreign-currency documents
+	// (decimal as string); nil for PEN. Recorded for PLE/SIRE and detracción.
+	ExchangeRate  *string
 	OperationType *string
 
 	CustomerDocType   string
@@ -92,6 +95,7 @@ type UpdateDocumentInput struct {
 	DueDate   *string
 
 	CurrencyCode  *string
+	ExchangeRate  *string
 	OperationType *string
 
 	CustomerDocType   *string
@@ -207,7 +211,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				global_discount,
 				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
 				sunat_environment,
-				origin
+				origin,
+				exchange_rate
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -221,7 +226,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$31,
 				$32, $33, $34, $35,
 				$36,
-				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin
+				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin,
+				$38
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -237,6 +243,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.DetraccionCodigo, in.DetraccionPorcentaje, in.DetraccionMonto, in.DetraccionCuentaBN,
 			environment,
 			in.Origin,
+			in.ExchangeRate,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -348,6 +355,9 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 	}
 	if in.CurrencyCode != nil {
 		add("currency_code", *in.CurrencyCode)
+	}
+	if in.ExchangeRate != nil {
+		add("exchange_rate", *in.ExchangeRate)
 	}
 	if in.OperationType != nil {
 		add("operation_type", *in.OperationType)

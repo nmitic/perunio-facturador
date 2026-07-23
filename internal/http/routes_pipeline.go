@@ -124,6 +124,7 @@ func buildIssueRequestFromDoc(
 		IssueTime: derefString(doc.IssueTime, "00:00:00"),
 
 		CurrencyCode:  doc.CurrencyCode,
+		ExchangeRate:  derefString(doc.ExchangeRate, ""),
 		OperationType: derefString(doc.OperationType, "0101"),
 
 		CustomerDocType:   doc.CustomerDocType,

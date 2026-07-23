@@ -155,6 +155,13 @@ func SummaryFilename(ruc, issueDate string, correlative int) string {
 }
 
 func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
+	// Each RC line carries the currency of its underlying boleta. SUNAT's RC
+	// schema allows per-line currency, so a USD/EUR boleta summarizes in its own
+	// moneda. Fall back to PEN for legacy rows with an empty currency.
+	cur := item.CurrencyCode
+	if cur == "" {
+		cur = "PEN"
+	}
 	// Field order below is irrelevant (Go marshals in struct-definition order);
 	// the schema-critical sequence lives in the summaryDocumentsLine type.
 	line := summaryDocumentsLine{
@@ -164,7 +171,7 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 		StartDocumentNumberID: fmt.Sprint(item.StartCorrelative),
 		EndDocumentNumberID:   fmt.Sprint(item.EndCorrelative),
 		ConditionCode:         item.ConditionCode,
-		TotalAmount:           newCurrencyAmount(item.TotalAmount, "PEN"), // RC amounts always PEN
+		TotalAmount:           newCurrencyAmount(item.TotalAmount, cur),
 	}
 
 	// Customer (optional) — must precede cac:Status per the schema sequence.
@@ -190,50 +197,51 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	// These are IGV-exclusive bases, not the tax amounts.
 	if !isZeroAmount(item.TotalGravada) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalGravada, "PEN"),
+			PaidAmount:    newCurrencyAmount(item.TotalGravada, cur),
 			InstructionID: "01", // Gravado
 		})
 	}
 	if !isZeroAmount(item.TotalExonerated) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalExonerated, "PEN"),
+			PaidAmount:    newCurrencyAmount(item.TotalExonerated, cur),
 			InstructionID: "02", // Exonerado
 		})
 	}
 	if !isZeroAmount(item.TotalUnaffected) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalUnaffected, "PEN"),
+			PaidAmount:    newCurrencyAmount(item.TotalUnaffected, cur),
 			InstructionID: "03", // Inafecto
 		})
 	}
 	if !isZeroAmount(item.TotalFree) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalFree, "PEN"),
+			PaidAmount:    newCurrencyAmount(item.TotalFree, cur),
 			InstructionID: "05", // Gratuito
 		})
 	}
 
 	// TaxTotal: one cac:TaxTotal per tributo present (IGV, ISC, otros).
 	if !isZeroAmount(item.TotalIGV) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, "1000", "IGV", "VAT"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, cur, "1000", "IGV", "VAT"))
 	}
 	if !isZeroAmount(item.TotalISC) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, "2000", "ISC", "EXC"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, "2000", "ISC", "EXC"))
 	}
 	if !isZeroAmount(item.TotalOtherTaxes) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalOtherTaxes, "9999", "OTROS", "OTH"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalOtherTaxes, cur, "9999", "OTROS", "OTH"))
 	}
 
 	return line
 }
 
-// newSummaryTax builds a cac:TaxTotal for an RC line from a tax amount and its
-// SUNAT catalog-05 scheme (IGV 1000/VAT, ISC 2000/EXC, otros 9999/OTH).
-func newSummaryTax(amount, schemeID, schemeName, taxTypeCode string) summaryTaxTotal {
+// newSummaryTax builds a cac:TaxTotal for an RC line from a tax amount, its line
+// currency, and its SUNAT catalog-05 scheme (IGV 1000/VAT, ISC 2000/EXC, otros
+// 9999/OTH).
+func newSummaryTax(amount, currency, schemeID, schemeName, taxTypeCode string) summaryTaxTotal {
 	return summaryTaxTotal{
-		TaxAmount: newCurrencyAmount(amount, "PEN"),
+		TaxAmount: newCurrencyAmount(amount, currency),
 		TaxSubtotal: summaryTaxSubtotal{
-			TaxAmount: newCurrencyAmount(amount, "PEN"),
+			TaxAmount: newCurrencyAmount(amount, currency),
 			TaxCategory: summaryTaxCategory{
 				TaxScheme: summaryTaxScheme{
 					ID:          schemeID,

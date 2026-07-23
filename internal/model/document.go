@@ -9,8 +9,8 @@ type IssueRequest struct {
 	EstablishmentCode string `json:"establishmentCode"` // "0000" default
 
 	// Document identity
-	DocType     string `json:"docType"`     // "01","03","07","08"
-	Series      string `json:"series"`      // "F001","B001","FC01","FD01"
+	DocType     string `json:"docType"` // "01","03","07","08"
+	Series      string `json:"series"`  // "F001","B001","FC01","FD01"
 	Correlative int    `json:"correlative"`
 
 	// Dates
@@ -18,11 +18,16 @@ type IssueRequest struct {
 	IssueTime string `json:"issueTime"` // HH:mm:ss
 
 	// Currency & operation
-	CurrencyCode  string `json:"currencyCode"`  // ISO 4217
+	CurrencyCode string `json:"currencyCode"` // ISO 4217
+	// ExchangeRate is the tipo de cambio to soles for foreign-currency documents
+	// (decimal as string); empty for PEN. Carried for PLE/SIRE and detracción
+	// records; it does not change the XML monetary amounts (the document is
+	// emitted in its own currency, and the detracción monto arrives already in PEN).
+	ExchangeRate  string `json:"exchangeRate,omitempty"`
 	OperationType string `json:"operationType"` // Cat.51
 
 	// Customer
-	CustomerDocType   string `json:"customerDocType"`   // Cat.06
+	CustomerDocType   string `json:"customerDocType"` // Cat.06
 	CustomerDocNumber string `json:"customerDocNumber"`
 	CustomerName      string `json:"customerName"`
 	CustomerAddress   string `json:"customerAddress"`
@@ -80,7 +85,7 @@ type IssueRequest struct {
 // CuotaCredito is one installment in a credit-sale invoice.
 type CuotaCredito struct {
 	Numero           int    `json:"numero"`
-	Monto            string `json:"monto"`             // decimal as string
+	Monto            string `json:"monto"`            // decimal as string
 	FechaVencimiento string `json:"fechaVencimiento"` // YYYY-MM-DD
 }
 

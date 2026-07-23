@@ -15,9 +15,9 @@ import (
 // documentListResponse mirrors the Node.js response shape:
 // { success: true, data: [...], pagination: { page, limit, total, totalPages } }.
 type documentListResponse struct {
-	Success    bool                       `json:"success"`
-	Data       []model.IssuedDocument     `json:"data"`
-	Pagination documentListPagination     `json:"pagination"`
+	Success    bool                   `json:"success"`
+	Data       []model.IssuedDocument `json:"data"`
+	Pagination documentListPagination `json:"pagination"`
 }
 
 type documentListPagination struct {
@@ -114,10 +114,10 @@ func (s *Server) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 
 // Zod-equivalent validators.
 var (
-	decimalRegex   = regexp.MustCompile(`^\d+(\.\d+)?$`)
-	dateRegex      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	timeRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
-	docUUIDRegex   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	decimalRegex = regexp.MustCompile(`^\d+(\.\d+)?$`)
+	dateRegex    = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	timeRegex    = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}$`)
+	docUUIDRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 	detraccionCodigoRegex = regexp.MustCompile(`^\d{3}$`) // Cat.54 bien/servicio
 )
@@ -155,6 +155,7 @@ type createDocumentBody struct {
 	IssueTime               *string                  `json:"issueTime,omitempty"`
 	DueDate                 *string                  `json:"dueDate,omitempty"`
 	CurrencyCode            string                   `json:"currencyCode"`
+	ExchangeRate            *string                  `json:"exchangeRate,omitempty"`
 	OperationType           *string                  `json:"operationType,omitempty"`
 	CustomerDocType         string                   `json:"customerDocType"`
 	CustomerDocNumber       string                   `json:"customerDocNumber"`
@@ -218,6 +219,11 @@ func (b *createDocumentBody) validate() string {
 	if len(b.CurrencyCode) != 3 {
 		return "currencyCode inválido"
 	}
+	// Tipo de cambio: solo se valida el formato cuando viene. La obligatoriedad
+	// para moneda extranjera la impone el frontend (registro PLE/detracción).
+	if b.ExchangeRate != nil && *b.ExchangeRate != "" && !decimalRegex.MatchString(*b.ExchangeRate) {
+		return "exchangeRate inválido"
+	}
 	// Customer is optional at draft time: a boleta with no customer is defaulted
 	// to consumidor final when stored, and the issue-time validator is the real
 	// gate (facturas still require a RUC there). Only enforce format here.
@@ -266,6 +272,16 @@ func (b *createDocumentBody) validate() string {
 	return ""
 }
 
+// nilIfEmpty returns nil for a nil or empty-string pointer, so an omitted or
+// blank optional numeric (e.g. exchangeRate on a PEN doc) is stored as SQL NULL
+// rather than an empty string the numeric column would reject.
+func nilIfEmpty(s *string) *string {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return s
+}
+
 func (b createDocumentBody) toInput() db.CreateDocumentInput {
 	items := make([]db.CreateDocumentItemInput, 0, len(b.Items))
 	for i, it := range b.Items {
@@ -296,6 +312,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		IssueTime:               b.IssueTime,
 		DueDate:                 b.DueDate,
 		CurrencyCode:            b.CurrencyCode,
+		ExchangeRate:            nilIfEmpty(b.ExchangeRate),
 		OperationType:           b.OperationType,
 		CustomerDocType:         b.CustomerDocType,
 		CustomerDocNumber:       b.CustomerDocNumber,
@@ -362,6 +379,7 @@ type updateDocumentBody struct {
 	IssueTime               *string                  `json:"issueTime,omitempty"`
 	DueDate                 *string                  `json:"dueDate,omitempty"`
 	CurrencyCode            *string                  `json:"currencyCode,omitempty"`
+	ExchangeRate            *string                  `json:"exchangeRate,omitempty"`
 	OperationType           *string                  `json:"operationType,omitempty"`
 	CustomerDocType         *string                  `json:"customerDocType,omitempty"`
 	CustomerDocNumber       *string                  `json:"customerDocNumber,omitempty"`
@@ -393,6 +411,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		IssueTime:               b.IssueTime,
 		DueDate:                 b.DueDate,
 		CurrencyCode:            b.CurrencyCode,
+		ExchangeRate:            nilIfEmpty(b.ExchangeRate),
 		OperationType:           b.OperationType,
 		CustomerDocType:         b.CustomerDocType,
 		CustomerDocNumber:       b.CustomerDocNumber,

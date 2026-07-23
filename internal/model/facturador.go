@@ -55,7 +55,10 @@ type IssuedDocument struct {
 	IssueTime *string    `json:"issueTime"`
 	DueDate   *time.Time `json:"dueDate"`
 
-	CurrencyCode  string  `json:"currencyCode"`
+	CurrencyCode string `json:"currencyCode"`
+	// ExchangeRate is the tipo de cambio to soles for foreign-currency documents
+	// (decimal as string); nil for PEN.
+	ExchangeRate  *string `json:"exchangeRate,omitempty"`
 	OperationType *string `json:"operationType"`
 
 	CustomerDocType   string  `json:"customerDocType"`

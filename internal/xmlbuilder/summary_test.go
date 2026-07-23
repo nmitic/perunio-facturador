@@ -62,6 +62,32 @@ func TestBuildSummaryXML(t *testing.T) {
 		taxIdx := strings.Index(xml, `<cac:TaxTotal>`)
 		is.True(t, customerIdx < statusIdx && statusIdx < totalIdx && totalIdx < taxIdx, "line elements must be in schema order")
 	})
+
+	t.Run("should emit each line's own currency for a USD boleta summary", func(t *testing.T) {
+		req := model.SummaryRequest{
+			SupplierRUC:   "20100113612",
+			SupplierName:  "EMPRESA TEST SAC",
+			IssueDate:     "2024-01-16",
+			ReferenceDate: "2024-01-15",
+			Correlative:   1,
+			Items: []model.SummaryItem{
+				{
+					LineNumber: 1, DocType: "03", Series: "B001",
+					StartCorrelative: 1, EndCorrelative: 10,
+					ConditionCode: "1", CurrencyCode: "USD",
+					TotalAmount: "1180.00", TotalGravada: "1000.00", TotalIGV: "180.00",
+					CustomerDocType: "1", CustomerDocNumber: "12345678",
+				},
+			},
+		}
+
+		xmlBytes, err := xmlbuilder.BuildSummaryXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `currencyID="USD"`), "RC amounts should carry the line's USD currency")
+		is.True(t, !strings.Contains(xml, `currencyID="PEN"`), "a USD-only summary must not hardcode PEN")
+	})
 }
 
 func TestBuildVoidedXML(t *testing.T) {
