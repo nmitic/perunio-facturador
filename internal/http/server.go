@@ -113,6 +113,7 @@ func NewServer(deps Deps) *Server {
 		r.Delete("/documents/{companyId}/{docId}", s.deleteDocumentHandler)
 		r.Post("/documents/{companyId}/{docId}/issue", s.issueDocumentPipelineHandler)
 		r.Get("/documents/{companyId}/{docId}/files/{fileType}", s.documentFileHandler)
+		r.Post("/documents/{companyId}/{docId}/files/pdf", s.uploadDocumentPdfHandler)
 
 		// Installment payments (cuotas) recorded against a credit document.
 		r.Get("/documents/{companyId}/{docId}/payments", s.listPaymentsHandler)

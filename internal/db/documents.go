@@ -298,6 +298,19 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 	return &doc, nil
 }
 
+// SetDocumentPdfKey persists the R2 key of a client-rendered PDF on an issued
+// document. It touches only r2_pdf_key (and updated_at), leaving status and the
+// other artifact keys untouched — unlike ApplyIssueResult, which rewrites
+// status. Must be called inside the request's tenant context.
+func (p *Pool) SetDocumentPdfKey(ctx context.Context, docID, key string) error {
+	return p.WithTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			"UPDATE issued_documents SET r2_pdf_key = $1, updated_at = now() WHERE id = $2",
+			key, docID)
+		return err
+	})
+}
+
 // GetIssuedDocumentItems returns the line items for a document, ordered by
 // line_number.
 func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]model.IssuedDocumentItem, error) {

@@ -2,14 +2,17 @@ package http
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/model"
+	"github.com/perunio/perunio-facturador/internal/r2"
 )
 
 // documentListResponse mirrors the Node.js response shape:
@@ -546,6 +549,8 @@ func (s *Server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 		r2Key = doc.R2ZipKey
 	case "cdr":
 		r2Key = doc.R2CdrKey
+	case "pdf":
+		r2Key = doc.R2PdfKey
 	default:
 		writeError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", "Tipo de archivo inválido")
 		return
@@ -562,4 +567,66 @@ func (s *Server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccess(w, map[string]string{"url": url, "fileType": fileType})
+}
+
+// maxDocumentPdfBytes caps the client-rendered PDF upload body.
+const maxDocumentPdfBytes = 15 << 20 // 15 MiB
+
+// uploadDocumentPdfHandler stores the client-rendered comprobante PDF in R2,
+// under the same key layout as the other artifacts
+// (documents/{tenant}/{company}/{docId}/pdf.pdf), and persists the key on the
+// row so it becomes downloadable later via documentFileHandler. The body is the
+// raw PDF bytes (Content-Type: application/pdf).
+func (s *Server) uploadDocumentPdfHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	docID := chi.URLParam(r, "docId")
+
+	payload, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Autenticación requerida")
+		return
+	}
+
+	doc, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
+	if err != nil {
+		s.log.Error("get document for pdf upload", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+	if doc == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Documento no encontrado")
+		return
+	}
+	// Only issued documents have a signed XML; the PDF is rendered from it, so
+	// refuse uploads for drafts (mirrors the frontend's canPreviewPdf gate).
+	if doc.R2SignedXmlKey == nil || *doc.R2SignedXmlKey == "" {
+		writeError(w, http.StatusConflict, "NOT_ISSUED", "El comprobante aún no ha sido emitido")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxDocumentPdfBytes)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "No se pudo leer el archivo PDF")
+		return
+	}
+	if len(data) == 0 {
+		writeError(w, http.StatusBadRequest, "EMPTY_BODY", "El archivo PDF está vacío")
+		return
+	}
+
+	key := r2.DocumentKey(payload.TenantID, companyID, docID, r2.FilePDF)
+	if err := s.r2.UploadDocumentFile(r.Context(), key, r2.FilePDF, data); err != nil {
+		s.log.Error("upload document pdf", "error", err, "key", key)
+		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", "No se pudo guardar el PDF")
+		return
+	}
+
+	if err := s.pool.SetDocumentPdfKey(r.Context(), docID, key); err != nil {
+		s.log.Error("persist document pdf key", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+
+	writeSuccess(w, map[string]string{"r2PdfKey": key})
 }

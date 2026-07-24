@@ -88,6 +88,7 @@ All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS
 - `DELETE /documents/{companyId}/{docId}` — delete draft
 - `POST /documents/{companyId}/{docId}/issue` — run full pipeline against draft
 - `GET /documents/{companyId}/{docId}/files/{fileType}` — presigned R2 URL (`xml|signed_xml|zip|cdr|pdf`)
+- `POST /documents/{companyId}/{docId}/files/pdf` — store the client-rendered PDF (raw `application/pdf` body) in R2 and persist `r2_pdf_key`
 - `GET|POST /documents/{companyId}/{docId}/payments` — list/record installment (cuota) payments
 - `DELETE /documents/{companyId}/{docId}/payments/{paymentId}` — delete a recorded payment
 
