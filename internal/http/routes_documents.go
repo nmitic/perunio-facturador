@@ -40,11 +40,12 @@ func (s *Server) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 
 	filter := db.DocumentListFilter{
-		DocType:           q.Get("docType"),
-		Status:            q.Get("status"),
-		CustomerDocNumber: q.Get("customer"),
-		Page:              page,
-		Limit:             limit,
+		DocType:  q.Get("docType"),
+		Status:   q.Get("status"),
+		Customer: q.Get("customer"),
+		Payment:  q.Get("payment"),
+		Page:     page,
+		Limit:    limit,
 	}
 
 	result, err := s.pool.ListIssuedDocuments(r.Context(), companyID, filter)
@@ -640,4 +641,88 @@ func (s *Server) uploadDocumentPdfHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	writeSuccess(w, map[string]string{"r2PdfKey": key})
+}
+
+// markPaymentBody is the wire contract for manually marking a contado document
+// as paid. paidAt is required; the rest are optional record-keeping.
+type markPaymentBody struct {
+	PaidAt    string  `json:"paidAt"`
+	Method    *string `json:"method,omitempty"`
+	Reference *string `json:"reference,omitempty"`
+	Notes     *string `json:"notes,omitempty"`
+}
+
+// setDocumentPaymentHandler records a manual payment on a CONTADO document.
+// Crédito documents track payment per-cuota (see the /payments endpoints) so
+// they're rejected here — there must be a single source of truth for their paid
+// state. Drafts and voided documents can't be paid either.
+func (s *Server) setDocumentPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	docID := chi.URLParam(r, "docId")
+
+	var b markPaymentBody
+	if err := decodeBody(r, &b); err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Cuerpo de solicitud inválido")
+		return
+	}
+	if !dateRegex.MatchString(b.PaidAt) {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "paidAt inválido (YYYY-MM-DD)")
+		return
+	}
+
+	doc, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
+	if err != nil {
+		s.log.Error("get document for mark paid", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+	if doc == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Documento no encontrado")
+		return
+	}
+	if doc.FormaPago != nil && *doc.FormaPago == "credito" {
+		writeError(w, http.StatusConflict, "CREDIT_DOCUMENT", "Los comprobantes al crédito registran su pago por cuotas")
+		return
+	}
+	if doc.Status == "draft" || doc.Status == "voided" {
+		writeError(w, http.StatusConflict, "INVALID_STATUS", "Solo un comprobante emitido y vigente puede marcarse como pagado")
+		return
+	}
+
+	if err := s.pool.SetDocumentPayment(r.Context(), docID, b.PaidAt, b.Method, b.Reference, b.Notes); err != nil {
+		s.log.Error("set document payment", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+
+	updated, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
+	if err != nil || updated == nil {
+		writeSuccess(w, map[string]bool{"ok": true})
+		return
+	}
+	writeSuccess(w, updated)
+}
+
+// clearDocumentPaymentHandler reverts a document to unpaid.
+func (s *Server) clearDocumentPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	docID := chi.URLParam(r, "docId")
+
+	doc, err := s.pool.GetIssuedDocument(r.Context(), companyID, docID)
+	if err != nil {
+		s.log.Error("get document for clear payment", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+	if doc == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Documento no encontrado")
+		return
+	}
+
+	if err := s.pool.ClearDocumentPayment(r.Context(), docID); err != nil {
+		s.log.Error("clear document payment", "error", err, "docId", docID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+	writeSuccess(w, map[string]string{"message": "Pago eliminado"})
 }

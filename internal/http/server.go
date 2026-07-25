@@ -120,6 +120,16 @@ func NewServer(deps Deps) *Server {
 		r.Post("/documents/{companyId}/{docId}/payments", s.createPaymentHandler)
 		r.Delete("/documents/{companyId}/{docId}/payments/{paymentId}", s.deletePaymentHandler)
 
+		// Manual payment status for a contado document (mark paid / unpaid).
+		r.Put("/documents/{companyId}/{docId}/payment", s.setDocumentPaymentHandler)
+		r.Delete("/documents/{companyId}/{docId}/payment", s.clearDocumentPaymentHandler)
+
+		// Supporting documents attached to a comprobante (internal only).
+		r.Get("/documents/{companyId}/{docId}/attachments", s.listAttachmentsHandler)
+		r.Post("/documents/{companyId}/{docId}/attachments", s.uploadAttachmentHandler)
+		r.Get("/documents/{companyId}/{docId}/attachments/{attachmentId}/download", s.downloadAttachmentHandler)
+		r.Delete("/documents/{companyId}/{docId}/attachments/{attachmentId}", s.deleteAttachmentHandler)
+
 		// Reports (aggregations over issued_documents / items).
 		r.Get("/reports/{companyId}/sales/summary", s.salesSummaryHandler)
 		r.Get("/reports/{companyId}/sales/series", s.salesSeriesHandler)

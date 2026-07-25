@@ -61,8 +61,8 @@ The core: draft → issue pipeline (validate → UBL XML → sign → ZIP → SO
 
 ### `GET /documents/{companyId}` — list (paginated, filterable)
 **Purpose:** the issued-documents table/grid.
-**Query:** `page`, `limit` (1–100, default 20), `docType`, `status`, `customer` (customer doc number).
-**Response:** `{ success, data: IssuedDocument[], pagination: { page, limit, total, totalPages } }`.
+**Query:** `page`, `limit` (1–100, default 20), `docType`, `status`, `customer` (free-text, case-insensitive partial match over customer **name** and **doc number**), `payment` (derived payment status: `pagado`|`parcial`|`pendiente`|`vencido`).
+**Response:** `{ success, data: IssuedDocument[], pagination: { page, limit, total, totalPages } }`. Each row carries a derived `paymentStatus` (`pagado`|`parcial`|`pendiente`) + `paymentOverdue` — contado from `paid_at`, crédito rolled up from the cuotas schedule vs recorded installment payments (mirrors the installments report). Not populated on the detail endpoint (the CuotasPanel derives it live there).
 
 ### `POST /documents/{companyId}` — create draft
 **Purpose:** persist a draft document + line items before issuing. Runs **monthly quota check** (`CheckDocumentQuota`) then atomically increments the issued-document counter and reserves the correlative.
@@ -98,6 +98,26 @@ Records the actual payments applied to a credit document's cuotas. The cuotas *s
 | `GET /documents/{companyId}/{docId}/payments` | List recorded payments for a document. | → `InstallmentPayment[]` (ordered by cuota, then date). |
 | `POST /documents/{companyId}/{docId}/payments` | Record one payment against a cuota. Guarded by an EXISTS check so a payment can't attach to a document outside the company/tenant. | Body `{ cuotaNumero, amount, paidAt, method?, reference?, notes? }` → `201 InstallmentPayment`. `404 NOT_FOUND`. |
 | `DELETE /documents/{companyId}/{docId}/payments/{paymentId}` | Delete a recorded payment. | → `{message}`. `404 NOT_FOUND`. |
+
+### Manual payment status — contado documents
+
+A document-level "pagado" mark for **contado** comprobantes, orthogonal to SUNAT `status` and independent of the cuotas system. Crédito documents are rejected here (they record payment per-cuota above). Drafts and voided documents can't be marked paid. `paid_at` present = pagado. **🟢 frontend (live)** via `documentsApi.setPayment/clearPayment`.
+
+| Method & path | Purpose | Contract |
+|---|---|---|
+| `PUT /documents/{companyId}/{docId}/payment` | Mark a contado document as paid. | Body `{ paidAt, method?, reference?, notes? }` → refreshed `IssuedDocument`. `409 CREDIT_DOCUMENT` (crédito), `409 INVALID_STATUS` (draft/voided), `404 NOT_FOUND`. |
+| `DELETE /documents/{companyId}/{docId}/payment` | Revert to unpaid (nulls every payment_* column). | → `{message}`. `404 NOT_FOUND`. |
+
+### Attachments — supporting documents on a comprobante
+
+Arbitrary internal-only supporting files (a signed order, a payment voucher, a contract) stored in R2 under the comprobante's per-document prefix (`…/{docId}/attachments/{attachmentId}.{ext}`). Never exposed on the public share link. Extension allow-list + 10 MiB cap. **🟢 frontend (live)** via `documentsApi.listAttachments/uploadAttachment/getAttachmentUrl/deleteAttachment`.
+
+| Method & path | Purpose | Contract |
+|---|---|---|
+| `GET /documents/{companyId}/{docId}/attachments` | List attachments (newest first). | → `ComprobanteAttachment[]`. |
+| `POST /documents/{companyId}/{docId}/attachments` | Upload a supporting file (`multipart/form-data`, field `file`). | → `201 ComprobanteAttachment`. `413`/MaxBytes, `415 UNSUPPORTED_TYPE`, `404 NOT_FOUND`. |
+| `GET /documents/{companyId}/{docId}/attachments/{attachmentId}/download` | Presigned R2 URL (original filename, attachment disposition). | → `{url}`. `404 NOT_FOUND`. |
+| `DELETE /documents/{companyId}/{docId}/attachments/{attachmentId}` | Delete attachment (row + R2 object). | → `{message}`. `404 NOT_FOUND`. |
 
 ---
 

@@ -91,6 +91,10 @@ All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS
 - `POST /documents/{companyId}/{docId}/files/pdf` — store the client-rendered PDF (raw `application/pdf` body) in R2 and persist `r2_pdf_key`
 - `GET|POST /documents/{companyId}/{docId}/payments` — list/record installment (cuota) payments
 - `DELETE /documents/{companyId}/{docId}/payments/{paymentId}` — delete a recorded payment
+- `PUT|DELETE /documents/{companyId}/{docId}/payment` — mark/unmark a **contado** document as paid (document-level `paid_at`; crédito rejected — use cuotas)
+- `GET|POST /documents/{companyId}/{docId}/attachments` — list/upload internal supporting files (R2, 10 MiB + extension allow-list)
+- `GET /documents/{companyId}/{docId}/attachments/{attachmentId}/download` — presigned R2 URL
+- `DELETE /documents/{companyId}/{docId}/attachments/{attachmentId}` — delete attachment (row + object)
 
 ### Reports (aggregations over issued documents / items)
 Read-only GROUP BY reports. Reuse the historial's company+environment scope (`docScope` in `internal/db/documents.go`) so reports and historial never disagree. Sign convention: facturas/boletas `+`, notas de crédito `−`, notas de débito `+`. Shared query params: `from`, `to` (default current month), `currency` (default PEN).

@@ -79,6 +79,23 @@ type IssuedDocument struct {
 	FormaPago *string        `json:"formaPago,omitempty"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
 
+	// Manual payment status for CONTADO documents. PaidAt present = "pagado".
+	// Orthogonal to SUNAT Status and to the cuotas system (crédito docs derive
+	// their paid state from document_installment_payments, never from these).
+	PaidAt           *time.Time `json:"paidAt"`
+	PaymentMethod    *string    `json:"paymentMethod"`
+	PaymentReference *string    `json:"paymentReference"`
+	PaymentNotes     *string    `json:"paymentNotes"`
+
+	// Unified payment status, populated only in the historial list (nil in the
+	// detail view, which derives crédito state live in the CuotasPanel). For
+	// contado docs it reflects PaidAt; for crédito docs it's derived from the
+	// cuotas schedule + recorded installment payments. PaymentStatus is
+	// "pagado"|"parcial"|"pendiente"; PaymentOverdue flags any past-due cuota with
+	// an outstanding balance (crédito only). Mirrors GetInstallmentsReport.
+	PaymentStatus  *string `json:"paymentStatus,omitempty"`
+	PaymentOverdue bool    `json:"paymentOverdue,omitempty"`
+
 	// Detracción (SPOT). All nil = not subject to detracción. DetraccionCuentaBN
 	// is the per-document override; when empty the company default is used at
 	// issue time.
@@ -137,6 +154,18 @@ type IssuedDocumentItem struct {
 	LineTotal              string    `json:"lineTotal"`
 	PriceTypeCode          *string   `json:"priceTypeCode"`
 	CreatedAt              time.Time `json:"createdAt"`
+}
+
+// ComprobanteAttachment is a supporting file attached to an issued comprobante
+// (a signed order, a payment voucher, a contract). Internal-only — never exposed
+// on the public comprobante share link. The bytes live in R2 under r2Key.
+type ComprobanteAttachment struct {
+	ID         string    `json:"id"`
+	DocumentID string    `json:"documentId"`
+	FileName   string    `json:"fileName"`
+	MimeType   string    `json:"mimeType"`
+	FileSize   int64     `json:"fileSize"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // InstallmentPayment is one payment recorded against a credit document's cuota.
