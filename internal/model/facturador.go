@@ -66,6 +66,12 @@ type IssuedDocument struct {
 	CustomerName      string  `json:"customerName"`
 	CustomerAddress   *string `json:"customerAddress"`
 
+	// ClienteID is the id of the saved cliente_facturador matching this document's
+	// customer (company + doc type + doc number), or nil when the customer isn't a
+	// saved cliente (e.g. consumidor final). Populated only in the historial list
+	// so the UI can link the customer to their cliente detail page; nil elsewhere.
+	ClienteID *string `json:"clienteId,omitempty"`
+
 	Subtotal           string  `json:"subtotal"`
 	TotalIgv           string  `json:"totalIgv"`
 	TotalIsc           *string `json:"totalIsc"`

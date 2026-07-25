@@ -67,6 +67,23 @@ const paymentRollupJoin = `
 		) r
 	) pay ON true`
 
+// clienteIDSubquery resolves each document's denormalized customer back to a saved
+// cliente_facturador row (if any) so the historial can link the customer to their
+// cliente detail page. Matched on the same (company, tipo, numero) key as the
+// uq_clientes_fac_company_doc unique constraint, so at most one row matches (the
+// LIMIT 1 is belt-and-suspenders). A correlated scalar subquery rather than a
+// top-level LEFT JOIN so it introduces no second `id` column into the FROM —
+// issuedDocumentColumns selects a bare, unqualified `id`, so joining another table
+// with an `id` would make that reference ambiguous. Adds no query args; yields NULL
+// when the customer isn't a saved cliente (e.g. consumidor final).
+const clienteIDSubquery = `(
+	SELECT cl.id FROM clientes_facturador cl
+	WHERE cl.company_id = d.company_id
+		AND cl.tipo_documento = d.customer_doc_type
+		AND cl.numero_documento = d.customer_doc_number
+	LIMIT 1
+)`
+
 // DocumentListResult is a paginated slice of issued documents plus the total
 // count for the same filter.
 type DocumentListResult struct {
@@ -240,7 +257,7 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 		// NOT NULL, so the ordering is identical either way) so the index provides
 		// the order and the scan can stop after LIMIT rows instead of sorting the
 		// whole company/environment set.
-		listSQL := "SELECT " + issuedDocumentColumns + ", pay.payment_status, pay.overdue" +
+		listSQL := "SELECT " + issuedDocumentColumns + ", pay.payment_status, pay.overdue, " + clienteIDSubquery +
 			" FROM " + listFrom + " WHERE " + where +
 			fmt.Sprintf(" ORDER BY d.created_at DESC NULLS LAST LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
 
@@ -255,8 +272,9 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 			var cuotasRaw, observationsRaw []byte
 			var paymentStatus *string // NULL for an un-marked contado doc
 			var overdue bool
+			var clienteID *string // NULL when the customer isn't a saved cliente
 			dest := documentScanDest(&d, &cuotasRaw, &observationsRaw)
-			dest = append(dest, &paymentStatus, &overdue)
+			dest = append(dest, &paymentStatus, &overdue, &clienteID)
 			if err := rows.Scan(dest...); err != nil {
 				return err
 			}
@@ -265,6 +283,7 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 			}
 			d.PaymentStatus = paymentStatus
 			d.PaymentOverdue = overdue
+			d.ClienteID = clienteID
 			result.Documents = append(result.Documents, d)
 		}
 		return rows.Err()
