@@ -540,17 +540,18 @@ func (s *Server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var r2Key *string
+	var r2FileType r2.DocumentFileType
 	switch fileType {
 	case "xml":
-		r2Key = doc.R2XmlKey
+		r2Key, r2FileType = doc.R2XmlKey, r2.FileXML
 	case "signed_xml":
-		r2Key = doc.R2SignedXmlKey
+		r2Key, r2FileType = doc.R2SignedXmlKey, r2.FileSignedXML
 	case "zip":
-		r2Key = doc.R2ZipKey
+		r2Key, r2FileType = doc.R2ZipKey, r2.FileZIP
 	case "cdr":
-		r2Key = doc.R2CdrKey
+		r2Key, r2FileType = doc.R2CdrKey, r2.FileCDR
 	case "pdf":
-		r2Key = doc.R2PdfKey
+		r2Key, r2FileType = doc.R2PdfKey, r2.FilePDF
 	default:
 		writeError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", "Tipo de archivo inválido")
 		return
@@ -560,7 +561,17 @@ func (s *Server) documentFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := s.r2.DocumentPresignedURL(r.Context(), *r2Key, 0)
+	// Presign with a canonical SUNAT filename + attachment disposition so the
+	// browser downloads (instead of rendering PDF/XML inline in a tab) under a
+	// meaningful name rather than the object key's basename ("pdf.pdf"/"zip.zip").
+	var downloadName string
+	if company, cErr := s.pool.GetCompany(r.Context(), companyID); cErr == nil && company != nil {
+		downloadName = r2.DocumentDownloadName(
+			company.RUC, doc.DocType, doc.Series, doc.Correlative, r2FileType,
+		)
+	}
+
+	url, err := s.r2.DocumentPresignedURL(r.Context(), *r2Key, downloadName, 0)
 	if err != nil {
 		s.log.Error("presign document file", "error", err, "key", *r2Key)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")

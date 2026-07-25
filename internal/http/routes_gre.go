@@ -186,9 +186,9 @@ type createDespatchBody struct {
 	TransferReasonDesc *string `json:"transferReasonDesc,omitempty"`
 	StartDate          *string `json:"startDate,omitempty"`
 
-	TotalWeightKg  string  `json:"totalWeightKg"`
-	WeightUnitCode string  `json:"weightUnitCode"`
-	TotalPackages  *int    `json:"totalPackages,omitempty"`
+	TotalWeightKg  string `json:"totalWeightKg"`
+	WeightUnitCode string `json:"weightUnitCode"`
+	TotalPackages  *int   `json:"totalPackages,omitempty"`
 
 	StartUbigeo    string `json:"startUbigeo"`
 	StartAddress   string `json:"startAddress"`
@@ -764,15 +764,16 @@ func (s *Server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var r2Key *string
+	var r2FileType r2.DocumentFileType
 	switch fileType {
 	case "xml":
-		r2Key = d.R2XmlKey
+		r2Key, r2FileType = d.R2XmlKey, r2.FileXML
 	case "signed_xml":
-		r2Key = d.R2SignedXmlKey
+		r2Key, r2FileType = d.R2SignedXmlKey, r2.FileSignedXML
 	case "zip":
-		r2Key = d.R2ZipKey
+		r2Key, r2FileType = d.R2ZipKey, r2.FileZIP
 	case "cdr":
-		r2Key = d.R2CdrKey
+		r2Key, r2FileType = d.R2CdrKey, r2.FileCDR
 	default:
 		writeError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", "Tipo de archivo inválido")
 		return
@@ -782,7 +783,15 @@ func (s *Server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := s.r2.DocumentPresignedURL(r.Context(), *r2Key, 0)
+	// Canonical SUNAT filename + attachment disposition (see documentFileHandler).
+	var downloadName string
+	if company, cErr := s.pool.GetCompany(r.Context(), companyID); cErr == nil && company != nil {
+		downloadName = r2.DocumentDownloadName(
+			company.RUC, d.DocType, d.Series, d.Correlative, r2FileType,
+		)
+	}
+
+	url, err := s.r2.DocumentPresignedURL(r.Context(), *r2Key, downloadName, 0)
 	if err != nil {
 		s.log.Error("presign despatch file", "error", err, "key", *r2Key)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")

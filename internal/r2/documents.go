@@ -93,18 +93,59 @@ func (c *Client) GetDocumentFile(ctx context.Context, key string) ([]byte, error
 
 // DocumentPresignedURL returns a time-limited download URL the browser can use
 // directly. Default expiry mirrors the Node.js helper (24 hours).
-func (c *Client) DocumentPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+//
+// When downloadName is non-empty, the presigned URL carries a
+// response-content-disposition=attachment override so the browser downloads the
+// file (rather than rendering PDF/XML inline in a tab) under that filename, plus
+// a matching response-content-type. The SUNAT object key basename is
+// meaningless ("pdf.pdf", "zip.zip"), so callers pass the canonical
+// {RUC}-{tipo}-{serie}-{correlativo} name here (see DocumentDownloadName).
+func (c *Client) DocumentPresignedURL(ctx context.Context, key, downloadName string, expiry time.Duration) (string, error) {
 	if expiry == 0 {
 		expiry = 24 * time.Hour
 	}
-	out, err := c.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.documentsBucket),
 		Key:    aws.String(key),
-	}, s3.WithPresignExpires(expiry))
+	}
+	if downloadName != "" {
+		in.ResponseContentDisposition = aws.String(
+			fmt.Sprintf("attachment; filename=%q", downloadName),
+		)
+		in.ResponseContentType = aws.String(contentTypeForName(downloadName))
+	}
+	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", fmt.Errorf("presign document %q: %w", key, err)
 	}
 	return out.URL, nil
+}
+
+// DocumentDownloadName builds the canonical SUNAT filename for a stored artifact,
+// matching the convention SUNAT, Nubefact and greenter use:
+//
+//	{RUC}-{docType}-{series}-{correlativo8}          → xml / signedXml / zip / pdf
+//	R-{RUC}-{docType}-{series}-{correlativo8}.zip    → cdr (Constancia de Recepción)
+func DocumentDownloadName(ruc, docType, series string, correlative int, fileType DocumentFileType) string {
+	base := fmt.Sprintf("%s-%s-%s-%08d", ruc, docType, series, correlative)
+	ext := documentExt(fileType)
+	if fileType == FileCDR {
+		return fmt.Sprintf("R-%s.%s", base, ext)
+	}
+	return fmt.Sprintf("%s.%s", base, ext)
+}
+
+func contentTypeForName(name string) string {
+	switch {
+	case len(name) >= 4 && name[len(name)-4:] == ".pdf":
+		return "application/pdf"
+	case len(name) >= 4 && name[len(name)-4:] == ".xml":
+		return "application/xml"
+	case len(name) >= 4 && name[len(name)-4:] == ".zip":
+		return "application/zip"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // DeleteDocumentFile removes a single artifact.
