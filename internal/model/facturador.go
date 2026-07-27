@@ -72,15 +72,19 @@ type IssuedDocument struct {
 	// so the UI can link the customer to their cliente detail page; nil elsewhere.
 	ClienteID *string `json:"clienteId,omitempty"`
 
-	Subtotal           string  `json:"subtotal"`
-	TotalIgv           string  `json:"totalIgv"`
-	TotalIsc           *string `json:"totalIsc"`
-	TotalOtherTaxes    *string `json:"totalOtherTaxes"`
-	TotalDiscount      *string `json:"totalDiscount"`
-	GlobalDiscount     *string `json:"globalDiscount"`
-	TotalAmount        string  `json:"totalAmount"`
-	TaxInclusiveAmount *string `json:"taxInclusiveAmount"`
-	Notes              *string `json:"notes"`
+	Subtotal        string  `json:"subtotal"`
+	TotalIgv        string  `json:"totalIgv"`
+	TotalIsc        *string `json:"totalIsc"`
+	TotalOtherTaxes *string `json:"totalOtherTaxes"`
+	TotalDiscount   *string `json:"totalDiscount"`
+	GlobalDiscount  *string `json:"globalDiscount"`
+	// BillingPeriodMonths is the periodo de facturación this comprobante bills for.
+	// Reporting metadata: the line prices and descriptions already have it baked in,
+	// so it must never be fed back into a form as a multiplier. Nil = none.
+	BillingPeriodMonths *int    `json:"billingPeriodMonths"`
+	TotalAmount         string  `json:"totalAmount"`
+	TaxInclusiveAmount  *string `json:"taxInclusiveAmount"`
+	Notes               *string `json:"notes"`
 
 	FormaPago *string        `json:"formaPago,omitempty"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`

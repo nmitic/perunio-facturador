@@ -124,6 +124,11 @@ var (
 	docUUIDRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 	detraccionCodigoRegex = regexp.MustCompile(`^\d{3}$`) // Cat.54 bien/servicio
+
+	// billingPeriodMaxMonths mirrors BILLING_PERIOD_MAX in the frontend. A decade of
+	// months is generous for a real contract and stops a typo turning S/ 100 into
+	// S/ 100,000 worth of stored metadata.
+	billingPeriodMaxMonths = 120
 )
 
 type createDocumentItemBody struct {
@@ -154,23 +159,27 @@ type detraccionBody struct {
 }
 
 type createDocumentBody struct {
-	SeriesID                string                   `json:"seriesId"`
-	IssueDate               string                   `json:"issueDate"`
-	IssueTime               *string                  `json:"issueTime,omitempty"`
-	DueDate                 *string                  `json:"dueDate,omitempty"`
-	CurrencyCode            string                   `json:"currencyCode"`
-	ExchangeRate            *string                  `json:"exchangeRate,omitempty"`
-	OperationType           *string                  `json:"operationType,omitempty"`
-	CustomerDocType         string                   `json:"customerDocType"`
-	CustomerDocNumber       string                   `json:"customerDocNumber"`
-	CustomerName            string                   `json:"customerName"`
-	CustomerAddress         *string                  `json:"customerAddress,omitempty"`
-	Subtotal                string                   `json:"subtotal"`
-	TotalIgv                string                   `json:"totalIgv"`
-	TotalIsc                *string                  `json:"totalIsc,omitempty"`
-	TotalOtherTaxes         *string                  `json:"totalOtherTaxes,omitempty"`
-	TotalDiscount           *string                  `json:"totalDiscount,omitempty"`
-	GlobalDiscount          *string                  `json:"globalDiscount,omitempty"`
+	SeriesID          string  `json:"seriesId"`
+	IssueDate         string  `json:"issueDate"`
+	IssueTime         *string `json:"issueTime,omitempty"`
+	DueDate           *string `json:"dueDate,omitempty"`
+	CurrencyCode      string  `json:"currencyCode"`
+	ExchangeRate      *string `json:"exchangeRate,omitempty"`
+	OperationType     *string `json:"operationType,omitempty"`
+	CustomerDocType   string  `json:"customerDocType"`
+	CustomerDocNumber string  `json:"customerDocNumber"`
+	CustomerName      string  `json:"customerName"`
+	CustomerAddress   *string `json:"customerAddress,omitempty"`
+	Subtotal          string  `json:"subtotal"`
+	TotalIgv          string  `json:"totalIgv"`
+	TotalIsc          *string `json:"totalIsc,omitempty"`
+	TotalOtherTaxes   *string `json:"totalOtherTaxes,omitempty"`
+	TotalDiscount     *string `json:"totalDiscount,omitempty"`
+	GlobalDiscount    *string `json:"globalDiscount,omitempty"`
+	// BillingPeriodMonths is the periodo de facturación the browser applied. Purely
+	// reporting metadata: the items already carry the multiplied prices and the
+	// annotated descriptions, and this never reaches the XML.
+	BillingPeriodMonths     *int                     `json:"billingPeriodMonths,omitempty"`
 	TotalAmount             string                   `json:"totalAmount"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
@@ -248,6 +257,9 @@ func (b *createDocumentBody) validate() string {
 	}
 	if b.GlobalDiscount != nil && *b.GlobalDiscount != "" && !decimalRegex.MatchString(*b.GlobalDiscount) {
 		return "globalDiscount inválido"
+	}
+	if msg := validateBillingPeriodMonths(b.BillingPeriodMonths); msg != "" {
+		return msg
 	}
 	if msg := b.Detraccion.validate(); msg != "" {
 		return msg
@@ -328,6 +340,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		TotalOtherTaxes:         b.TotalOtherTaxes,
 		TotalDiscount:           b.TotalDiscount,
 		GlobalDiscount:          b.GlobalDiscount,
+		BillingPeriodMonths:     b.BillingPeriodMonths,
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,
@@ -376,6 +389,19 @@ func (s *Server) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	writeSuccessStatus(w, http.StatusCreated, doc)
 }
 
+// validateBillingPeriodMonths guards the periodo de facturación. Absent means no
+// billing period; present must be a sane month count. It is metadata only, so a bad
+// value can't corrupt a comprobante — but a nonsense one would poison the reports.
+func validateBillingPeriodMonths(months *int) string {
+	if months == nil {
+		return ""
+	}
+	if *months < 1 || *months > billingPeriodMaxMonths {
+		return "billingPeriodMonths inválido"
+	}
+	return ""
+}
+
 // updateDocumentBody accepts the same fields as create, all optional. If
 // `items` is present it fully replaces the existing line items.
 type updateDocumentBody struct {
@@ -395,6 +421,7 @@ type updateDocumentBody struct {
 	TotalOtherTaxes         *string                  `json:"totalOtherTaxes,omitempty"`
 	TotalDiscount           *string                  `json:"totalDiscount,omitempty"`
 	GlobalDiscount          *string                  `json:"globalDiscount,omitempty"`
+	BillingPeriodMonths     *int                     `json:"billingPeriodMonths,omitempty"`
 	TotalAmount             *string                  `json:"totalAmount,omitempty"`
 	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
 	Notes                   *string                  `json:"notes,omitempty"`
@@ -427,6 +454,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		TotalOtherTaxes:         b.TotalOtherTaxes,
 		TotalDiscount:           b.TotalDiscount,
 		GlobalDiscount:          b.GlobalDiscount,
+		BillingPeriodMonths:     b.BillingPeriodMonths,
 		TotalAmount:             b.TotalAmount,
 		TaxInclusiveAmount:      b.TaxInclusiveAmount,
 		Notes:                   b.Notes,
@@ -482,6 +510,11 @@ func (s *Server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	var body updateDocumentBody
 	if err := decodeBody(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Datos inválidos")
+		return
+	}
+
+	if msg := validateBillingPeriodMonths(body.BillingPeriodMonths); msg != "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
 		return
 	}
 

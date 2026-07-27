@@ -41,15 +41,19 @@ type CreateDocumentInput struct {
 	CustomerName      string
 	CustomerAddress   *string
 
-	Subtotal           string
-	TotalIgv           string
-	TotalIsc           *string
-	TotalOtherTaxes    *string
-	TotalDiscount      *string
-	GlobalDiscount     *string
-	TotalAmount        string
-	TaxInclusiveAmount *string
-	Notes              *string
+	Subtotal        string
+	TotalIgv        string
+	TotalIsc        *string
+	TotalOtherTaxes *string
+	TotalDiscount   *string
+	GlobalDiscount  *string
+	// BillingPeriodMonths is the periodo de facturación the comprobante bills for.
+	// Reporting metadata only: the items already carry the multiplied prices and the
+	// annotated descriptions, so this is never an input to any amount. Nil = none.
+	BillingPeriodMonths *int
+	TotalAmount         string
+	TaxInclusiveAmount  *string
+	Notes               *string
 
 	FormaPago *string
 	Cuotas    []model.CuotaCredito
@@ -103,15 +107,16 @@ type UpdateDocumentInput struct {
 	CustomerName      *string
 	CustomerAddress   *string
 
-	Subtotal           *string
-	TotalIgv           *string
-	TotalIsc           *string
-	TotalOtherTaxes    *string
-	TotalDiscount      *string
-	GlobalDiscount     *string
-	TotalAmount        *string
-	TaxInclusiveAmount *string
-	Notes              *string
+	Subtotal            *string
+	TotalIgv            *string
+	TotalIsc            *string
+	TotalOtherTaxes     *string
+	TotalDiscount       *string
+	GlobalDiscount      *string
+	BillingPeriodMonths *int
+	TotalAmount         *string
+	TaxInclusiveAmount  *string
+	Notes               *string
 
 	FormaPago   *string
 	Cuotas      []model.CuotaCredito
@@ -212,7 +217,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
 				sunat_environment,
 				origin,
-				exchange_rate
+				exchange_rate,
+				billing_period_months
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -227,7 +233,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$32, $33, $34, $35,
 				$36,
 				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin,
-				$38
+				$38,
+				$39
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -244,6 +251,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			environment,
 			in.Origin,
 			in.ExchangeRate,
+			in.BillingPeriodMonths,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -391,6 +399,9 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 	}
 	if in.GlobalDiscount != nil {
 		add("global_discount", *in.GlobalDiscount)
+	}
+	if in.BillingPeriodMonths != nil {
+		add("billing_period_months", *in.BillingPeriodMonths)
 	}
 	if in.TotalAmount != nil {
 		add("total_amount", *in.TotalAmount)
