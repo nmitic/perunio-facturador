@@ -152,12 +152,22 @@ const (
 	PriceTypeReferential = "02"
 )
 
-// Cat51 — Operation Types
+// Cat51 — Operation Types.
+//
+// SUNAT retired the original 01xx block (beyond 0101) from catálogo 51; sending
+// one now fails validation with fault 3206. OpExportBienes/OpNoDomiciliados are
+// kept only to document the old codes — use OpExportBienes2/OpExportServ. See
+// sunatOperationType in internal/xmlbuilder for how OpAnticipos survives as an
+// internal-only marker that never reaches the wire.
 const (
-	OpVentaInterna         = "0101"
-	OpExportBienes         = "0102"
-	OpNoDomiciliados       = "0103"
-	OpAnticipos            = "0104"
+	OpVentaInterna = "0101"
+
+	// OpAnticipos marks a factura de anticipo. Retired from catálogo 51, so it
+	// is stored and reported on but mapped to OpVentaInterna when building XML.
+	OpAnticipos = "0104"
+
+	OpExportBienes         = "0102" // retired — SUNAT rejects it
+	OpNoDomiciliados       = "0103" // retired — SUNAT rejects it
 	OpExportBienes2        = "0200"
 	OpExportServ           = "0201"
 	OpDetraccion           = "1001" // Operación sujeta a detracción

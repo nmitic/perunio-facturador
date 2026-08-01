@@ -169,6 +169,29 @@ func (s *Server) installmentsReportHandler(w http.ResponseWriter, r *http.Reques
 	writeSuccess(w, res)
 }
 
+func (s *Server) anticiposReportHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	filter, msg := parseReportFilter(r)
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
+		return
+	}
+	q := r.URL.Query()
+	status := q.Get("status")
+	switch status {
+	case "", "pendiente", "aplicado":
+	default:
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "status debe ser pendiente|aplicado")
+		return
+	}
+	res, err := s.pool.GetAnticiposReport(r.Context(), companyID, status, q.Get("customerDoc"), filter)
+	if err != nil {
+		s.reportError(w, "anticipos", err)
+		return
+	}
+	writeSuccess(w, res)
+}
+
 func (s *Server) sunatSubmissionsHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	filter, msg := parseReportFilter(r)

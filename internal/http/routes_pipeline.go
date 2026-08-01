@@ -143,6 +143,7 @@ func buildIssueRequestFromDoc(
 
 		FormaPago: derefString(doc.FormaPago, "contado"),
 		Cuotas:    doc.Cuotas,
+		Anticipos: doc.Anticipos,
 	}
 
 	if doc.Notes != nil && *doc.Notes != "" {

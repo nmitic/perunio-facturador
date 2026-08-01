@@ -510,6 +510,131 @@ func (p *Pool) GetInstallmentsReport(ctx context.Context, companyID, statusFilte
 	return filtered, nil
 }
 
+// ─── Anticipos ──────────────────────────────────────────────────────────────
+
+// AnticipoReportRow is one accepted anticipo comprobante (operation_type 0104)
+// with its derived applied state. Status is "aplicado" when an accepted
+// document carries this anticipo in its `anticipos` jsonb — matched by
+// sourceDocumentId (historial picks) or by docId string (manual entries) — and
+// "pendiente" otherwise. The AppliedBy* fields describe that regularización.
+type AnticipoReportRow struct {
+	DocumentID        string  `json:"documentId"`
+	DocType           string  `json:"docType"`
+	Series            string  `json:"series"`
+	Correlative       int     `json:"correlative"`
+	IssueDate         string  `json:"issueDate"`
+	CustomerDocNumber string  `json:"customerDocNumber"`
+	CustomerName      string  `json:"customerName"`
+	Currency          string  `json:"currency"`
+	TotalAmount       string  `json:"totalAmount"`
+	Status            string  `json:"status"` // "pendiente" | "aplicado"
+	AppliedByID       *string `json:"appliedById"`
+	AppliedByCode     *string `json:"appliedByCode"` // "F001-00000050"
+	AppliedByDate     *string `json:"appliedByDate"` // YYYY-MM-DD
+
+	// The venta con anticipos (deal) this row belongs to, so the report can group
+	// without a second round-trip. All nil for anticipos emitted before the deal
+	// concept existed, or emitted outside one — those render under "Sin agrupar".
+	// VentaRegularizado is the total already documented by the deal's accepted
+	// factura(s) final — its saldo, since a regularización deducts the anticipos.
+	// It closes the group: cobrado + regularizado = acordado, so a regularizada
+	// venta stops reporting a saldo por cobrar. "0.00" while none exists.
+	VentaAnticipoID   *string `json:"ventaAnticipoId"`
+	VentaNombre       *string `json:"ventaNombre"`
+	VentaAcordado     *string `json:"ventaAcordado"`
+	VentaRegularizado *string `json:"ventaRegularizado"`
+}
+
+// GetAnticiposReport lists the accepted anticipo comprobantes in the period
+// with their applied state. `statusFilter` optionally narrows to
+// "pendiente"|"aplicado"; `customerDoc` optionally narrows to one customer's
+// anticipos (used by the emission form to suggest pending anticipos). Empty =
+// all.
+func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, customerDoc string, f ReportFilter) ([]AnticipoReportRow, error) {
+	args := []any{companyID, f.From, f.To, f.Currency}
+	customerCond := ""
+	if customerDoc != "" {
+		args = append(args, customerDoc)
+		customerCond = fmt.Sprintf(" AND d.customer_doc_number = $%d", len(args))
+	}
+	// The applying regularización: any accepted doc in the same company +
+	// environment whose anticipos array references this row. sourceDocumentId is
+	// the robust link (historial picks); the docId string match covers manual
+	// entries. Newest first so a re-emission after a voided attempt wins.
+	sqlStr := fmt.Sprintf(`
+		SELECT d.id, d.doc_type, d.series, d.correlative,
+		       to_char(d.issue_date, 'YYYY-MM-DD'),
+		       d.customer_doc_number, d.customer_name, d.currency_code,
+		       d.total_amount::numeric(14,2)::text,
+		       app.id, app.code, app.issue_date,
+		       d.venta_anticipo_id, va.nombre, va.monto_acordado::numeric(14,2)::text,
+		       fin.regularizado
+		FROM issued_documents d
+		LEFT JOIN ventas_anticipo va ON va.id = d.venta_anticipo_id
+		LEFT JOIN LATERAL (
+			SELECT COALESCE(SUM(f.total_amount), 0)::numeric(14,2)::text AS regularizado
+			FROM issued_documents f
+			WHERE f.venta_anticipo_id = va.id
+			  AND f.operation_type IS DISTINCT FROM '0104'
+			  AND f.status IN %s
+		) fin ON va.id IS NOT NULL
+		LEFT JOIN LATERAL (
+			SELECT r.id,
+			       r.series || '-' || lpad(r.correlative::text, 8, '0') AS code,
+			       to_char(r.issue_date, 'YYYY-MM-DD') AS issue_date
+			FROM issued_documents r
+			CROSS JOIN LATERAL jsonb_array_elements(r.anticipos) AS a
+			WHERE r.company_id = d.company_id
+			  AND r.sunat_environment = d.sunat_environment
+			  AND r.status IN %s
+			  AND (a->>'sourceDocumentId' = d.id::text
+			       OR a->>'docId' = d.series || '-' || lpad(d.correlative::text, 8, '0'))
+			ORDER BY r.issue_date DESC, r.created_at DESC
+			LIMIT 1
+		) app ON true
+		WHERE %s AND d.operation_type = '0104'%s
+		ORDER BY (app.id IS NOT NULL), d.issue_date DESC, d.created_at DESC`,
+		acceptedStatuses, acceptedStatuses, moneyScope("d"), customerCond)
+
+	out := []AnticipoReportRow{}
+	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, sqlStr, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r AnticipoReportRow
+			if err := rows.Scan(&r.DocumentID, &r.DocType, &r.Series, &r.Correlative,
+				&r.IssueDate, &r.CustomerDocNumber, &r.CustomerName, &r.Currency,
+				&r.TotalAmount, &r.AppliedByID, &r.AppliedByCode, &r.AppliedByDate,
+				&r.VentaAnticipoID, &r.VentaNombre, &r.VentaAcordado, &r.VentaRegularizado); err != nil {
+				return err
+			}
+			if r.AppliedByID != nil {
+				r.Status = "aplicado"
+			} else {
+				r.Status = "pendiente"
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	if statusFilter == "" {
+		return out, nil
+	}
+	filtered := out[:0]
+	for _, r := range out {
+		if r.Status == statusFilter {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, nil
+}
+
 // ─── SUNAT submissions ──────────────────────────────────────────────────────
 
 // SunatStatusRow is the document count for one SUNAT status.

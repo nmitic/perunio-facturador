@@ -92,16 +92,24 @@ type invoice struct {
 	InvoiceTypeCode      invoiceTypeCode
 	Notes                []noteElement
 	DocumentCurrencyCode documentCurrencyCode
-	Signature            cacSignature
-	SupplierParty        accountingSupplierParty
-	CustomerParty        accountingCustomerParty
+	// Anticipo document references (UBL puts cac:AdditionalDocumentReference
+	// before cac:Signature). Empty except on facturas de regularización.
+	AdditionalDocumentReferences []additionalDocumentReference `xml:"cac:AdditionalDocumentReference,omitempty"`
+	Signature                    cacSignature
+	SupplierParty                accountingSupplierParty
+	CustomerParty                accountingCustomerParty
 	// Detracción cuenta BN (cac:PaymentMeans) — UBL places it before
 	// cac:PaymentTerms. nil when the document is not subject to detracción.
 	PaymentMeans *paymentMeans
 	PaymentTerms []paymentTerms
-	// Document-level descuento global (UBL puts cac:AllowanceCharge before
-	// cac:TaxTotal). nil when there is no global discount.
-	AllowanceCharge    *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	// Anticipos applied (UBL puts cac:PrepaidPayment after cac:PaymentTerms and
+	// before cac:AllowanceCharge). One entry per anticipo, row-paired with
+	// AdditionalDocumentReferences.
+	PrepaidPayments []prepaidPayment
+	// Document-level allowances (UBL puts cac:AllowanceCharge before
+	// cac:TaxTotal): the descuento global (Cat.53 02) if any, then one Cat.53 04
+	// entry per anticipo applied.
+	AllowanceCharges   []lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
 	TaxTotal           taxTotal
 	LegalMonetaryTotal legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
 	InvoiceLines       []invoiceLine
@@ -169,8 +177,14 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		inv.PaymentTerms = append(inv.PaymentTerms, *pt)
 	}
 
-	// Descuento global (Cat.53 code 02) — document-level cac:AllowanceCharge.
-	inv.AllowanceCharge = buildGlobalDiscount(req)
+	// Anticipos (factura de regularización): document references + prepaid
+	// payments, row-paired via cbc:DocumentStatusCode = cbc:ID.
+	inv.AdditionalDocumentReferences = buildAnticipoReferences(req)
+	inv.PrepaidPayments = buildPrepaidPayments(req)
+
+	// Document-level cac:AllowanceCharge entries: descuento global (Cat.53 02)
+	// and/or the anticipo deductions (Cat.53 04).
+	inv.AllowanceCharges = buildDocumentAllowances(req)
 
 	// Tax totals
 	inv.TaxTotal = buildDocumentTaxTotal(req)
@@ -296,24 +310,141 @@ func buildGlobalDiscount(req model.IssueRequest) *lineAllowanceCharge {
 	if base != 0 {
 		factor = amt / base
 	}
+	baseAmount := newCurrencyAmount(formatDecimal(base), req.CurrencyCode)
 	return &lineAllowanceCharge{
 		ChargeIndicator:         false,
 		AllowanceChargeReason:   globalDiscountReasonCode,
 		MultiplierFactorNumeric: strconv.FormatFloat(factor, 'f', 5, 64),
 		Amount:                  newCurrencyAmount(formatDecimal(amt), req.CurrencyCode),
-		BaseAmount:              newCurrencyAmount(formatDecimal(base), req.CurrencyCode),
+		BaseAmount:              &baseAmount,
 	}
+}
+
+// anticipoReasonCode is Cat.53 "04" — descuento global por anticipos gravados
+// que afecta la base imponible.
+const anticipoReasonCode = "04"
+
+// anticipoTotals sums the applied anticipos two ways: base is the IGV-exclusive
+// total (what the Cat.53 "04" allowances deduct from the base imponible) and
+// paid the IGV-inclusive one (cbc:PrepaidAmount). Both figures reach the XML,
+// at different levels — see buildLegalMonetaryTotal.
+func anticipoTotals(req model.IssueRequest) (base, paid float64) {
+	for _, a := range req.Anticipos {
+		base += parseDecimal(a.BaseAmount)
+		paid += parseDecimal(a.TotalAmount)
+	}
+	return base, paid
+}
+
+// buildAnticipoAllowances emits one document-level cac:AllowanceCharge per
+// applied anticipo, Cat.53 "04", carrying the anticipo's IGV-EXCLUSIVE base as
+// cbc:Amount. They are what SUNAT keys on to accept the reduced gravado
+// cac:TaxSubtotal (the IGV of the anticipo was already declared by the factura
+// de anticipo), and they are mandatory whenever cbc:PrepaidAmount is present:
+// omitting them is fault 3287 "Si se informa 'Total de anticipos' debe
+// consignar los descuentos globales por anticipo con monto mayor a cero".
+//
+// Unlike the descuento global they carry no cbc:BaseAmount or
+// cbc:MultiplierFactorNumeric — there is nothing to prorate, the anticipo is an
+// absolute amount already invoiced.
+func buildAnticipoAllowances(req model.IssueRequest) []lineAllowanceCharge {
+	if len(req.Anticipos) == 0 {
+		return nil
+	}
+	out := make([]lineAllowanceCharge, 0, len(req.Anticipos))
+	for _, a := range req.Anticipos {
+		base := parseDecimal(a.BaseAmount)
+		if base <= 0 {
+			continue
+		}
+		out = append(out, lineAllowanceCharge{
+			ChargeIndicator:       false,
+			AllowanceChargeReason: anticipoReasonCode,
+			Amount:                newCurrencyAmount(formatDecimal(base), req.CurrencyCode),
+		})
+	}
+	return out
+}
+
+// buildAnticipoReferences emits one cac:AdditionalDocumentReference per applied
+// anticipo: the anticipo's SERIE-CORRELATIVO, its Cat.12 type (02/03), the
+// 1-based row number (cbc:DocumentStatusCode) pairing it with the matching
+// cac:PrepaidPayment, and the emitter's RUC. v1 only supports anticipos issued
+// by the same supplier, so the RUC is always req.SupplierRUC.
+func buildAnticipoReferences(req model.IssueRequest) []additionalDocumentReference {
+	if len(req.Anticipos) == 0 {
+		return nil
+	}
+	out := make([]additionalDocumentReference, 0, len(req.Anticipos))
+	for i, a := range req.Anticipos {
+		out = append(out, additionalDocumentReference{
+			ID:                 a.DocID,
+			DocumentTypeCode:   a.DocTypeCode,
+			DocumentStatusCode: fmt.Sprint(i + 1),
+			IssuerParty: &docRefIssuerParty{
+				PartyIdentification: partyIdentification{
+					ID: schemeID{Value: req.SupplierRUC, SchemeID: "6"},
+				},
+			},
+		})
+	}
+	return out
+}
+
+// buildPrepaidPayments emits one cac:PrepaidPayment per applied anticipo with
+// the IGV-inclusive monto anticipado, row-numbered to match the references.
+func buildPrepaidPayments(req model.IssueRequest) []prepaidPayment {
+	if len(req.Anticipos) == 0 {
+		return nil
+	}
+	out := make([]prepaidPayment, 0, len(req.Anticipos))
+	for i, a := range req.Anticipos {
+		out = append(out, prepaidPayment{
+			ID: schemeID{
+				Value:            fmt.Sprint(i + 1),
+				SchemeName:       "Anticipo",
+				SchemeAgencyName: "PE:SUNAT",
+			},
+			PaidAmount: newCurrencyAmount(a.TotalAmount, req.CurrencyCode),
+		})
+	}
+	return out
+}
+
+// buildDocumentAllowances assembles the document-level cac:AllowanceCharge
+// entries: the descuento global (Cat.53 02) and one descuento por anticipo
+// (Cat.53 04) per applied anticipo. Both are afecta-base — their amounts reduce
+// the gravado base imponible in buildDocumentTaxTotal — and neither ever
+// surfaces as cbc:AllowanceTotalAmount (fault 3300), which carries only
+// discounts that do NOT affect the base.
+//
+// They differ in the totales: the descuento global also reduces
+// cbc:LineExtensionAmount and cbc:TaxInclusiveAmount (the customer owes less),
+// while an anticipo leaves the sale declared in full and is deducted once more,
+// as cbc:PrepaidAmount. See buildLegalMonetaryTotal.
+func buildDocumentAllowances(req model.IssueRequest) []lineAllowanceCharge {
+	var out []lineAllowanceCharge
+	if gd := buildGlobalDiscount(req); gd != nil {
+		out = append(out, *gd)
+	}
+	return append(out, buildAnticipoAllowances(req)...)
 }
 
 func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	cur := req.CurrencyCode
 	buckets := sumLineBuckets(req.Items)
 
-	// Descuento global (Cat.53 code 02) reduces the gravado base imponible: the
-	// gravado cac:TaxSubtotal must declare BaseAmount − discount and the IGV is
-	// recomputed at 18% on the reduced base, or SUNAT rejects the IGV total.
-	if gd := globalDiscountValue(req); gd > 0 {
-		buckets.regularBase -= gd
+	// El descuento global (Cat.53 code 02) reduce la base imponible del IGV: el
+	// cac:TaxSubtotal gravado declara BaseAmount − descuento y el IGV se
+	// recalcula al 18% sobre la base reducida, o SUNAT rechaza el total de IGV.
+	//
+	// Los anticipos (Cat.53 code 04) reducen esta misma base, por su importe SIN
+	// IGV: la factura de anticipo ya declaró el IGV de lo cobrado, así que la
+	// factura de regularización solo tributa el saldo. Las líneas siguen
+	// declarando la venta completa — solo este total del documento va neto.
+	anticipoBase, _ := anticipoTotals(req)
+	if deduction := globalDiscountValue(req) + anticipoBase; deduction > 0 {
+		buckets.regularBase -= deduction
 		if buckets.regularBase < 0 {
 			buckets.regularBase = 0
 		}
@@ -436,15 +567,45 @@ func buildLegalMonetaryTotal(req model.IssueRequest) legalMonetaryTotal {
 	// (code 02) block and as the reduced gravado cac:TaxSubtotal/TaxableAmount.
 	// Per-line descuentos likewise stay inside each line's LineExtensionAmount and
 	// never surface as a document AllowanceTotalAmount.
+	//
+	// Anticipos only half work like the descuento global. The Cat.53 "04"
+	// allowances DO reduce the base imponible (buildDocumentTaxTotal), but here
+	// the sale stays declared IN FULL — LineExtensionAmount and
+	// TaxInclusiveAmount are gross — and what was already collected is deducted
+	// once, IGV included, as cbc:PrepaidAmount:
+	//
+	//	PayableAmount = TaxInclusiveAmount − PrepaidAmount
+	//
+	// So TaxInclusiveAmount is NOT LineExtensionAmount + the document TaxAmount
+	// here: it is the full sale (líneas + IGV de las líneas), while the document
+	// TaxAmount only covers the untaxed remainder.
+	//
+	// Both halves are load-bearing, each proven by a SUNAT beta rejection on
+	// 2026-07-31: deducting the anticipo from the base AND from the payable
+	// total (PayableAmount = reduced TaxInclusiveAmount) is fault 3280 "El
+	// importe total del comprobante no coincide con el valor calculado";
+	// deducting it only from the payable total, with no Cat.53 "04" allowance,
+	// is fault 3287. The shape below is the one SUNAT accepts — a full sale of
+	// 1000 + 180 IGV with two anticipos of 118 emits LineExtension 1000,
+	// TaxSubtotal 800/144, TaxInclusive 1180, Prepaid 236, Payable 944.
+	//
+	// req.TaxInclusiveAmount and req.TotalAmount already arrive in that shape
+	// from the frontend's sumTotals.
+	_, anticipoPaid := anticipoTotals(req)
 	lineExtension := req.Subtotal
-	if gd := globalDiscountValue(req); gd > 0 {
-		lineExtension = formatDecimal(parseDecimal(req.Subtotal) - gd)
+	if deduction := globalDiscountValue(req); deduction > 0 {
+		lineExtension = formatDecimal(parseDecimal(req.Subtotal) - deduction)
 	}
-	return legalMonetaryTotal{
+	lmt := legalMonetaryTotal{
 		LineExtensionAmount: newCurrencyAmount(lineExtension, cur),
 		TaxInclusiveAmount:  newCurrencyAmount(req.TaxInclusiveAmount, cur),
 		PayableAmount:       newCurrencyAmount(req.TotalAmount, cur),
 	}
+	if anticipoPaid > 0 {
+		prepaid := newCurrencyAmount(formatDecimal(anticipoPaid), cur)
+		lmt.PrepaidAmount = &prepaid
+	}
+	return lmt
 }
 
 func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
@@ -491,12 +652,13 @@ func buildLineDiscount(li model.LineItem, cur string) *lineAllowanceCharge {
 	if base != 0 {
 		factor = discount / base
 	}
+	baseAmount := newCurrencyAmount(formatDecimal(base), cur)
 	return &lineAllowanceCharge{
 		ChargeIndicator:         false,
 		AllowanceChargeReason:   "00",
 		MultiplierFactorNumeric: strconv.FormatFloat(factor, 'f', 5, 64),
 		Amount:                  newCurrencyAmount(formatDecimal(discount), cur),
-		BaseAmount:              newCurrencyAmount(formatDecimal(base), cur),
+		BaseAmount:              &baseAmount,
 	}
 }
 

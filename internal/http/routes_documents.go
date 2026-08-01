@@ -40,12 +40,13 @@ func (s *Server) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 
 	filter := db.DocumentListFilter{
-		DocType:  q.Get("docType"),
-		Status:   q.Get("status"),
-		Customer: q.Get("customer"),
-		Payment:  q.Get("payment"),
-		Page:     page,
-		Limit:    limit,
+		DocType:       q.Get("docType"),
+		Status:        q.Get("status"),
+		Customer:      q.Get("customer"),
+		Payment:       q.Get("payment"),
+		OperationType: q.Get("operationType"),
+		Page:          page,
+		Limit:         limit,
 	}
 
 	result, err := s.pool.ListIssuedDocuments(r.Context(), companyID, filter)
@@ -125,6 +126,10 @@ var (
 
 	detraccionCodigoRegex = regexp.MustCompile(`^\d{3}$`) // Cat.54 bien/servicio
 
+	// anticipoDocIDRegex is the SERIE-CORRELATIVO of an anticipo comprobante
+	// ("F001-00000042"). F-series = factura anticipo, B-series = boleta anticipo.
+	anticipoDocIDRegex = regexp.MustCompile(`^[FB][A-Z0-9]{3}-\d{1,8}$`)
+
 	// billingPeriodMaxMonths mirrors BILLING_PERIOD_MAX in the frontend. A decade of
 	// months is generous for a real contract and stops a typo turning S/ 100 into
 	// S/ 100,000 worth of stored metadata.
@@ -158,6 +163,64 @@ type detraccionBody struct {
 	CuentaBN   *string `json:"cuentaBN,omitempty"`
 }
 
+// anticipoBody is one applied anticipo on the create/update wire contract.
+// Amount semantics match model.Anticipo (totalAmount con IGV, baseAmount sin
+// IGV); business rules (doc type, sums vs. gravado base) are enforced by
+// validation.validateAnticipos at issue time.
+type anticipoBody struct {
+	DocID            string  `json:"docId"`
+	DocTypeCode      string  `json:"docTypeCode"`
+	TotalAmount      string  `json:"totalAmount"`
+	BaseAmount       string  `json:"baseAmount"`
+	SourceDocumentID *string `json:"sourceDocumentId,omitempty"`
+}
+
+// validate checks an anticipo wire object's field formats.
+func (a anticipoBody) validate() string {
+	if !anticipoDocIDRegex.MatchString(a.DocID) {
+		return "anticipos.docId inválido"
+	}
+	switch a.DocTypeCode {
+	case "02": // factura de anticipo — F-series
+		if a.DocID[0] != 'F' {
+			return "anticipos.docTypeCode 02 requiere serie F"
+		}
+	case "03": // boleta de anticipo — B-series
+		if a.DocID[0] != 'B' {
+			return "anticipos.docTypeCode 03 requiere serie B"
+		}
+	default:
+		return "anticipos.docTypeCode inválido"
+	}
+	if !decimalRegex.MatchString(a.TotalAmount) {
+		return "anticipos.totalAmount inválido"
+	}
+	if !decimalRegex.MatchString(a.BaseAmount) {
+		return "anticipos.baseAmount inválido"
+	}
+	if a.SourceDocumentID != nil && !docUUIDRegex.MatchString(*a.SourceDocumentID) {
+		return "anticipos.sourceDocumentId inválido"
+	}
+	return ""
+}
+
+func toModelAnticipos(bodies []anticipoBody) []model.Anticipo {
+	if bodies == nil {
+		return nil
+	}
+	out := make([]model.Anticipo, 0, len(bodies))
+	for _, a := range bodies {
+		out = append(out, model.Anticipo{
+			DocID:            a.DocID,
+			DocTypeCode:      a.DocTypeCode,
+			TotalAmount:      a.TotalAmount,
+			BaseAmount:       a.BaseAmount,
+			SourceDocumentID: a.SourceDocumentID,
+		})
+	}
+	return out
+}
+
 type createDocumentBody struct {
 	SeriesID          string  `json:"seriesId"`
 	IssueDate         string  `json:"issueDate"`
@@ -179,12 +242,16 @@ type createDocumentBody struct {
 	// BillingPeriodMonths is the periodo de facturación the browser applied. Purely
 	// reporting metadata: the items already carry the multiplied prices and the
 	// annotated descriptions, and this never reaches the XML.
-	BillingPeriodMonths     *int                     `json:"billingPeriodMonths,omitempty"`
-	TotalAmount             string                   `json:"totalAmount"`
-	TaxInclusiveAmount      *string                  `json:"taxInclusiveAmount,omitempty"`
-	Notes                   *string                  `json:"notes,omitempty"`
-	FormaPago               *string                  `json:"formaPago,omitempty"`
-	Cuotas                  []model.CuotaCredito     `json:"cuotas,omitempty"`
+	BillingPeriodMonths *int                 `json:"billingPeriodMonths,omitempty"`
+	TotalAmount         string               `json:"totalAmount"`
+	TaxInclusiveAmount  *string              `json:"taxInclusiveAmount,omitempty"`
+	Notes               *string              `json:"notes,omitempty"`
+	FormaPago           *string              `json:"formaPago,omitempty"`
+	Cuotas              []model.CuotaCredito `json:"cuotas,omitempty"`
+	Anticipos           []anticipoBody       `json:"anticipos,omitempty"`
+	// VentaAnticipoID links this comprobante to a venta con anticipos (the deal),
+	// set on both its advances and its factura final. Omitted for ordinary docs.
+	VentaAnticipoID         *string                  `json:"ventaAnticipoId,omitempty"`
 	ReferenceDocType        *string                  `json:"referenceDocType,omitempty"`
 	ReferenceDocSeries      *string                  `json:"referenceDocSeries,omitempty"`
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
@@ -263,6 +330,11 @@ func (b *createDocumentBody) validate() string {
 	}
 	if msg := b.Detraccion.validate(); msg != "" {
 		return msg
+	}
+	for _, a := range b.Anticipos {
+		if msg := a.validate(); msg != "" {
+			return msg
+		}
 	}
 	if len(b.Items) == 0 {
 		return "items requerido"
@@ -346,6 +418,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		Notes:                   b.Notes,
 		FormaPago:               b.FormaPago,
 		Cuotas:                  b.Cuotas,
+		Anticipos:               toModelAnticipos(b.Anticipos),
+		VentaAnticipoID:         nilIfEmpty(b.VentaAnticipoID),
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
 		ReferenceDocCorrelative: b.ReferenceDocCorrelative,
@@ -427,6 +501,7 @@ type updateDocumentBody struct {
 	Notes                   *string                  `json:"notes,omitempty"`
 	FormaPago               *string                  `json:"formaPago,omitempty"`
 	Cuotas                  *[]model.CuotaCredito    `json:"cuotas,omitempty"`
+	Anticipos               *[]anticipoBody          `json:"anticipos,omitempty"`
 	ReferenceDocType        *string                  `json:"referenceDocType,omitempty"`
 	ReferenceDocSeries      *string                  `json:"referenceDocSeries,omitempty"`
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
@@ -468,6 +543,10 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 	if b.Cuotas != nil {
 		in.CuotasIsSet = true
 		in.Cuotas = *b.Cuotas
+	}
+	if b.Anticipos != nil {
+		in.AnticiposIsSet = true
+		in.Anticipos = toModelAnticipos(*b.Anticipos)
 	}
 	if d := b.Detraccion; d != nil {
 		in.DetraccionCodigo = &d.Codigo
@@ -516,6 +595,14 @@ func (s *Server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	if msg := validateBillingPeriodMonths(body.BillingPeriodMonths); msg != "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
 		return
+	}
+	if body.Anticipos != nil {
+		for _, a := range *body.Anticipos {
+			if msg := a.validate(); msg != "" {
+				writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
+				return
+			}
+		}
 	}
 
 	doc, err := s.pool.UpdateDraftDocument(r.Context(), docID, body.toInput())

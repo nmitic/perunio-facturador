@@ -72,12 +72,18 @@ type orderReference struct {
 }
 
 // additionalDocumentReference carries references to related documents
-// (used heavily by por Eventos to point at the original GRE, and by
-// Remitente to reference the commercial invoice).
+// (used heavily by por Eventos to point at the original GRE, by Remitente to
+// reference the commercial invoice, and by Invoice regularizaciones to
+// reference facturas/boletas de anticipo). DocumentStatusCode and IssuerParty
+// are the anticipo-only fields: the row number pairing the reference with its
+// cac:PrepaidPayment, and the RUC of the anticipo's emitter. Field order
+// follows the UBL DocumentReference sequence.
 type additionalDocumentReference struct {
-	ID               string `xml:"cbc:ID"`
-	DocumentTypeCode string `xml:"cbc:DocumentTypeCode,omitempty"`
-	DocumentType     string `xml:"cbc:DocumentType,omitempty"`
+	ID                 string             `xml:"cbc:ID"`
+	DocumentTypeCode   string             `xml:"cbc:DocumentTypeCode,omitempty"`
+	DocumentType       string             `xml:"cbc:DocumentType,omitempty"`
+	DocumentStatusCode string             `xml:"cbc:DocumentStatusCode,omitempty"`
+	IssuerParty        *docRefIssuerParty `xml:"cac:IssuerParty,omitempty"`
 }
 
 // despatchSupplierParty is the shipper (remitente for type 09, carrier

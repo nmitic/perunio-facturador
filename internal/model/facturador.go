@@ -18,6 +18,66 @@ type Series struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
+// VentaAnticipoEstado is a venta con anticipos' lifecycle, always DERIVED from
+// the comprobantes pointing at it (plus the manual Cancelada flag) so it can
+// never disagree with the historial.
+type VentaAnticipoEstado string
+
+const (
+	// VentaAbierta still has balance to collect, or has collected everything but
+	// has not been regularized by a factura final yet.
+	VentaAbierta VentaAnticipoEstado = "abierta"
+	// VentaRegularizada has an accepted factura final deducting its anticipos.
+	VentaRegularizada VentaAnticipoEstado = "regularizada"
+	// VentaCancelada was abandoned by the user. The anticipos already emitted
+	// stay valid comprobantes — cancelling only stops the deal being offered.
+	VentaCancelada VentaAnticipoEstado = "cancelada"
+)
+
+// VentaAnticipo is one sale collected through advance payments: the agreed total
+// plus the comprobantes that chip away at it.
+//
+// SUNAT never sees this record. It exists so the product can answer "how much is
+// still left to collect", which needs the agreed total stored somewhere — the
+// individual anticipo facturas carry no notion of the sale they belong to.
+type VentaAnticipo struct {
+	ID               string `json:"id"`
+	TenantID         string `json:"tenantId"`
+	CompanyID        string `json:"companyId"`
+	SunatEnvironment string `json:"sunatEnvironment"`
+
+	Nombre      string  `json:"nombre"`
+	Descripcion *string `json:"descripcion"`
+
+	CustomerDocType   string `json:"customerDocType"`
+	CustomerDocNumber string `json:"customerDocNumber"`
+	CustomerName      string `json:"customerName"`
+
+	CurrencyCode string `json:"currencyCode"`
+	// MontoAcordado is the line total of FormData, denormalised at save time so
+	// listing deals stays a single query.
+	MontoAcordado string         `json:"montoAcordado"`
+	FormData      map[string]any `json:"formData"`
+
+	Cancelada bool      `json:"cancelada"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Derived from the issued_documents pointing here — never stored, so voiding
+	// a comprobante self-heals the numbers. Cobrado covers every accepted
+	// comprobante of the deal, the factura final included: its total is the
+	// saldo, so a regularizada venta reads cobrado = acordado, saldo 0.
+	// AnticipoCount, in contrast, counts only the anticipos (0104).
+	Cobrado       string              `json:"cobrado"`
+	Saldo         string              `json:"saldo"`
+	Estado        VentaAnticipoEstado `json:"estado"`
+	AnticipoCount int                 `json:"anticipoCount"`
+	// FinalDocumentID/Code identify the accepted factura final that regularized
+	// this venta; both nil while it is still abierta.
+	FinalDocumentID   *string `json:"finalDocumentId"`
+	FinalDocumentCode *string `json:"finalDocumentCode"`
+}
+
 // ScheduleOrigin identifies which kind of schedule emitted a comprobante.
 //
 // Single source of the vocabulary: the scheduler uses it to say which table a due
@@ -88,6 +148,16 @@ type IssuedDocument struct {
 
 	FormaPago *string        `json:"formaPago,omitempty"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
+
+	// Anticipos applied by this document (factura de regularización). Nil for
+	// ordinary comprobantes AND for the anticipo facturas themselves — whether
+	// an anticipo has been applied is derived by searching these arrays.
+	Anticipos []Anticipo `json:"anticipos,omitempty"`
+
+	// VentaAnticipoID is the venta con anticipos (deal) this comprobante belongs
+	// to — set on the anticipo facturas and on the factura final that closes it.
+	// Nil for every ordinary comprobante.
+	VentaAnticipoID *string `json:"ventaAnticipoId,omitempty"`
 
 	// Manual payment status for CONTADO documents. PaidAt present = "pagado".
 	// Orthogonal to SUNAT Status and to the cuotas system (crédito docs derive

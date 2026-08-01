@@ -324,14 +324,35 @@ func appendDetraccionLegend(notes []noteElement, req model.IssueRequest) []noteE
 	})
 }
 
+// prepaidPayment represents cac:PrepaidPayment — one prior anticipo deducted
+// by a factura de regularización. ID is the 1-based row number pairing it with
+// the cac:AdditionalDocumentReference whose cbc:DocumentStatusCode matches
+// (schemeName "Anticipo", schemeAgencyName "PE:SUNAT" per the SUNAT anticipo
+// guide); PaidAmount is the anticipo amount INCLUDING IGV.
+type prepaidPayment struct {
+	XMLName    xml.Name       `xml:"cac:PrepaidPayment"`
+	ID         schemeID       `xml:"cbc:ID"`
+	PaidAmount currencyAmount `xml:"cbc:PaidAmount"`
+}
+
+// docRefIssuerParty is the cac:IssuerParty of an anticipo document reference:
+// the emitter of the referenced anticipo comprobante, identified by RUC
+// (schemeID "6", Cat.06).
+type docRefIssuerParty struct {
+	PartyIdentification partyIdentification `xml:"cac:PartyIdentification"`
+}
+
 // legalMonetaryTotal represents the totals block. The element name is supplied
 // by the parent field's tag (cac:LegalMonetaryTotal for Invoice/CreditNote,
 // cac:RequestedMonetaryTotal for DebitNote) rather than hardcoded here.
+// PrepaidAmount (UBL order: after ChargeTotalAmount, before PayableAmount) is
+// the total of anticipos applied, con IGV; emitted only on regularizaciones.
 type legalMonetaryTotal struct {
 	LineExtensionAmount  currencyAmount  `xml:"cbc:LineExtensionAmount"`
 	TaxInclusiveAmount   currencyAmount  `xml:"cbc:TaxInclusiveAmount"`
 	AllowanceTotalAmount *currencyAmount `xml:"cbc:AllowanceTotalAmount,omitempty"`
 	ChargeTotalAmount    *currencyAmount `xml:"cbc:ChargeTotalAmount,omitempty"`
+	PrepaidAmount        *currencyAmount `xml:"cbc:PrepaidAmount,omitempty"`
 	PayableAmount        currencyAmount  `xml:"cbc:PayableAmount"`
 }
 
@@ -385,18 +406,23 @@ type debitNoteLine struct {
 	Price               price             `xml:"cac:Price"`
 }
 
-// lineAllowanceCharge represents a line-level cac:AllowanceCharge. SUNAT uses
-// it to itemise a descuento por ítem (Cat.53 code "00", which affects the IGV
-// base). The discount reconciles cbc:LineExtensionAmount with cac:Price: SUNAT
-// rule 3271 computes LineExtensionAmount = Price.PriceAmount × Quantity − Amount,
-// so the line price stays gross (valor unitario) and the discount is subtracted
-// here. MultiplierFactorNumeric = Amount / BaseAmount.
+// lineAllowanceCharge represents a cac:AllowanceCharge, used both on a line and
+// at document level. SUNAT uses it to itemise a descuento por ítem (Cat.53 code
+// "00", which affects the IGV base). The discount reconciles
+// cbc:LineExtensionAmount with cac:Price: SUNAT rule 3271 computes
+// LineExtensionAmount = Price.PriceAmount × Quantity − Amount, so the line price
+// stays gross (valor unitario) and the discount is subtracted here.
+// MultiplierFactorNumeric = Amount / BaseAmount.
+//
+// MultiplierFactorNumeric and BaseAmount are optional: the descuento global por
+// anticipo (Cat.53 "04") carries only the amount already collected, with no base
+// to prorate against (see buildAnticipoAllowances).
 type lineAllowanceCharge struct {
-	ChargeIndicator         bool           `xml:"cbc:ChargeIndicator"`
-	AllowanceChargeReason   string         `xml:"cbc:AllowanceChargeReasonCode"`
-	MultiplierFactorNumeric string         `xml:"cbc:MultiplierFactorNumeric"`
-	Amount                  currencyAmount `xml:"cbc:Amount"`
-	BaseAmount              currencyAmount `xml:"cbc:BaseAmount"`
+	ChargeIndicator         bool            `xml:"cbc:ChargeIndicator"`
+	AllowanceChargeReason   string          `xml:"cbc:AllowanceChargeReasonCode"`
+	MultiplierFactorNumeric string          `xml:"cbc:MultiplierFactorNumeric,omitempty"`
+	Amount                  currencyAmount  `xml:"cbc:Amount"`
+	BaseAmount              *currencyAmount `xml:"cbc:BaseAmount,omitempty"`
 }
 
 type quantity struct {
@@ -567,13 +593,30 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 	}
 }
 
+// sunatOperationType maps an internally stored tipo de operación onto the code
+// SUNAT's cat_51.xml actually accepts.
+//
+// "0104" (Venta interna – Anticipos) was retired from catálogo 51: SUNAT now
+// rejects it outright with fault 3206 ("no se encuentra en el catalogo: 51").
+// We still store it on the document as the marker that a factura *is* an
+// anticipo — it drives the anticipos report, the historial picker and the UI
+// badge — but on the wire an anticipo is an ordinary venta interna. What makes
+// the final factura a regularización is the PrepaidPayment / AllowanceCharge
+// "04" block, not the operation type.
+func sunatOperationType(operationType string) string {
+	if operationType == model.OpAnticipos {
+		return model.OpVentaInterna
+	}
+	return operationType
+}
+
 func newInvoiceTypeCode(code, operationType string) invoiceTypeCode {
 	if operationType == "" {
 		operationType = "0101"
 	}
 	return invoiceTypeCode{
 		Value:          code,
-		ListID:         operationType,
+		ListID:         sunatOperationType(operationType),
 		ListAgencyName: "PE:SUNAT",
 		ListName:       "Tipo de Documento",
 		ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",
@@ -587,7 +630,7 @@ func newProfileID(operationType string) profileIDElement {
 		operationType = "0101"
 	}
 	return profileIDElement{
-		Value:            operationType,
+		Value:            sunatOperationType(operationType),
 		SchemeName:       "SUNAT:Identificador de Tipo de Operación",
 		SchemeAgencyName: "PE:SUNAT",
 		SchemeURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17",

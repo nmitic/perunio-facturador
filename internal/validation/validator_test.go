@@ -12,26 +12,26 @@ import (
 
 func newValidInvoice() model.IssueRequest {
 	return model.IssueRequest{
-		SupplierRUC:       "20100113612",
-		SupplierName:      "EMPRESA TEST SAC",
-		SupplierAddress:   "AV. TEST 123",
-		EstablishmentCode: "0000",
-		DocType:           "01",
-		Series:            "F001",
-		Correlative:       1,
-		IssueDate:         "2024-01-15",
-		IssueTime:         "15:20:30",
-		CurrencyCode:      "PEN",
-		OperationType:     "0101",
-		CustomerDocType:   "6",
-		CustomerDocNumber: "20601327318",
-		CustomerName:      "CLIENTE TEST SRL",
-		Subtotal:          "1000.00",
-		TotalIGV:          "180.00",
-		TotalISC:          "0.00",
-		TotalOtherTaxes:   "0.00",
-		TotalDiscount:     "0.00",
-		TotalAmount:       "1180.00",
+		SupplierRUC:        "20100113612",
+		SupplierName:       "EMPRESA TEST SAC",
+		SupplierAddress:    "AV. TEST 123",
+		EstablishmentCode:  "0000",
+		DocType:            "01",
+		Series:             "F001",
+		Correlative:        1,
+		IssueDate:          "2024-01-15",
+		IssueTime:          "15:20:30",
+		CurrencyCode:       "PEN",
+		OperationType:      "0101",
+		CustomerDocType:    "6",
+		CustomerDocNumber:  "20601327318",
+		CustomerName:       "CLIENTE TEST SRL",
+		Subtotal:           "1000.00",
+		TotalIGV:           "180.00",
+		TotalISC:           "0.00",
+		TotalOtherTaxes:    "0.00",
+		TotalDiscount:      "0.00",
+		TotalAmount:        "1180.00",
 		TaxInclusiveAmount: "1180.00",
 		Items: []model.LineItem{
 			{
@@ -294,5 +294,97 @@ func TestValidateDetraccion(t *testing.T) {
 		req.Detraccion = newDetraccion()
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "operationType"), "should require operationType 1001/1002")
+	})
+}
+
+func newAnticipo() model.Anticipo {
+	return model.Anticipo{
+		DocID: "F001-00000042", DocTypeCode: "02",
+		TotalAmount: "118.00", BaseAmount: "100.00",
+	}
+}
+
+func TestValidateAnticipos(t *testing.T) {
+	// The regularización declares the sale in full (1000 gravado + 180 IGV =
+	// 1180) and deducts the 118 anticipo only from the payable: 1062.
+	newRegularizacion := func() model.IssueRequest {
+		req := newValidInvoice()
+		req.TotalAmount = "1062.00"
+		req.Anticipos = []model.Anticipo{newAnticipo()}
+		return req
+	}
+
+	t.Run("valid factura de regularización passes", func(t *testing.T) {
+		errs := validation.Validate(newRegularizacion())
+		is.True(t, !hasErrorField(errs, "anticipos"), "should have no anticipo errors")
+	})
+
+	t.Run("anticipos on a boleta are rejected", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.Anticipos = []model.Anticipo{newAnticipo()}
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos"), "should reject anticipos on a boleta")
+	})
+
+	t.Run("anticipos combined with detracción are rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.OperationType = "1001"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos"), "should reject anticipos + detracción")
+	})
+
+	t.Run("a 0104 anticipo factura cannot itself apply anticipos", func(t *testing.T) {
+		req := newRegularizacion()
+		req.OperationType = "0104"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "operationType"), "should reject anticipos on a 0104 factura")
+	})
+
+	t.Run("docTypeCode outside 02/03 is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].DocTypeCode = "01"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].docTypeCode"), "should reject a non-anticipo Cat.12 code")
+	})
+
+	t.Run("base not matching total minus 18% IGV is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].BaseAmount = "90.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].baseAmount"), "should require total ≈ base × 1.18")
+	})
+
+	t.Run("zero total is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].TotalAmount = "0.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].totalAmount"), "should require a positive monto")
+	})
+
+	t.Run("anticipos exceeding the total of the comprobante are rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos = []model.Anticipo{
+			{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "708.00", BaseAmount: "600.00"},
+			{DocID: "F001-00000043", DocTypeCode: "02", TotalAmount: "708.00", BaseAmount: "600.00"},
+		}
+		req.TotalAmount = "-236.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos"), "1416 anticipado cannot come off a 1180 sale")
+	})
+
+	t.Run("anticipos exactly at the total, after a descuento global, pass", func(t *testing.T) {
+		req := newRegularizacion()
+		// 1000 − 100 discount = 900 base, IGV 162 → the sale totals 1062, all
+		// of it already collected, so nothing is left to pay.
+		req.GlobalDiscount = "100.00"
+		req.TotalIGV = "162.00"
+		req.TaxInclusiveAmount = "1062.00"
+		req.TotalAmount = "0.00"
+		req.Anticipos = []model.Anticipo{
+			{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "1062.00", BaseAmount: "900.00"},
+		}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos"), "anticipos may cover the sale exactly")
 	})
 }

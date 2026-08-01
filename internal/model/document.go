@@ -52,6 +52,16 @@ type IssueRequest struct {
 	FormaPago string         `json:"formaPago"`
 	Cuotas    []CuotaCredito `json:"cuotas,omitempty"`
 
+	// Anticipos are the prior advance-payment comprobantes this document
+	// (a factura de regularización) applies. Each one emits a
+	// cac:AdditionalDocumentReference + cac:PrepaidPayment pair and a document
+	// cac:AllowanceCharge (Cat.53 "04") that reduces the gravado IGV base by
+	// its BaseAmount, and their sum is declared as cbc:PrepaidAmount.
+	// Subtotal, TotalIGV and TaxInclusiveAmount arrive GROSS (the full sale);
+	// only TotalAmount, the payable, is net of the anticipos.
+	// Empty for every ordinary document.
+	Anticipos []Anticipo `json:"anticipos,omitempty"`
+
 	// Detraccion is the SPOT (Sistema de Pago de Obligaciones Tributarias)
 	// withholding. nil = the operation is not subject to detracción. When set,
 	// OperationType must be "1001"/"1002" and the document emits the detracción
@@ -80,6 +90,26 @@ type IssueRequest struct {
 	SunatUsername string `json:"sunatUsername"`
 	SunatPassword string `json:"sunatPassword"`
 	Environment   string `json:"environment"` // "beta" or "production"
+}
+
+// Anticipo is one prior advance-payment comprobante applied to (deducted
+// from) a factura de regularización. DocID is its SERIE-CORRELATIVO
+// ("F001-00000042") and DocTypeCode the Cat.12 related-document type
+// ("02" factura de anticipo, "03" boleta de anticipo). TotalAmount is the
+// anticipo amount WITH IGV, carried by cbc:PaidAmount / cbc:PrepaidAmount and
+// deducted from the payable total. BaseAmount is its IGV-exclusive base, which
+// the Cat.53 "04" cac:AllowanceCharge deducts from the base imponible — the
+// factura de anticipo already declared the IGV on it. Both figures reach the
+// XML at different levels; see buildLegalMonetaryTotal. Amounts are decimal
+// strings in the document currency.
+// SourceDocumentID is the issued_documents row the anticipo was picked from,
+// nil when it was entered manually (emitted outside Perunio).
+type Anticipo struct {
+	DocID            string  `json:"docId"`
+	DocTypeCode      string  `json:"docTypeCode"`
+	TotalAmount      string  `json:"totalAmount"`
+	BaseAmount       string  `json:"baseAmount"`
+	SourceDocumentID *string `json:"sourceDocumentId,omitempty"`
 }
 
 // CuotaCredito is one installment in a credit-sale invoice.

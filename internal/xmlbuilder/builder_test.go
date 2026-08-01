@@ -816,6 +816,155 @@ func TestBuildDocumentXML_GlobalDiscount(t *testing.T) {
 	})
 }
 
+func TestBuildDocumentXML_Anticipos(t *testing.T) {
+	// Factura de regularización: the sale is declared IN FULL in the totales
+	// (LineExtension 1000.00, TaxInclusive 1180.00) and the prior anticipo of
+	// 118.00 comes off the payable once, as cbc:PrepaidAmount → PayableAmount
+	// 1062.00. Its base (100.00) additionally reduces the gravado TaxSubtotal
+	// through a Cat.53 "04" AllowanceCharge, because the factura de anticipo
+	// already declared the IGV of that 100.
+	//
+	// Both halves are SUNAT-enforced: deducting the anticipo from the base AND
+	// from the payable total is fault 3280, dropping the "04" allowance is
+	// fault 3287.
+	newRegularizacion := func() model.IssueRequest {
+		req := newTestInvoice()
+		req.Notes = nil
+		req.TotalAmount = "1062.00"
+		req.Anticipos = []model.Anticipo{{
+			DocID: "F001-00000042", DocTypeCode: "02",
+			TotalAmount: "118.00", BaseAmount: "100.00",
+		}}
+		return req
+	}
+
+	t.Run("declares the sale in full, taxes only the remainder and deducts the anticipo as PrepaidAmount", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newRegularizacion())
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		ref := `<cac:AdditionalDocumentReference><cbc:ID>F001-00000042</cbc:ID><cbc:DocumentTypeCode>02</cbc:DocumentTypeCode><cbc:DocumentStatusCode>1</cbc:DocumentStatusCode><cac:IssuerParty><cac:PartyIdentification><cbc:ID schemeID="6">20100113612</cbc:ID></cac:PartyIdentification></cac:IssuerParty></cac:AdditionalDocumentReference>`
+		is.True(t, strings.Contains(xml, ref),
+			"must reference the anticipo doc with Cat.12 type 02, row 1 and the emitter RUC")
+		is.True(t, strings.Index(xml, "<cac:AdditionalDocumentReference>") < strings.Index(xml, "<cac:Signature>"),
+			"UBL order: AdditionalDocumentReference must precede cac:Signature")
+
+		prepaid := `<cac:PrepaidPayment><cbc:ID schemeName="Anticipo" schemeAgencyName="PE:SUNAT">1</cbc:ID><cbc:PaidAmount currencyID="PEN">118.00</cbc:PaidAmount></cac:PrepaidPayment>`
+		is.True(t, strings.Contains(xml, prepaid),
+			"must emit cac:PrepaidPayment row 1 with the IGV-inclusive monto anticipado")
+		is.True(t, strings.Index(xml, "<cac:PrepaidPayment>") > strings.Index(xml, "</cac:PaymentTerms>"),
+			"UBL order: PrepaidPayment must follow cac:PaymentTerms")
+		// Fault 3287 regression guard: a declared PrepaidAmount needs its
+		// Cat.53 "04" allowance, carrying the anticipo base and nothing else.
+		allowance := `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>04</cbc:AllowanceChargeReasonCode><cbc:Amount currencyID="PEN">100.00</cbc:Amount></cac:AllowanceCharge>`
+		is.True(t, strings.Contains(xml, allowance),
+			"must emit a Cat.53 '04' AllowanceCharge with the anticipo base, no BaseAmount/MultiplierFactor (fault 3287)")
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">900.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="PEN">162.00</cbc:TaxAmount>`),
+			"gravado TaxSubtotal must net out the anticipo base (1000 − 100), IGV recomputed at 18%")
+		is.True(t, strings.Contains(xml, `<cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID="PEN">1180.00</cbc:TaxInclusiveAmount><cbc:PrepaidAmount currencyID="PEN">118.00</cbc:PrepaidAmount><cbc:PayableAmount currencyID="PEN">1062.00</cbc:PayableAmount>`),
+			"LegalMonetaryTotal: gross LineExtension 1000, TaxInclusive 1180 (the full sale, not LineExtension + the reduced TaxAmount), Prepaid 118, Payable = 1180 − 118")
+		is.True(t, !strings.Contains(xml, "<cbc:AllowanceTotalAmount"),
+			"no global discount here, so no AllowanceTotalAmount (fault 3300)")
+	})
+
+	t.Run("two anticipos are row-paired 1/2 and their totals summed", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos = append(req.Anticipos, model.Anticipo{
+			DocID: "B002-00000007", DocTypeCode: "03",
+			TotalAmount: "236.00", BaseAmount: "200.00",
+		})
+		// Both bases come off the taxable (1000 − 300 = 700, IGV 126); the
+		// totales stay gross and only the payable moves: 1180 − 354.
+		req.TotalAmount = "826.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `<cbc:ID>B002-00000007</cbc:ID><cbc:DocumentTypeCode>03</cbc:DocumentTypeCode><cbc:DocumentStatusCode>2</cbc:DocumentStatusCode>`),
+			"second anticipo must be row 2 with Cat.12 type 03")
+		is.True(t, strings.Contains(xml, `<cbc:ID schemeName="Anticipo" schemeAgencyName="PE:SUNAT">2</cbc:ID><cbc:PaidAmount currencyID="PEN">236.00</cbc:PaidAmount>`),
+			"second PrepaidPayment must be row 2 with its own monto")
+		is.True(t, strings.Count(xml, "<cbc:AllowanceChargeReasonCode>04</cbc:AllowanceChargeReasonCode>") == 2,
+			"one Cat.53 '04' allowance per anticipo")
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">700.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="PEN">126.00</cbc:TaxAmount>`),
+			"gravado base must net out both anticipo bases (1000 − 100 − 200)")
+		is.True(t, strings.Contains(xml, `<cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID="PEN">1180.00</cbc:TaxInclusiveAmount>`),
+			"the totales stay the full sale however many anticipos are applied")
+		is.True(t, strings.Contains(xml, `<cbc:PrepaidAmount currencyID="PEN">354.00</cbc:PrepaidAmount><cbc:PayableAmount currencyID="PEN">826.00</cbc:PayableAmount>`),
+			"PrepaidAmount must be the sum of both anticipos con IGV (118 + 236), Payable = 1180 − 354")
+	})
+
+	t.Run("a descuento global reduces the totales too; the anticipo only the taxable and the payable", func(t *testing.T) {
+		req := newRegularizacion()
+		req.GlobalDiscount = "100.00"
+		// The 02 discount moves the totales as well: valor venta 1000 − 100 =
+		// 900, IGV 162, TaxInclusive 1062, and the anticipo comes off that:
+		// 1062 − 118. The taxable drops by both (1000 − 100 − 100 = 800).
+		req.TotalIGV = "162.00"
+		req.TaxInclusiveAmount = "1062.00"
+		req.TotalAmount = "944.00"
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, "<cbc:AllowanceChargeReasonCode>02</cbc:AllowanceChargeReasonCode>"),
+			"must keep the descuento global 02 entry")
+		is.True(t, strings.Contains(xml, "<cbc:AllowanceChargeReasonCode>04</cbc:AllowanceChargeReasonCode>"),
+			"and the anticipo 04 entry alongside it")
+		is.True(t, strings.Contains(xml, `<cbc:TaxableAmount currencyID="PEN">800.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="PEN">144.00</cbc:TaxAmount>`),
+			"gravado base must net out both the discount and the anticipo base (1000 − 100 − 100)")
+		is.True(t, strings.Contains(xml, `<cbc:LineExtensionAmount currencyID="PEN">900.00</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID="PEN">1062.00</cbc:TaxInclusiveAmount><cbc:PrepaidAmount currencyID="PEN">118.00</cbc:PrepaidAmount><cbc:PayableAmount currencyID="PEN">944.00</cbc:PayableAmount>`),
+			"LegalMonetaryTotal: discount in the base, anticipo in Prepaid, Payable = 1062 − 118")
+	})
+
+	t.Run("crédito regularización: the leading Credito entry carries the net pending amount", func(t *testing.T) {
+		req := newRegularizacion()
+		req.FormaPago = "credito"
+		req.Cuotas = []model.CuotaCredito{{Numero: 1, Monto: "1062.00", FechaVencimiento: "2024-02-15"}}
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `<cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">1062.00</cbc:Amount>`),
+			"the Credito net pending (err 3251) must be the total NET of anticipos")
+	})
+
+	// SUNAT retired 0104 from catálogo 51 and rejects it with fault 3206, so the
+	// internal anticipo marker must never reach the wire — it degrades to 0101.
+	t.Run("a factura de anticipo emits 0101, never the retired 0104", func(t *testing.T) {
+		req := newTestInvoice()
+		req.OperationType = model.OpAnticipos
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, !strings.Contains(xml, "0104"), "the retired 0104 must not appear anywhere in the XML")
+		is.True(t, strings.Contains(xml, ">0101</cbc:ProfileID>"), "cbc:ProfileID must fall back to 0101")
+		is.True(t, strings.Contains(xml, `listID="0101"`), "InvoiceTypeCode listID must fall back to 0101")
+		is.True(t, !strings.Contains(xml, "<cac:PrepaidPayment>"),
+			"an anticipo factura itself deducts nothing — no PrepaidPayment")
+	})
+
+	t.Run("a regularización factura keeps its own operation type on the wire", func(t *testing.T) {
+		req := newTestInvoice()
+		req.OperationType = model.OpVentaInterna
+		req.Anticipos = []model.Anticipo{
+			{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "118.00", BaseAmount: "100.00"},
+		}
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `listID="0101"`), "InvoiceTypeCode listID must stay 0101")
+		is.True(t, strings.Contains(xml, "<cac:PrepaidPayment>"), "the regularización must declare its anticipos")
+	})
+}
+
 func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {
 	// SUNAT fault 3272: for gravado-gratuito (Cat.07 codes 11-16) the
 	// cac:PricingReference referencial (PriceTypeCode 02) is the IGV-EXCLUSIVE

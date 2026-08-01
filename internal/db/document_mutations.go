@@ -57,6 +57,10 @@ type CreateDocumentInput struct {
 
 	FormaPago *string
 	Cuotas    []model.CuotaCredito
+	Anticipos []model.Anticipo
+	// VentaAnticipoID links this comprobante to a venta con anticipos, whether it
+	// is one of the advances or the factura final. Nil for ordinary comprobantes.
+	VentaAnticipoID *string
 
 	DetraccionCodigo     *string
 	DetraccionPorcentaje *string
@@ -118,9 +122,11 @@ type UpdateDocumentInput struct {
 	TaxInclusiveAmount  *string
 	Notes               *string
 
-	FormaPago   *string
-	Cuotas      []model.CuotaCredito
-	CuotasIsSet bool // true to overwrite (including with nil/empty); false leaves column untouched
+	FormaPago      *string
+	Cuotas         []model.CuotaCredito
+	CuotasIsSet    bool // true to overwrite (including with nil/empty); false leaves column untouched
+	Anticipos      []model.Anticipo
+	AnticiposIsSet bool // same overwrite semantics as CuotasIsSet
 
 	DetraccionCodigo     *string
 	DetraccionPorcentaje *string
@@ -202,6 +208,14 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			}
 			cuotasJSON = b
 		}
+		var anticiposJSON any
+		if in.Anticipos != nil {
+			b, err := json.Marshal(in.Anticipos)
+			if err != nil {
+				return fmt.Errorf("marshal anticipos: %w", err)
+			}
+			anticiposJSON = b
+		}
 		row := tx.QueryRow(ctx, `
 			INSERT INTO issued_documents (
 				tenant_id, company_id, series_id, doc_type, series, correlative, status,
@@ -218,7 +232,9 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				sunat_environment,
 				origin,
 				exchange_rate,
-				billing_period_months
+				billing_period_months,
+				anticipos,
+				venta_anticipo_id
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -234,7 +250,9 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$36,
 				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin,
 				$38,
-				$39
+				$39,
+				$40,
+				$41
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -252,6 +270,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.Origin,
 			in.ExchangeRate,
 			in.BillingPeriodMonths,
+			anticiposJSON,
+			in.VentaAnticipoID,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -421,6 +441,14 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 		} else {
 			b, _ := json.Marshal(in.Cuotas)
 			add("cuotas", b)
+		}
+	}
+	if in.AnticiposIsSet {
+		if in.Anticipos == nil {
+			add("anticipos", nil)
+		} else {
+			b, _ := json.Marshal(in.Anticipos)
+			add("anticipos", b)
 		}
 	}
 	if in.DetraccionCodigo != nil {

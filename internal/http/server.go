@@ -105,6 +105,16 @@ func NewServer(deps Deps) *Server {
 		r.Put("/series/{companyId}/{seriesId}", s.updateSeriesHandler)
 		r.Delete("/series/{companyId}/{seriesId}", s.deleteSeriesHandler)
 
+		// Ventas con anticipos — the deal a set of anticipo facturas belongs to.
+		// A planning entity SUNAT never sees; it exists so the product can report
+		// the saldo still to collect.
+		r.Get("/ventas-anticipo/{companyId}", s.listVentasAnticipoHandler)
+		r.Post("/ventas-anticipo/{companyId}", s.createVentaAnticipoHandler)
+		r.Get("/ventas-anticipo/{companyId}/{ventaId}", s.getVentaAnticipoHandler)
+		r.Put("/ventas-anticipo/{companyId}/{ventaId}", s.updateVentaAnticipoHandler)
+		r.Delete("/ventas-anticipo/{companyId}/{ventaId}", s.deleteVentaAnticipoHandler)
+		r.Get("/ventas-anticipo/{companyId}/{ventaId}/documents", s.listVentaAnticipoDocumentsHandler)
+
 		// Documents.
 		r.Get("/documents/{companyId}", s.listDocumentsHandler)
 		r.Post("/documents/{companyId}", s.createDocumentHandler)
@@ -138,6 +148,7 @@ func NewServer(deps Deps) *Server {
 		r.Get("/reports/{companyId}/tax/breakdown", s.taxBreakdownHandler)
 		r.Get("/reports/{companyId}/tax/notes", s.taxNotesHandler)
 		r.Get("/reports/{companyId}/installments", s.installmentsReportHandler)
+		r.Get("/reports/{companyId}/anticipos", s.anticiposReportHandler)
 		r.Get("/reports/{companyId}/sunat/submissions", s.sunatSubmissionsHandler)
 
 		// Summaries.

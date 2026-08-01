@@ -14,4 +14,5 @@ var (
 	ErrNoBoletas          = errors.New("no unsummarized accepted boletas found for this date")
 	ErrInvalidDocStatus   = errors.New("document not in accepted state")
 	ErrVoidWindowExpired  = errors.New("document past the 7-day void window")
+	ErrVentaHasDocuments  = errors.New("venta con anticipos has associated documents")
 )

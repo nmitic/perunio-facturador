@@ -337,6 +337,62 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 	return errs
 }
 
+// validateAnticipos guards the anticipos a factura de regularización applies.
+// v1 scope: facturas only, no mixing with detracción (the SPOT monto is
+// computed over the full operation total while the payable is net of the
+// anticipos, a combination never verified against SUNAT), and gravado-only
+// anticipos — each BaseAmount must be its TotalAmount net of 18% IGV. Their
+// totals together may not exceed the total of the comprobante.
+func validateAnticipos(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	if len(req.Anticipos) == 0 {
+		return errs
+	}
+	if req.DocType != model.DocTypeFactura {
+		return append(errs, model.ValidationError{Code: 2800, Message: "anticipos solo aplican a facturas", Field: "anticipos"})
+	}
+	if req.Detraccion != nil {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "anticipos y detracción no pueden combinarse en el mismo comprobante", Field: "anticipos"})
+	}
+	if req.OperationType == model.OpAnticipos {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "una factura de anticipo (0104) no puede aplicar anticipos", Field: "operationType"})
+	}
+
+	var totalSum float64
+	for i, a := range req.Anticipos {
+		field := fmt.Sprintf("anticipos[%d]", i)
+		switch a.DocTypeCode {
+		case "02", "03":
+		default:
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "docTypeCode de anticipo debe ser 02 (factura) o 03 (boleta)", Field: field + ".docTypeCode"})
+		}
+		total, _ := strconv.ParseFloat(a.TotalAmount, 64)
+		base, _ := strconv.ParseFloat(a.BaseAmount, 64)
+		if total <= 0 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "monto de anticipo debe ser mayor a 0", Field: field + ".totalAmount"})
+			continue
+		}
+		if base <= 0 || base >= total {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "base de anticipo debe ser mayor a 0 y menor al total con IGV", Field: field + ".baseAmount"})
+			continue
+		}
+		// Gravado-only in v1: total must be base + 18% IGV (±2 cents rounding).
+		if diff := base*1.18 - total; diff > 0.02 || diff < -0.02 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("anticipo %s: total %.2f no equivale a base %.2f más IGV 18%%", a.DocID, total, base), Field: field + ".baseAmount"})
+		}
+		totalSum += total
+	}
+
+	// Los anticipos se deducen del total de la venta (cbc:PrepaidAmount), no de
+	// la base imponible, así que el límite es ese total: pasarse dejaría un
+	// PayableAmount negativo. Ver buildLegalMonetaryTotal.
+	taxInclusive, _ := strconv.ParseFloat(req.TaxInclusiveAmount, 64)
+	if totalSum > taxInclusive+0.01 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "la suma de anticipos no puede exceder el total del comprobante", Field: "anticipos"})
+	}
+	return errs
+}
+
 // validateDetraccion guards the detracción (SPOT). It is nil for the vast
 // majority of documents. When present it must sit on a factura, or on a nota de
 // crédito/débito that references a factura (SUNAT allows detracción only on

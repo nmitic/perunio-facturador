@@ -22,8 +22,14 @@ type DocumentListFilter struct {
 	// Payment narrows by derived payment status: "pagado" | "parcial" |
 	// "pendiente" | "vencido" (any past-due cuota with balance). Empty = all.
 	Payment string
-	Page    int
-	Limit   int
+	// OperationType narrows by Cat.51 tipo de operación (e.g. "0104" to list
+	// anticipo facturas for the regularización picker). Empty = all.
+	OperationType string
+	// VentaAnticipoID narrows to the comprobantes of one venta con anticipos —
+	// its advances plus the factura final. Empty = all.
+	VentaAnticipoID string
+	Page            int
+	Limit           int
 }
 
 // paymentRollupJoin is a LATERAL subquery over `issued_documents d` that derives
@@ -121,7 +127,7 @@ const issuedDocumentColumns = `
 	billing_period_months,
 	total_amount,
 	tax_inclusive_amount, notes,
-	forma_pago, cuotas,
+	forma_pago, cuotas, anticipos, venta_anticipo_id,
 	paid_at, payment_method, payment_reference, payment_notes,
 	reference_doc_type, reference_doc_series, reference_doc_correlative,
 	credit_debit_reason_code, credit_debit_reason_desc,
@@ -143,9 +149,9 @@ const issuedDocumentColumns = `
 // documentScanDest returns the ordered Scan destinations for issuedDocumentColumns.
 // Exposed so callers that SELECT issuedDocumentColumns plus extra trailing columns
 // (e.g. the historial's derived payment rollup) can append their own destinations
-// without duplicating this ~45-field list. cuotasRaw/observationsRaw receive the
-// raw jsonb, decoded by finishDocumentScan.
-func documentScanDest(d *model.IssuedDocument, cuotasRaw, observationsRaw *[]byte) []any {
+// without duplicating this ~45-field list. cuotasRaw/anticiposRaw/observationsRaw
+// receive the raw jsonb, decoded by finishDocumentScan.
+func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observationsRaw *[]byte) []any {
 	return []any{
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
 		&d.SunatEnvironment,
@@ -156,7 +162,7 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, observationsRaw *[]byt
 		&d.BillingPeriodMonths,
 		&d.TotalAmount,
 		&d.TaxInclusiveAmount, &d.Notes,
-		&d.FormaPago, cuotasRaw,
+		&d.FormaPago, cuotasRaw, anticiposRaw, &d.VentaAnticipoID,
 		&d.PaidAt, &d.PaymentMethod, &d.PaymentReference, &d.PaymentNotes,
 		&d.ReferenceDocType, &d.ReferenceDocSeries, &d.ReferenceDocCorrelative,
 		&d.CreditDebitReasonCode, &d.CreditDebitReasonDesc,
@@ -170,10 +176,15 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, observationsRaw *[]byt
 }
 
 // finishDocumentScan decodes the raw jsonb captured by documentScanDest.
-func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, observationsRaw []byte) error {
+func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observationsRaw []byte) error {
 	if len(cuotasRaw) > 0 {
 		if err := json.Unmarshal(cuotasRaw, &d.Cuotas); err != nil {
 			return fmt.Errorf("unmarshal cuotas: %w", err)
+		}
+	}
+	if len(anticiposRaw) > 0 {
+		if err := json.Unmarshal(anticiposRaw, &d.Anticipos); err != nil {
+			return fmt.Errorf("unmarshal anticipos: %w", err)
 		}
 	}
 	if len(observationsRaw) > 0 {
@@ -185,11 +196,11 @@ func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, observationsRaw []by
 }
 
 func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
-	var cuotasRaw, observationsRaw []byte
-	if err := row.Scan(documentScanDest(d, &cuotasRaw, &observationsRaw)...); err != nil {
+	var cuotasRaw, anticiposRaw, observationsRaw []byte
+	if err := row.Scan(documentScanDest(d, &cuotasRaw, &anticiposRaw, &observationsRaw)...); err != nil {
 		return err
 	}
-	return finishDocumentScan(d, cuotasRaw, observationsRaw)
+	return finishDocumentScan(d, cuotasRaw, anticiposRaw, observationsRaw)
 }
 
 // ListIssuedDocuments returns a paginated slice of issued documents for the
@@ -216,6 +227,14 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 	if filter.Status != "" {
 		args = append(args, filter.Status)
 		conditions = append(conditions, fmt.Sprintf("d.status = $%d", len(args)))
+	}
+	if filter.OperationType != "" {
+		args = append(args, filter.OperationType)
+		conditions = append(conditions, fmt.Sprintf("d.operation_type = $%d", len(args)))
+	}
+	if filter.VentaAnticipoID != "" {
+		args = append(args, filter.VentaAnticipoID)
+		conditions = append(conditions, fmt.Sprintf("d.venta_anticipo_id = $%d", len(args)))
 	}
 	if filter.Customer != "" {
 		// Free-text search over name + doc number. LIKE metacharacters in the raw
@@ -273,16 +292,16 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 
 		for rows.Next() {
 			var d model.IssuedDocument
-			var cuotasRaw, observationsRaw []byte
+			var cuotasRaw, anticiposRaw, observationsRaw []byte
 			var paymentStatus *string // NULL for an un-marked contado doc
 			var overdue bool
 			var clienteID *string // NULL when the customer isn't a saved cliente
-			dest := documentScanDest(&d, &cuotasRaw, &observationsRaw)
+			dest := documentScanDest(&d, &cuotasRaw, &anticiposRaw, &observationsRaw)
 			dest = append(dest, &paymentStatus, &overdue, &clienteID)
 			if err := rows.Scan(dest...); err != nil {
 				return err
 			}
-			if err := finishDocumentScan(&d, cuotasRaw, observationsRaw); err != nil {
+			if err := finishDocumentScan(&d, cuotasRaw, anticiposRaw, observationsRaw); err != nil {
 				return err
 			}
 			d.PaymentStatus = paymentStatus
