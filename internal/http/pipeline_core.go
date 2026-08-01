@@ -362,6 +362,12 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		MarkSent:                 true,
 		MarkAccepted:             parsedCDR.Accepted,
 	}
+	// Stamp the cuenta BN that actually went out when the draft inherited the
+	// company default, so the printed comprobante keeps naming the account the
+	// signed XML named even after the company changes it.
+	if issueReq.Detraccion != nil && doc.DetraccionCuentaBN == nil && issueReq.Detraccion.CuentaBN != "" {
+		dbResult.DetraccionCuentaBN = &issueReq.Detraccion.CuentaBN
+	}
 	updated, err := s.pool.ApplyIssueResult(ctx, docID, dbResult)
 	if err != nil {
 		s.log.Error("apply issue result", "error", err, "docId", docID)

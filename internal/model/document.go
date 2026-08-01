@@ -1,5 +1,10 @@
 package model
 
+import (
+	"math"
+	"strconv"
+)
+
 // IssueRequest is the payload the backend sends to issue a document.
 type IssueRequest struct {
 	// Supplier
@@ -90,6 +95,67 @@ type IssueRequest struct {
 	SunatUsername string `json:"sunatUsername"`
 	SunatPassword string `json:"sunatPassword"`
 	Environment   string `json:"environment"` // "beta" or "production"
+}
+
+// DetraccionEnMoneda returns the detracción converted into the document's own
+// currency, and whether the conversion was possible.
+//
+// The monto is always declared in soles (SUNAT liquidates the SPOT in PEN), so a
+// USD or EUR document has to divide by its tipo de cambio to state anything about
+// the detracción in the currency the rest of the comprobante is written in. With
+// no usable rate the caller gets ok=false and must not guess — validateDetraccion
+// requires the exchangeRate precisely so this never happens on a real emission.
+func (r IssueRequest) DetraccionEnMoneda() (float64, bool) {
+	if r.Detraccion == nil {
+		return 0, false
+	}
+	monto, err := strconv.ParseFloat(r.Detraccion.Monto, 64)
+	if err != nil {
+		return 0, false
+	}
+	if r.CurrencyCode == "" || r.CurrencyCode == "PEN" {
+		return monto, true
+	}
+	rate, err := strconv.ParseFloat(r.ExchangeRate, 64)
+	if err != nil || rate <= 0 {
+		return 0, false
+	}
+	return math.Round(monto/rate*100) / 100, true
+}
+
+// NetoPendientePago is the "monto neto pendiente de pago": what the receptor
+// actually transfers to the emisor, in the document's own currency.
+//
+// The receptor splits their payment in two: the detracción goes into the
+// EMISOR'S OWN cuenta de detracciones at the Banco de la Nación — a restricted
+// account they may only draw on to pay their own taxes — and only the remainder
+// reaches the emisor's operating account. So the detracción is not a tax the
+// emisor pays, but it is not money the receptor still owes them either, and it
+// comes off the payable total. TotalAmount is cbc:PayableAmount, already net of
+// anticipos, which is the other deduction.
+//
+// It is also why the detracción can never sit inside a cuota: it falls due at
+// payment (or the 5th business day of the following month, whichever is first)
+// no matter what credit terms the comprobante grants, so it is never financed.
+//
+// SUNAT keys the forma de pago a crédito on this figure and not on TotalAmount:
+// the leading cac:PaymentTerms "Credito" carries it and the cuotas must add up to
+// it. Printed representations state it as "Neto a pagar".
+//
+// Without detracción it is simply the payable, so callers can use it unguarded.
+func (r IssueRequest) NetoPendientePago() float64 {
+	total, err := strconv.ParseFloat(r.TotalAmount, 64)
+	if err != nil {
+		return 0
+	}
+	monto, ok := r.DetraccionEnMoneda()
+	if !ok {
+		return total
+	}
+	if neto := math.Round((total-monto)*100) / 100; neto > 0 {
+		return neto
+	}
+	return 0
 }
 
 // Anticipo is one prior advance-payment comprobante applied to (deducted

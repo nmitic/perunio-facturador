@@ -212,8 +212,12 @@ func buildPaymentTerms(req model.IssueRequest) []paymentTerms {
 		return []paymentTerms{{ID: "FormaPago", PaymentMeansID: "Contado"}}
 	}
 	out := make([]paymentTerms, 0, len(req.Cuotas)+1)
-	// SUNAT err 3251: leading Credito entry must carry the net pending amount.
-	netPending := newCurrencyAmount(req.TotalAmount, req.CurrencyCode)
+	// SUNAT err 3251: leading Credito entry must carry the net pending amount —
+	// the PAYABLE MINUS THE DETRACCIÓN, not the payable. The receptor deposits the
+	// detracción into the emisor's restricted cuenta at the Banco de la Nación and
+	// owes only the remainder on credit, so the cuotas below add up to this figure
+	// and not to TotalAmount. See model.NetoPendientePago.
+	netPending := newCurrencyAmount(formatDecimal(req.NetoPendientePago()), req.CurrencyCode)
 	out = append(out, paymentTerms{ID: "FormaPago", PaymentMeansID: "Credito", Amount: &netPending})
 	for _, c := range req.Cuotas {
 		amt := newCurrencyAmount(c.Monto, req.CurrencyCode)

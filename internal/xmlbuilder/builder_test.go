@@ -159,7 +159,8 @@ func TestBuildDocumentXML_PaymentTerms(t *testing.T) {
 		is.NotError(t, err)
 		xml := string(xmlBytes)
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>`), "should have Credito entry")
-		// SUNAT err 3251: leading Credito entry must carry net pending amount = TotalAmount.
+		// SUNAT err 3251: leading Credito entry must carry the net pending amount,
+		// which without detracción is just TotalAmount.
 		is.True(t, strings.Contains(xml, `<cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">1180.00</cbc:Amount></cac:PaymentTerms>`), "Credito entry should include net pending Amount")
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>`), "should have Cuota001")
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Cuota002</cbc:PaymentMeansID>`), "should have Cuota002")
@@ -212,6 +213,45 @@ func TestBuildDocumentXML_Detraccion(t *testing.T) {
 		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
 		is.NotError(t, err)
 		assertDetraccion(t, string(xmlBytes))
+	})
+
+	// The receptor deposits the detracción into the emisor's restricted BN cuenta
+	// and owes only the rest on credit, so the monto neto pendiente de pago is the
+	// payable MINUS the detracción and the cuotas settle that. 1180.00 − 141.60 =
+	// 1038.40.
+	t.Run("a crédito sujeto a detracción declares the neto pendiente, not the total", func(t *testing.T) {
+		req := newTestInvoice()
+		req.OperationType = "1001"
+		req.Detraccion = det
+		req.FormaPago = "credito"
+		req.Cuotas = []model.CuotaCredito{
+			{Numero: 1, Monto: "1038.40", FechaVencimiento: "2024-02-15"},
+		}
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, strings.Contains(xml, `<cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">1038.40</cbc:Amount></cac:PaymentTerms>`), "Credito Amount is the payable net of the detracción")
+		is.True(t, !strings.Contains(xml, `<cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">1180.00</cbc:Amount>`), "the full payable is not what stays pending")
+		assertDetraccion(t, xml)
+	})
+
+	// A USD document declares its detracción in soles, so the neto pendiente has
+	// to convert back: 141.60 PEN ÷ 3.540 = 40.00 USD off a 1180.00 USD payable.
+	t.Run("a USD crédito converts the detracción with its tipo de cambio", func(t *testing.T) {
+		req := newTestInvoice()
+		req.CurrencyCode = "USD"
+		req.ExchangeRate = "3.540"
+		req.OperationType = "1001"
+		req.Detraccion = det
+		req.FormaPago = "credito"
+		req.Cuotas = []model.CuotaCredito{
+			{Numero: 1, Monto: "1140.00", FechaVencimiento: "2024-02-15"},
+		}
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="USD">1140.00</cbc:Amount>`), "neto pendiente is stated in the document's currency")
+		is.True(t, strings.Contains(xml, `<cbc:Amount currencyID="PEN">141.60</cbc:Amount>`), "the detracción itself stays in soles")
 	})
 
 	t.Run("document without detracción emits no detracción markup", func(t *testing.T) {

@@ -442,6 +442,16 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "monto de detracción debe ser mayor a 0", Field: "detraccion.monto"})
 	}
 
+	// The monto is in soles while the document is not, so without a tipo de
+	// cambio the neto pendiente de pago cannot be computed — and that figure is
+	// what the cuotas must add up to and what the printed comprobante states as
+	// "neto a pagar". Required rather than assumed.
+	if req.CurrencyCode != "" && req.CurrencyCode != "PEN" {
+		if rate, err := strconv.ParseFloat(req.ExchangeRate, 64); err != nil || rate <= 0 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "indique el tipo de cambio: la detracción se declara en soles y el comprobante está en " + req.CurrencyCode, Field: "exchangeRate"})
+		}
+	}
+
 	// Arithmetic check only for PEN — detracción monto is always in soles, so a
 	// non-PEN document declares a converted amount we can't reconcile here
 	// (handled upstream). Guard against false negatives by skipping it.
@@ -489,7 +499,8 @@ func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 
 // validatePaymentTerms enforces SUNAT rules around forma de pago.
 // SUNAT err 3244 fires when missing entirely; for credit sales the cuotas must
-// add up (within ±1 cent) to the total payable amount.
+// add up (within ±1 cent) to the monto neto pendiente de pago — the payable, less
+// the detracción when the operation is subject to SPOT.
 func validatePaymentTerms(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 
@@ -533,13 +544,25 @@ func validatePaymentTerms(req model.IssueRequest) []model.ValidationError {
 		}
 		sum += amt
 	}
-	total, err := strconv.ParseFloat(req.TotalAmount, 64)
-	if err == nil && math.Abs(sum-total) > 0.01 {
-		errs = append(errs, model.ValidationError{
-			Code:    3244,
-			Message: fmt.Sprintf("la suma de cuotas (%.2f) no coincide con totalAmount (%.2f)", sum, total),
-			Field:   "cuotas",
-		})
+	// The cuotas settle the monto neto pendiente de pago, which on a comprobante
+	// sujeto a detracción is the payable MINUS the detracción: the receptor
+	// deposits that part straight into the emisor's restricted BN cuenta, on its
+	// own legal deadline, so it is never owed on credit and never falls due on a
+	// cuota. Without detracción this is just totalAmount and the check is
+	// unchanged. See model.NetoPendientePago.
+	if _, err := strconv.ParseFloat(req.TotalAmount, 64); err == nil {
+		neto := req.NetoPendientePago()
+		if math.Abs(sum-neto) > 0.01 {
+			label := "totalAmount"
+			if req.Detraccion != nil {
+				label = "el neto pendiente de pago (total menos detracción)"
+			}
+			errs = append(errs, model.ValidationError{
+				Code:    3244,
+				Message: fmt.Sprintf("la suma de cuotas (%.2f) no coincide con %s (%.2f)", sum, label, neto),
+				Field:   "cuotas",
+			})
+		}
 	}
 	return errs
 }

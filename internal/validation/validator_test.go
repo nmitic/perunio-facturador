@@ -421,3 +421,70 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, !hasErrorField(errs, "anticipos"), "anticipos may cover the sale exactly")
 	})
 }
+
+// newCreditoInvoice is a factura a crédito settled in one cuota. The cuota
+// carries the whole payable, which is what "no detracción" looks like.
+func newCreditoInvoice() model.IssueRequest {
+	req := newValidInvoice()
+	req.FormaPago = "credito"
+	req.Cuotas = []model.CuotaCredito{
+		{Numero: 1, Monto: "1180.00", FechaVencimiento: "2024-02-15"},
+	}
+	return req
+}
+
+func TestValidatePaymentTerms(t *testing.T) {
+	t.Run("cuotas adding up to the total pass when there is no detracción", func(t *testing.T) {
+		errs := validation.Validate(newCreditoInvoice())
+		is.True(t, !hasErrorField(errs, "cuotas"), "one cuota for the whole payable is valid")
+	})
+
+	// With detracción the cuotas settle the monto neto pendiente de pago: the
+	// receptor deposits the 141.60 into the Banco de la Nación and owes the
+	// emisor only 1038.40, so a cuota for the full 1180.00 is wrong.
+	tests := []struct {
+		name     string
+		cuota    string
+		rejected bool
+	}{
+		{name: "a cuota for the neto pendiente (total menos detracción) passes", cuota: "1038.40", rejected: false},
+		{name: "a cuota for the full total is rejected when there is detracción", cuota: "1180.00", rejected: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := newCreditoInvoice()
+			req.OperationType = "1001"
+			req.Detraccion = newDetraccion()
+			req.Cuotas = []model.CuotaCredito{
+				{Numero: 1, Monto: test.cuota, FechaVencimiento: "2024-02-15"},
+			}
+			errs := validation.Validate(req)
+			is.Equal(t, test.rejected, hasErrorField(errs, "cuotas"))
+		})
+	}
+
+	t.Run("a USD comprobante con detracción converts the neto with its tipo de cambio", func(t *testing.T) {
+		// 1180.00 USD with a 141.60 PEN detracción at 3.540 → 40.00 USD off the
+		// payable, so 1140.00 USD is what the receptor still owes the emisor.
+		req := newCreditoInvoice()
+		req.CurrencyCode = "USD"
+		req.ExchangeRate = "3.540"
+		req.OperationType = "1001"
+		req.Detraccion = newDetraccion()
+		req.Cuotas = []model.CuotaCredito{
+			{Numero: 1, Monto: "1140.00", FechaVencimiento: "2024-02-15"},
+		}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "cuotas"), "the detracción converts at the declared rate")
+		is.True(t, !hasErrorField(errs, "exchangeRate"), "a rate was declared")
+	})
+
+	t.Run("a foreign-currency detracción without tipo de cambio is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.CurrencyCode = "USD"
+		req.OperationType = "1001"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "exchangeRate"), "soles cannot be netted off a USD total without a rate")
+	})
+}

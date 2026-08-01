@@ -351,8 +351,15 @@ type IssuedDocumentResult struct {
 	R2CdrKey                 *string
 	R2PdfKey                 *string
 	QRData                   *string
-	MarkSent                 bool
-	MarkAccepted             bool
+	// DetraccionCuentaBN stamps the cuenta del Banco de la Nación the document
+	// actually declared to SUNAT. Drafts usually leave it null and inherit the
+	// company default at issue time, but the comprobante is a fiscal record: its
+	// printed representation has to state the account the receptor must deposit
+	// into, and that must keep matching the signed XML even after the company
+	// changes accounts. Nil leaves whatever the row already has.
+	DetraccionCuentaBN *string
+	MarkSent           bool
+	MarkAccepted       bool
 }
 
 // ApplyIssueResult writes the pipeline outcome back to issued_documents and
@@ -397,6 +404,9 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 		}
 		if res.QRData != nil {
 			add("qr_data", *res.QRData)
+		}
+		if res.DetraccionCuentaBN != nil {
+			add("detraccion_cuenta_bn", *res.DetraccionCuentaBN)
 		}
 		if res.MarkSent {
 			set = append(set, "sent_at = COALESCE(sent_at, now())")
