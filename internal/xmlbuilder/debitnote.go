@@ -62,7 +62,7 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 
 		UBLVersionID:    UBLVersion21,
 		CustomizationID: CustomizationID20,
-		ProfileID:       newProfileID(req.OperationType),
+		ProfileID:       newProfileID(req.OperationType, req.Detraccion),
 		ID:              docID,
 		IssueDate:       req.IssueDate,
 		IssueTime:       req.IssueTime,

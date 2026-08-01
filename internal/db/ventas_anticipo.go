@@ -61,10 +61,17 @@ const ventaAnticipoColumns = `v.id, v.tenant_id, v.company_id, v.sunat_environme
 // deducts the anticipos through cbc:PrepaidAmount), so together they add up to
 // exactly the monto acordado — the deal reads 100% cobrado / saldo 0 once it is
 // regularizada, instead of hanging at "everything but the last payment".
+//
+// detraccion_declarada sums the same way and for the same reason: the SPOT
+// obligation arises per payment, over the importe of the comprobante that
+// documents it, so each anticipo deposits its own share and the factura final
+// deposits on the saldo. Summed across the deal they come to porcentaje × monto
+// acordado, which is what makes the figure worth showing.
 const ventaAnticipoDerived = `
 	LEFT JOIN LATERAL (
 		SELECT
 			COALESCE(SUM(d.total_amount), 0)                                          AS cobrado,
+			COALESCE(SUM(d.detraccion_monto), 0)                                      AS detraccion_declarada,
 			COUNT(*) FILTER (WHERE d.operation_type = '0104')::int                    AS anticipo_count,
 			MAX(d.id::text)   FILTER (WHERE d.operation_type IS DISTINCT FROM '0104') AS final_id,
 			MAX(d.series || '-' || lpad(d.correlative::text, 8, '0'))
@@ -79,6 +86,7 @@ const ventaAnticipoDerived = `
 // money subtraction rather than float64 in Go.
 const ventaAnticipoDerivedColumns = `agg.cobrado,
 	(v.monto_acordado - agg.cobrado) AS saldo,
+	agg.detraccion_declarada,
 	agg.anticipo_count, agg.final_id, agg.final_code`
 
 func scanVentaAnticipo(row pgx.Row, v *model.VentaAnticipo) error {
@@ -86,7 +94,8 @@ func scanVentaAnticipo(row pgx.Row, v *model.VentaAnticipo) error {
 		&v.ID, &v.TenantID, &v.CompanyID, &v.SunatEnvironment,
 		&v.Nombre, &v.Descripcion, &v.CustomerDocType, &v.CustomerDocNumber, &v.CustomerName,
 		&v.CurrencyCode, &v.MontoAcordado, &v.FormData, &v.Cancelada, &v.CreatedAt, &v.UpdatedAt,
-		&v.Cobrado, &v.Saldo, &v.AnticipoCount, &v.FinalDocumentID, &v.FinalDocumentCode,
+		&v.Cobrado, &v.Saldo, &v.DetraccionDeclarada,
+		&v.AnticipoCount, &v.FinalDocumentID, &v.FinalDocumentCode,
 	); err != nil {
 		return err
 	}

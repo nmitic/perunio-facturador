@@ -338,11 +338,15 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 }
 
 // validateAnticipos guards the anticipos a factura de regularización applies.
-// v1 scope: facturas only, no mixing with detracción (the SPOT monto is
-// computed over the full operation total while the payable is net of the
-// anticipos, a combination never verified against SUNAT), and gravado-only
-// anticipos — each BaseAmount must be its TotalAmount net of 18% IGV. Their
-// totals together may not exceed the total of the comprobante.
+// Scope: facturas only, and gravado-only anticipos — each BaseAmount must be
+// its TotalAmount net of 18% IGV. Their totals together may not exceed the
+// total of the comprobante.
+//
+// Detracción is allowed alongside: the SPOT obligation arises per payment and
+// is computed on the monto of the comprobante documenting it, so this factura's
+// detracción sits on its PayableAmount (the saldo, net of the anticipos) while
+// each anticipo already declared SPOT on what it collected. validateDetraccion
+// enforces that base.
 func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 	if len(req.Anticipos) == 0 {
@@ -350,9 +354,6 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 	}
 	if req.DocType != model.DocTypeFactura {
 		return append(errs, model.ValidationError{Code: 2800, Message: "anticipos solo aplican a facturas", Field: "anticipos"})
-	}
-	if req.Detraccion != nil {
-		errs = append(errs, model.ValidationError{Code: 2800, Message: "anticipos y detracción no pueden combinarse en el mismo comprobante", Field: "anticipos"})
 	}
 	if req.OperationType == model.OpAnticipos {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "una factura de anticipo (0104) no puede aplicar anticipos", Field: "operationType"})
@@ -397,8 +398,15 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 // majority of documents. When present it must sit on a factura, or on a nota de
 // crédito/débito that references a factura (SUNAT allows detracción only on
 // operations that a factura documents — never on boletas). It requires
-// operationType 1001/1002, a resolved cuenta BN, and — for PEN documents — a
-// monto within ±1 cent of porcentaje × total.
+// operationType 1001/1002 — or 0104, the anticipo marker, which xmlbuilder maps
+// onto 1001/1002 on the wire — a resolved cuenta BN, and, for PEN documents, a
+// monto within ±1 cent of porcentaje × TotalAmount.
+//
+// TotalAmount is the document's cbc:PayableAmount, and that is deliberate: the
+// SPOT base is the importe of the comprobante that documents the payment. On a
+// factura de regularización the payable is already net of the anticipos, so the
+// detracción covers only the saldo being collected — each anticipo declared its
+// own share when it was issued, and the deposits sum to porcentaje × operación.
 func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 	d := req.Detraccion
@@ -417,8 +425,10 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "detracción solo aplica a facturas (no boletas)", Field: "detraccion"})
 	}
 
-	if req.OperationType != model.OpDetraccion && req.OperationType != model.OpDetraccionTransporte {
-		errs = append(errs, model.ValidationError{Code: 2800, Message: "operationType debe ser 1001/1002 para operación sujeta a detracción", Field: "operationType"})
+	switch req.OperationType {
+	case model.OpDetraccion, model.OpDetraccionTransporte, model.OpAnticipos:
+	default:
+		errs = append(errs, model.ValidationError{Code: 2800, Message: "operationType debe ser 1001/1002 (o 0104 para una factura de anticipo) en una operación sujeta a detracción", Field: "operationType"})
 	}
 	if strings.TrimSpace(d.Codigo) == "" {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "código de detracción requerido (Cat.54)", Field: "detraccion.codigo"})
@@ -435,12 +445,21 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	// Arithmetic check only for PEN — detracción monto is always in soles, so a
 	// non-PEN document declares a converted amount we can't reconcile here
 	// (handled upstream). Guard against false negatives by skipping it.
+	total, _ := strconv.ParseFloat(req.TotalAmount, 64)
 	if req.CurrencyCode == "PEN" {
 		pct, _ := strconv.ParseFloat(d.Porcentaje, 64)
-		total, _ := strconv.ParseFloat(req.TotalAmount, 64)
 		expected := total * pct / 100
 		if diff := monto - expected; diff > 0.01 || diff < -0.01 {
 			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f no coincide con %s%% de %.2f", monto, d.Porcentaje, total), Field: "detraccion.monto"})
+		}
+
+		// The deposit comes out of what this comprobante collects, so it can
+		// never exceed it. Unreachable while the porcentaje check above holds
+		// (no Cat.54 rate is above 100%), but it is the failure mode of getting
+		// the base wrong — e.g. computing SPOT over the whole operación on a
+		// factura de regularización whose payable is only the saldo.
+		if monto > total+0.01 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f excede el total a pagar del comprobante %.2f", monto, total), Field: "detraccion.monto"})
 		}
 	}
 

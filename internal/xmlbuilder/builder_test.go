@@ -965,6 +965,93 @@ func TestBuildDocumentXML_Anticipos(t *testing.T) {
 	})
 }
 
+// TestBuildDocumentXML_AnticipoConDetraccion covers the tipo de operación an
+// anticipo declares once SPOT enters the picture. The 0104 marker still never
+// reaches the wire, but a factura de anticipo sujeta a detracción goes out as
+// an operación sujeta a detracción (1001/1002) rather than a venta interna,
+// because that is the code SUNAT pairs with the leyenda 2006 + cuenta BN block.
+func TestBuildDocumentXML_AnticipoConDetraccion(t *testing.T) {
+	// The anticipo collects 1180.00 and deposits 12% of exactly that — SPOT is
+	// computed on the comprobante documenting the payment, not on the eventual
+	// operación.
+	newDet := func(codigo string) *model.Detraccion {
+		return &model.Detraccion{Codigo: codigo, Porcentaje: "12.00", Monto: "141.60", CuentaBN: "00-123-456789"}
+	}
+
+	tests := []struct {
+		name          string
+		operationType string
+		detraccion    *model.Detraccion
+		expected      string
+	}{
+		{name: "an anticipo without detracción stays a venta interna", operationType: model.OpAnticipos, detraccion: nil, expected: "0101"},
+		{name: "an anticipo sujeto a detracción declares 1001", operationType: model.OpAnticipos, detraccion: newDet("019"), expected: "1001"},
+		{name: "an anticipo de transporte de carga (027) declares 1002", operationType: model.OpAnticipos, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1002"},
+		{name: "a plain factura sujeta a detracción is unaffected", operationType: model.OpDetraccion, detraccion: newDet("019"), expected: "1001"},
+		{name: "an explicit 1002 is unaffected", operationType: model.OpDetraccionTransporte, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1002"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := newTestInvoice()
+			req.OperationType = test.operationType
+			req.Detraccion = test.detraccion
+
+			xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+			is.NotError(t, err)
+			xml := string(xmlBytes)
+
+			is.True(t, strings.Contains(xml, ">"+test.expected+"</cbc:ProfileID>"), "cbc:ProfileID must be "+test.expected)
+			is.True(t, strings.Contains(xml, `listID="`+test.expected+`"`), "InvoiceTypeCode listID must be "+test.expected)
+			is.True(t, !strings.Contains(xml, "0104"), "the retired 0104 must never reach the wire")
+		})
+	}
+
+	t.Run("an anticipo sujeto a detracción emits the full SPOT block", func(t *testing.T) {
+		req := newTestInvoice()
+		req.OperationType = model.OpAnticipos
+		req.Detraccion = newDet("019")
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		is.True(t, strings.Contains(xml, `<cbc:Note languageLocaleID="2006">`), "should emit leyenda 2006")
+		is.True(t, strings.Contains(xml, `<cac:PaymentMeans><cbc:ID>Detraccion</cbc:ID><cbc:PaymentMeansCode>999</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>00-123-456789</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>`), "should emit cuenta BN PaymentMeans")
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>019</cbc:PaymentMeansID><cbc:PaymentPercent>12.00</cbc:PaymentPercent><cbc:Amount currencyID="PEN">141.60</cbc:Amount>`), "should emit detracción PaymentTerms")
+	})
+
+	// The hybrid amount model (gross totales + one Cat.53 "04" AllowanceCharge
+	// per anticipo) is what SUNAT accepted; the detracción block rides alongside
+	// it without disturbing any of those figures.
+	t.Run("a regularización sujeta a detracción keeps the hybrid anticipo shape", func(t *testing.T) {
+		req := newTestInvoice()
+		req.Notes = nil
+		req.OperationType = model.OpDetraccion
+		req.TotalAmount = "1062.00" // 1180.00 sale − 118.00 already collected
+		req.Anticipos = []model.Anticipo{{
+			DocID: "F001-00000042", DocTypeCode: "02",
+			TotalAmount: "118.00", BaseAmount: "100.00",
+		}}
+		// 12% of the 1062.00 payable — the anticipo deposited its own 14.16, so
+		// together they come to 141.60 = 12% of the 1180.00 operación.
+		req.Detraccion = &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "127.44", CuentaBN: "00-123-456789"}
+
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// The sale is still declared in full, reduced only by the Cat.53 "04"
+		// allowance, and the anticipo still comes off exactly once as Prepaid.
+		is.True(t, strings.Contains(xml, `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>04</cbc:AllowanceChargeReasonCode><cbc:Amount currencyID="PEN">100.00</cbc:Amount></cac:AllowanceCharge>`), "should keep the Cat.53 04 allowance")
+		is.True(t, strings.Contains(xml, `<cbc:TaxInclusiveAmount currencyID="PEN">1180.00</cbc:TaxInclusiveAmount>`), "TaxInclusiveAmount stays gross")
+		is.True(t, strings.Contains(xml, `<cbc:PrepaidAmount currencyID="PEN">118.00</cbc:PrepaidAmount>`), "should deduct the anticipo as PrepaidAmount")
+		is.True(t, strings.Contains(xml, `<cbc:PayableAmount currencyID="PEN">1062.00</cbc:PayableAmount>`), "PayableAmount is the saldo")
+		// …and the SPOT sits on that saldo.
+		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>019</cbc:PaymentMeansID><cbc:PaymentPercent>12.00</cbc:PaymentPercent><cbc:Amount currencyID="PEN">127.44</cbc:Amount>`), "detracción is 12% of the payable")
+	})
+}
+
 func TestBuildDocumentXML_GravadoGratuitoReferential(t *testing.T) {
 	// SUNAT fault 3272: for gravado-gratuito (Cat.07 codes 11-16) the
 	// cac:PricingReference referencial (PriceTypeCode 02) is the IGV-EXCLUSIVE

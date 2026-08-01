@@ -593,6 +593,17 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 	}
 }
 
+// detraccionOperationType returns the catálogo 51 code a document sujeto a
+// detracción must declare: "1002" for el transporte de bienes por vía terrestre
+// (Cat.54 código 027, which SUNAT tracks separately because its base is the
+// mayor between importe and valor referencial), "1001" for everything else.
+func detraccionOperationType(d *model.Detraccion) string {
+	if d != nil && d.Codigo == model.DetraccionTransporteCarga {
+		return model.OpDetraccionTransporte
+	}
+	return model.OpDetraccion
+}
+
 // sunatOperationType maps an internally stored tipo de operación onto the code
 // SUNAT's cat_51.xml actually accepts.
 //
@@ -600,23 +611,33 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 // rejects it outright with fault 3206 ("no se encuentra en el catalogo: 51").
 // We still store it on the document as the marker that a factura *is* an
 // anticipo — it drives the anticipos report, the historial picker and the UI
-// badge — but on the wire an anticipo is an ordinary venta interna. What makes
-// the final factura a regularización is the PrepaidPayment / AllowanceCharge
-// "04" block, not the operation type.
-func sunatOperationType(operationType string) string {
+// badge — but it never reaches the wire. What makes the final factura a
+// regularización is the PrepaidPayment / AllowanceCharge "04" block, not the
+// operation type.
+//
+// A factura de anticipo can also be sujeta a detracción: the SPOT obligation
+// arises per payment, computed on the monto of the comprobante that documents
+// it (so the anticipo declares SPOT on what it collected, and the factura de
+// regularización on its PayableAmount — the saldo). When that happens the
+// anticipo goes out as an operación sujeta a detracción, since 1001/1002 is
+// what pairs with the leyenda 2006 + cuenta BN block (fault 3127 otherwise).
+func sunatOperationType(operationType string, d *model.Detraccion) string {
 	if operationType == model.OpAnticipos {
+		if d != nil {
+			return detraccionOperationType(d)
+		}
 		return model.OpVentaInterna
 	}
 	return operationType
 }
 
-func newInvoiceTypeCode(code, operationType string) invoiceTypeCode {
+func newInvoiceTypeCode(code, operationType string, d *model.Detraccion) invoiceTypeCode {
 	if operationType == "" {
 		operationType = "0101"
 	}
 	return invoiceTypeCode{
 		Value:          code,
-		ListID:         sunatOperationType(operationType),
+		ListID:         sunatOperationType(operationType, d),
 		ListAgencyName: "PE:SUNAT",
 		ListName:       "Tipo de Documento",
 		ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",
@@ -625,12 +646,12 @@ func newInvoiceTypeCode(code, operationType string) invoiceTypeCode {
 
 // newProfileID returns the SUNAT cbc:ProfileID element carrying the
 // operation type (catalog 17). Defaults to "0101" (Venta interna).
-func newProfileID(operationType string) profileIDElement {
+func newProfileID(operationType string, d *model.Detraccion) profileIDElement {
 	if operationType == "" {
 		operationType = "0101"
 	}
 	return profileIDElement{
-		Value:            sunatOperationType(operationType),
+		Value:            sunatOperationType(operationType, d),
 		SchemeName:       "SUNAT:Identificador de Tipo de Operación",
 		SchemeAgencyName: "PE:SUNAT",
 		SchemeURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17",

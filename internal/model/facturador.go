@@ -68,10 +68,16 @@ type VentaAnticipo struct {
 	// comprobante of the deal, the factura final included: its total is the
 	// saldo, so a regularizada venta reads cobrado = acordado, saldo 0.
 	// AnticipoCount, in contrast, counts only the anticipos (0104).
-	Cobrado       string              `json:"cobrado"`
-	Saldo         string              `json:"saldo"`
-	Estado        VentaAnticipoEstado `json:"estado"`
-	AnticipoCount int                 `json:"anticipoCount"`
+	Cobrado string              `json:"cobrado"`
+	Saldo   string              `json:"saldo"`
+	Estado  VentaAnticipoEstado `json:"estado"`
+	// DetraccionDeclarada is the SPOT total across the deal's accepted
+	// comprobantes. Each one declares detracción on its own importe (the
+	// anticipo on what it collected, the factura final on the saldo), so a
+	// complete venta sums to porcentaje × MontoAcordado — which is what lets the
+	// detail page show whether the deposits add up.
+	DetraccionDeclarada string `json:"detraccionDeclarada"`
+	AnticipoCount       int    `json:"anticipoCount"`
 	// FinalDocumentID/Code identify the accepted factura final that regularized
 	// this venta; both nil while it is still abierta.
 	FinalDocumentID   *string `json:"finalDocumentId"`

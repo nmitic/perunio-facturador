@@ -288,12 +288,31 @@ func TestValidateDetraccion(t *testing.T) {
 		is.True(t, hasErrorField(errs, "detraccion.monto"), "should reject mismatched monto")
 	})
 
-	t.Run("operationType not 1001/1002 is rejected", func(t *testing.T) {
+	t.Run("operationType not 1001/1002/0104 is rejected", func(t *testing.T) {
 		req := newValidInvoice()
 		req.OperationType = "0101"
 		req.Detraccion = newDetraccion()
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "operationType"), "should require operationType 1001/1002")
+		is.True(t, hasErrorField(errs, "operationType"), "should require operationType 1001/1002/0104")
+	})
+
+	t.Run("a factura de anticipo (0104) sujeta a detracción is allowed", func(t *testing.T) {
+		// The anticipo keeps its 0104 marker in the DB; xmlbuilder maps it onto
+		// 1001/1002 on the wire, so validation must not demand it here.
+		req := newValidInvoice()
+		req.OperationType = "0104"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "operationType"), "0104 carries the detracción through")
+		is.True(t, !hasErrorField(errs, "detraccion"), "should have no detracción errors")
+	})
+
+	t.Run("a monto exceeding the total a pagar is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: "019", Porcentaje: "150.00", Monto: "1770.00", CuentaBN: "00-123-456789"}
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.monto"), "cannot deposit more than the comprobante collects")
 	})
 }
 
@@ -326,12 +345,26 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, hasErrorField(errs, "anticipos"), "should reject anticipos on a boleta")
 	})
 
-	t.Run("anticipos combined with detracción are rejected", func(t *testing.T) {
+	t.Run("anticipos combined with detracción on the saldo pass", func(t *testing.T) {
+		// SPOT arises per payment, over the comprobante that documents it: the
+		// anticipo already declared its own share, so this factura's detracción
+		// covers only the 1062.00 payable. 12% of that is 127.44.
+		req := newRegularizacion()
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "127.44", CuentaBN: "00-123-456789"}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos"), "anticipos + detracción is a valid combination")
+		is.True(t, !hasErrorField(errs, "detraccion.monto"), "12% of the payable is the right base")
+	})
+
+	t.Run("a detracción computed over the whole operación instead of the saldo is rejected", func(t *testing.T) {
+		// 141.60 = 12% of the full 1180.00 sale, but only 1062.00 is being
+		// collected here — the other 118.00 was deposited with the anticipo.
 		req := newRegularizacion()
 		req.OperationType = "1001"
 		req.Detraccion = newDetraccion()
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "anticipos"), "should reject anticipos + detracción")
+		is.True(t, hasErrorField(errs, "detraccion.monto"), "the base is the payable, not the operación")
 	})
 
 	t.Run("a 0104 anticipo factura cannot itself apply anticipos", func(t *testing.T) {

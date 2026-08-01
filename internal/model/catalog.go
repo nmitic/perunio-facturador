@@ -174,6 +174,17 @@ const (
 	OpDetraccionTransporte = "1002" // Operación sujeta a detracción — transporte de carga
 )
 
+// Cat54 — Bienes y servicios sujetos a detracción (SPOT).
+//
+// Only the códigos that change behaviour are named here; the full list lives in
+// the frontend catalogue (src/data/sunat/detracciones.ts), which is what
+// resolves código, porcentaje and umbral from the productos of a comprobante.
+const (
+	// DetraccionTransporteCarga is the one código whose operación declares
+	// catálogo 51 "1002" instead of "1001". See detraccionOperationType.
+	DetraccionTransporteCarga = "027"
+)
+
 // Cat52 — Legends
 const (
 	LegendMontoLetras    = "1000"

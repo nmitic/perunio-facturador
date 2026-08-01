@@ -133,11 +133,11 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 
 		UBLVersionID:    UBLVersion21,
 		CustomizationID: CustomizationID20,
-		ProfileID:       newProfileID(req.OperationType),
+		ProfileID:       newProfileID(req.OperationType, req.Detraccion),
 		ID:              docID,
 		IssueDate:       req.IssueDate,
 		IssueTime:       req.IssueTime,
-		InvoiceTypeCode: newInvoiceTypeCode(req.DocType, req.OperationType),
+		InvoiceTypeCode: newInvoiceTypeCode(req.DocType, req.OperationType, req.Detraccion),
 
 		DocumentCurrencyCode: newDocumentCurrencyCode(req.CurrencyCode),
 		Signature:            newCACSignature(req.SupplierRUC, req.SupplierName),
