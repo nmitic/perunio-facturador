@@ -17,13 +17,13 @@ import (
 // exchange against api-seguridad.sunat.gob.pe. They are encrypted with the
 // same AES-GCM key as the SOL password.
 type Company struct {
-	ID                    string
-	TenantID              string
-	RUC                   string
-	CompanyName           string
-	FiscalAddress         string
-	Username              *string
-	EncryptedPassword     *string
+	ID                string
+	TenantID          string
+	RUC               string
+	CompanyName       string
+	FiscalAddress     string
+	Username          *string
+	EncryptedPassword *string
 	// EmissionUsername / EmissionPassword are the dedicated SUNAT SOL secondary-user
 	// credentials used for emission (SOAP WS-Security). They are required to emit —
 	// resolvePipelineDeps rejects with EMISSION_CREDENTIALS_MISSING when unset — and are
@@ -86,4 +86,3 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 	})
 	return c, err
 }
-

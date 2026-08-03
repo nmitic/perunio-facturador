@@ -89,7 +89,6 @@ func (p *Pool) CreateDailySummary(ctx context.Context, companyID, referenceDate,
 	return &summary, nil
 }
 
-
 // SummaryIssueResult captures the outcome of sending a daily summary to
 // SUNAT. All pointer fields are optional.
 type SummaryIssueResult struct {

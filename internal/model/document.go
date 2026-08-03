@@ -74,6 +74,11 @@ type IssueRequest struct {
 	// document totals — it is a payment instruction, not a discount.
 	Detraccion *Detraccion `json:"detraccion,omitempty"`
 
+	// TransporteCarga carries the extra data SUNAT demands when the detracción
+	// código is 027 (servicio de transporte de carga), which declares tipo de
+	// operación 1004. Nil for every other comprobante. See buildLineDelivery.
+	TransporteCarga *TransporteCarga `json:"transporteCarga,omitempty"`
+
 	// Notes
 	Notes []Note `json:"notes"`
 
@@ -196,6 +201,33 @@ type Detraccion struct {
 	Porcentaje string `json:"porcentaje"` // decimal as string
 	Monto      string `json:"monto"`      // decimal as string, PEN
 	CuentaBN   string `json:"cuentaBN"`   // Banco de la Nación account
+}
+
+// TransporteCarga is the per-operation data a detracción de transporte de carga
+// (Cat.54 027 / tipo de operación 1004) must declare. SUNAT models it at the
+// line level, but the data describes the trip the whole comprobante documents,
+// so it is stored once per document and emitted on the FIRST line — the
+// validation rules only require one occurrence of each tag.
+//
+// Every field here is mandatory when present at all (faults 3116-3126):
+// omitting any one of them is an outright rejection.
+type TransporteCarga struct {
+	// Ubigeo (Cat.13, 6 digits) + free-form street of each end of the trip.
+	OrigenUbigeo     string `json:"origenUbigeo"`
+	OrigenDireccion  string `json:"origenDireccion"`
+	DestinoUbigeo    string `json:"destinoUbigeo"`
+	DestinoDireccion string `json:"destinoDireccion"`
+
+	// Free-text description of the trip (an..500).
+	DetalleViaje string `json:"detalleViaje"`
+
+	// The three valores referenciales, all in PEN. SUNAT computes the SPOT base
+	// as the greater of the importe and the valor referencial, so it wants all
+	// three declared: the service's own reference value ("01"), the one over the
+	// effective load ("02") and the one over the vehicle's nominal payload ("03").
+	ValorReferencialServicio      string `json:"valorReferencialServicio"`
+	ValorReferencialCargaEfectiva string `json:"valorReferencialCargaEfectiva"`
+	ValorReferencialCargaUtil     string `json:"valorReferencialCargaUtil"`
 }
 
 // Note is a legend/note attached to the document.

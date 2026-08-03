@@ -223,6 +223,21 @@ func newDetraccion() *model.Detraccion {
 	return &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "141.60", CuentaBN: "00-123-456789"}
 }
 
+// newBoletaDetraccion is newDetraccion scaled to newBoletaUnder700's total:
+// 12% of 118.00 = 14.16.
+func newBoletaDetraccion() *model.Detraccion {
+	return &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "14.16", CuentaBN: "00-123-456789"}
+}
+
+// asConsumidorFinal strips the receptor down to the anonymous placeholder a
+// boleta falls back to when nobody is entered.
+func asConsumidorFinal(req model.IssueRequest) model.IssueRequest {
+	req.CustomerDocType = model.IdentityDocTribNoRUC
+	req.CustomerDocNumber = model.ConsumidorFinalDocNumber
+	req.CustomerName = model.ConsumidorFinalName
+	return req
+}
+
 func TestValidateDetraccion(t *testing.T) {
 	t.Run("valid factura sujeta a detracción passes", func(t *testing.T) {
 		req := newValidInvoice()
@@ -242,12 +257,41 @@ func TestValidateDetraccion(t *testing.T) {
 		is.True(t, hasErrorField(errs, "detraccion.cuentaBN"), "should require cuenta BN")
 	})
 
-	t.Run("detracción on a boleta is rejected", func(t *testing.T) {
+	t.Run("boleta sujeta a detracción passes", func(t *testing.T) {
+		// Catálogo 51 marks 1001-1004 "Factura, Boletas" and the Boleta2_0 sheet
+		// of SUNAT's validation pack carries the same detracción rules as
+		// Factura2_0 — see validateDetraccion.
 		req := newBoletaUnder700()
 		req.OperationType = "1001"
-		req.Detraccion = newDetraccion()
+		req.Detraccion = newBoletaDetraccion()
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "detraccion"), "should reject detracción on boleta")
+		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on a boleta")
+	})
+
+	t.Run("detracción on a consumidor-final boleta is rejected", func(t *testing.T) {
+		// The constancia de depósito is filed under the adquirente, so
+		// "CLIENTES VARIOS" cannot carry a SPOT operation.
+		req := asConsumidorFinal(newBoletaUnder700())
+		req.OperationType = "1001"
+		req.Detraccion = newBoletaDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "customerDocType"), "should require an identified adquirente")
+	})
+
+	t.Run("a boleta de anticipo (0104) sujeta a detracción is allowed", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.OperationType = "0104"
+		req.Detraccion = newBoletaDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "operationType"), "0104 carries the detracción through")
+		is.True(t, !hasErrorField(errs, "detraccion"), "should have no detracción errors")
+	})
+
+	t.Run("a consumidor-final boleta de anticipo (0104) is rejected", func(t *testing.T) {
+		req := asConsumidorFinal(newBoletaUnder700())
+		req.OperationType = "0104"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "customerDocType"), "an anticipo must name the buyer it will be reconciled against")
 	})
 
 	t.Run("nota de crédito referencing a factura is allowed", func(t *testing.T) {
@@ -264,7 +308,8 @@ func TestValidateDetraccion(t *testing.T) {
 		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on NC referencing a factura")
 	})
 
-	t.Run("nota de crédito referencing a boleta is rejected", func(t *testing.T) {
+	t.Run("nota de crédito referencing a boleta is allowed", func(t *testing.T) {
+		// A boleta can be sujeta a detracción, so a nota correcting one mirrors it.
 		req := newValidInvoice()
 		req.DocType = "07"
 		req.Series = "BC01"
@@ -275,7 +320,36 @@ func TestValidateDetraccion(t *testing.T) {
 		req.ReasonCode = "01"
 		req.Detraccion = newDetraccion()
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "detraccion"), "should reject detracción on NC referencing a boleta")
+		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on NC referencing a boleta")
+	})
+
+	t.Run("nota de débito referencing a boleta is allowed", func(t *testing.T) {
+		// The half SUNAT's NotaDebito2_0 sheet actually validates.
+		req := newValidInvoice()
+		req.DocType = "08"
+		req.Series = "BD01"
+		req.OperationType = "1001"
+		req.ReferenceDocType = "03"
+		req.ReferenceDocSeries = "B001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on ND referencing a boleta")
+	})
+
+	t.Run("detracción on a nota referencing a guía is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.DocType = "07"
+		req.Series = "FC01"
+		req.OperationType = "1001"
+		req.ReferenceDocType = "09"
+		req.ReferenceDocSeries = "T001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
+		req.Detraccion = newDetraccion()
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "only facturas and boletas can carry a detracción")
 	})
 
 	t.Run("monto not matching porcentaje × total is rejected", func(t *testing.T) {
@@ -307,12 +381,125 @@ func TestValidateDetraccion(t *testing.T) {
 		is.True(t, !hasErrorField(errs, "detraccion"), "should have no detracción errors")
 	})
 
+	t.Run("recursos hidrobiológicos (004) is refused until its item data is supported", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1002"
+		d := newDetraccion()
+		d.Codigo = model.DetraccionHidrobiologicos
+		req.Detraccion = d
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "004 needs AdditionalItemProperty we do not emit")
+	})
+
+	t.Run("transporte de pasajeros (028) is refused: it is not a percentage", func(t *testing.T) {
+		req := newValidInvoice()
+		req.OperationType = "1003"
+		d := newDetraccion()
+		d.Codigo = model.DetraccionTransportePasaj
+		req.Detraccion = d
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "028 is a fixed amount per vehicle")
+	})
+
 	t.Run("a monto exceeding the total a pagar is rejected", func(t *testing.T) {
 		req := newValidInvoice()
 		req.OperationType = "1001"
 		req.Detraccion = &model.Detraccion{Codigo: "019", Porcentaje: "150.00", Monto: "1770.00", CuentaBN: "00-123-456789"}
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion.monto"), "cannot deposit more than the comprobante collects")
+	})
+}
+
+func newTransporteCarga() *model.TransporteCarga {
+	return &model.TransporteCarga{
+		OrigenUbigeo:                  "150101",
+		OrigenDireccion:               "AV. ARGENTINA 1234, CERCADO DE LIMA",
+		DestinoUbigeo:                 "040101",
+		DestinoDireccion:              "AV. EJERCITO 500, AREQUIPA",
+		DetalleViaje:                  "Lima - Arequipa, carga general",
+		ValorReferencialServicio:      "1500.00",
+		ValorReferencialCargaEfectiva: "1400.00",
+		ValorReferencialCargaUtil:     "1600.00",
+	}
+}
+
+// newTransporteCargaInvoice is a factura sujeta a detracción por transporte de
+// carga (Cat.54 027 → tipo de operación 1004), with the trip block attached.
+func newTransporteCargaInvoice() model.IssueRequest {
+	req := newValidInvoice()
+	req.OperationType = "1004"
+	req.Detraccion = &model.Detraccion{
+		Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+		Monto: "47.20", CuentaBN: "00-123-456789", // 4% of 1180.00
+	}
+	req.TransporteCarga = newTransporteCarga()
+	return req
+}
+
+func TestValidateTransporteCarga(t *testing.T) {
+	t.Run("a complete transporte de carga passes", func(t *testing.T) {
+		errs := validation.Validate(newTransporteCargaInvoice())
+		for _, e := range errs {
+			t.Errorf("unexpected error: %d %s %s", e.Code, e.Field, e.Message)
+		}
+	})
+
+	t.Run("código 027 without the trip block is rejected", func(t *testing.T) {
+		req := newTransporteCargaInvoice()
+		req.TransporteCarga = nil
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "transporteCarga"), "1004 requires the trip data")
+	})
+
+	t.Run("each mandatory trip field is required", func(t *testing.T) {
+		fields := map[string]func(*model.TransporteCarga){
+			"transporteCarga.origenUbigeo":     func(t *model.TransporteCarga) { t.OrigenUbigeo = "" },
+			"transporteCarga.origenDireccion":  func(t *model.TransporteCarga) { t.OrigenDireccion = "" },
+			"transporteCarga.destinoUbigeo":    func(t *model.TransporteCarga) { t.DestinoUbigeo = "" },
+			"transporteCarga.destinoDireccion": func(t *model.TransporteCarga) { t.DestinoDireccion = "" },
+			"transporteCarga.detalleViaje":     func(t *model.TransporteCarga) { t.DetalleViaje = "" },
+		}
+		for field, blank := range fields {
+			req := newTransporteCargaInvoice()
+			blank(req.TransporteCarga)
+			errs := validation.Validate(req)
+			is.True(t, hasErrorField(errs, field), "should require "+field)
+		}
+	})
+
+	t.Run("a malformed ubigeo is rejected", func(t *testing.T) {
+		req := newTransporteCargaInvoice()
+		req.TransporteCarga.DestinoUbigeo = "4010"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "transporteCarga.destinoUbigeo"), "ubigeo must be 6 digits")
+	})
+
+	t.Run("each valor referencial must be present and positive", func(t *testing.T) {
+		fields := map[string]func(*model.TransporteCarga){
+			"transporteCarga.valorReferencialServicio":      func(t *model.TransporteCarga) { t.ValorReferencialServicio = "" },
+			"transporteCarga.valorReferencialCargaEfectiva": func(t *model.TransporteCarga) { t.ValorReferencialCargaEfectiva = "0.00" },
+			"transporteCarga.valorReferencialCargaUtil":     func(t *model.TransporteCarga) { t.ValorReferencialCargaUtil = "-5.00" },
+		}
+		for field, break_ := range fields {
+			req := newTransporteCargaInvoice()
+			break_(req.TransporteCarga)
+			errs := validation.Validate(req)
+			is.True(t, hasErrorField(errs, field), "should require "+field)
+		}
+	})
+
+	t.Run("a boleta may also be sujeta a detracción por transporte de carga", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.OperationType = "1004"
+		req.Detraccion = &model.Detraccion{
+			Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+			Monto: "4.72", CuentaBN: "00-123-456789", // 4% of 118.00
+		}
+		req.TransporteCarga = newTransporteCarga()
+		errs := validation.Validate(req)
+		for _, e := range errs {
+			t.Errorf("unexpected error: %d %s %s", e.Code, e.Field, e.Message)
+		}
 	})
 }
 
@@ -338,11 +525,47 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, !hasErrorField(errs, "anticipos"), "should have no anticipo errors")
 	})
 
-	t.Run("anticipos on a boleta are rejected", func(t *testing.T) {
+	// A boleta de regularización: the sale is 100 + 18 IGV = 118 in full, and a
+	// 59.00 anticipo (50.00 base) comes off the payable only, leaving 59.00.
+	newBoletaRegularizacion := func() model.IssueRequest {
 		req := newBoletaUnder700()
+		req.TotalAmount = "59.00"
+		req.Anticipos = []model.Anticipo{
+			{DocID: "B001-00000007", DocTypeCode: "03", TotalAmount: "59.00", BaseAmount: "50.00"},
+		}
+		return req
+	}
+
+	t.Run("boleta de regularización applying a boleta de anticipo passes", func(t *testing.T) {
+		errs := validation.Validate(newBoletaRegularizacion())
+		is.True(t, !hasErrorField(errs, "anticipos"), "should allow anticipos on a boleta")
+	})
+
+	t.Run("a boleta may apply a factura de anticipo", func(t *testing.T) {
+		// Cat.12 admits both 02 and 03 regardless of the regularizing document.
+		req := newBoletaRegularizacion()
+		req.Anticipos[0] = model.Anticipo{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "59.00", BaseAmount: "50.00"}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos"), "docTypeCode 02 on a boleta is valid")
+	})
+
+	t.Run("anticipos on a consumidor-final boleta are rejected", func(t *testing.T) {
+		req := asConsumidorFinal(newBoletaRegularizacion())
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "customerDocType"), "cannot reconcile an anticipo against CLIENTES VARIOS")
+	})
+
+	t.Run("anticipos on a nota are rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.DocType = "07"
+		req.Series = "FC01"
+		req.ReferenceDocType = "01"
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 1
+		req.ReasonCode = "01"
 		req.Anticipos = []model.Anticipo{newAnticipo()}
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "anticipos"), "should reject anticipos on a boleta")
+		is.True(t, hasErrorField(errs, "anticipos"), "a nota regularizes nothing")
 	})
 
 	t.Run("anticipos combined with detracción on the saldo pass", func(t *testing.T) {

@@ -32,11 +32,11 @@ type creditNote struct {
 	CustomerParty        accountingCustomerParty
 	// Detracción (cac:PaymentMeans + cac:PaymentTerms) — present only when the
 	// nota references a factura sujeta a detracción. nil/empty otherwise.
-	PaymentMeans         *paymentMeans
-	PaymentTerms         []paymentTerms
-	TaxTotal             taxTotal
-	LegalMonetaryTotal   legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
-	CreditNoteLines      []creditNoteLine
+	PaymentMeans       *paymentMeans
+	PaymentTerms       []paymentTerms
+	TaxTotal           taxTotal
+	LegalMonetaryTotal legalMonetaryTotal `xml:"cac:LegalMonetaryTotal"`
+	CreditNoteLines    []creditNoteLine
 }
 
 // buildCreditNoteXML creates UBL 2.1 CreditNote XML bytes.

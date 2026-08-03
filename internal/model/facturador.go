@@ -160,6 +160,10 @@ type IssuedDocument struct {
 	// an anticipo has been applied is derived by searching these arrays.
 	Anticipos []Anticipo `json:"anticipos,omitempty"`
 
+	// TransporteCarga is the trip block a detracción código 027 requires. Nil
+	// for every other document. See model.TransporteCarga.
+	TransporteCarga *TransporteCarga `json:"transporteCarga,omitempty"`
+
 	// VentaAnticipoID is the venta con anticipos (deal) this comprobante belongs
 	// to — set on the anticipo facturas and on the factura final that closes it.
 	// Nil for every ordinary comprobante.

@@ -127,7 +127,7 @@ const issuedDocumentColumns = `
 	billing_period_months,
 	total_amount,
 	tax_inclusive_amount, notes,
-	forma_pago, cuotas, anticipos, venta_anticipo_id,
+	forma_pago, cuotas, anticipos, transporte_carga, venta_anticipo_id,
 	paid_at, payment_method, payment_reference, payment_notes,
 	reference_doc_type, reference_doc_series, reference_doc_correlative,
 	credit_debit_reason_code, credit_debit_reason_desc,
@@ -151,7 +151,7 @@ const issuedDocumentColumns = `
 // (e.g. the historial's derived payment rollup) can append their own destinations
 // without duplicating this ~45-field list. cuotasRaw/anticiposRaw/observationsRaw
 // receive the raw jsonb, decoded by finishDocumentScan.
-func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observationsRaw *[]byte) []any {
+func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw *[]byte) []any {
 	return []any{
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
 		&d.SunatEnvironment,
@@ -162,7 +162,7 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observat
 		&d.BillingPeriodMonths,
 		&d.TotalAmount,
 		&d.TaxInclusiveAmount, &d.Notes,
-		&d.FormaPago, cuotasRaw, anticiposRaw, &d.VentaAnticipoID,
+		&d.FormaPago, cuotasRaw, anticiposRaw, transporteCargaRaw, &d.VentaAnticipoID,
 		&d.PaidAt, &d.PaymentMethod, &d.PaymentReference, &d.PaymentNotes,
 		&d.ReferenceDocType, &d.ReferenceDocSeries, &d.ReferenceDocCorrelative,
 		&d.CreditDebitReasonCode, &d.CreditDebitReasonDesc,
@@ -176,7 +176,7 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observat
 }
 
 // finishDocumentScan decodes the raw jsonb captured by documentScanDest.
-func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observationsRaw []byte) error {
+func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw []byte) error {
 	if len(cuotasRaw) > 0 {
 		if err := json.Unmarshal(cuotasRaw, &d.Cuotas); err != nil {
 			return fmt.Errorf("unmarshal cuotas: %w", err)
@@ -185,6 +185,11 @@ func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observ
 	if len(anticiposRaw) > 0 {
 		if err := json.Unmarshal(anticiposRaw, &d.Anticipos); err != nil {
 			return fmt.Errorf("unmarshal anticipos: %w", err)
+		}
+	}
+	if len(transporteCargaRaw) > 0 {
+		if err := json.Unmarshal(transporteCargaRaw, &d.TransporteCarga); err != nil {
+			return fmt.Errorf("unmarshal transporte_carga: %w", err)
 		}
 	}
 	if len(observationsRaw) > 0 {
@@ -196,11 +201,11 @@ func finishDocumentScan(d *model.IssuedDocument, cuotasRaw, anticiposRaw, observ
 }
 
 func scanIssuedDocument(row pgx.Row, d *model.IssuedDocument) error {
-	var cuotasRaw, anticiposRaw, observationsRaw []byte
-	if err := row.Scan(documentScanDest(d, &cuotasRaw, &anticiposRaw, &observationsRaw)...); err != nil {
+	var cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw []byte
+	if err := row.Scan(documentScanDest(d, &cuotasRaw, &anticiposRaw, &transporteCargaRaw, &observationsRaw)...); err != nil {
 		return err
 	}
-	return finishDocumentScan(d, cuotasRaw, anticiposRaw, observationsRaw)
+	return finishDocumentScan(d, cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw)
 }
 
 // ListIssuedDocuments returns a paginated slice of issued documents for the
@@ -292,16 +297,16 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 
 		for rows.Next() {
 			var d model.IssuedDocument
-			var cuotasRaw, anticiposRaw, observationsRaw []byte
+			var cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw []byte
 			var paymentStatus *string // NULL for an un-marked contado doc
 			var overdue bool
 			var clienteID *string // NULL when the customer isn't a saved cliente
-			dest := documentScanDest(&d, &cuotasRaw, &anticiposRaw, &observationsRaw)
+			dest := documentScanDest(&d, &cuotasRaw, &anticiposRaw, &transporteCargaRaw, &observationsRaw)
 			dest = append(dest, &paymentStatus, &overdue, &clienteID)
 			if err := rows.Scan(dest...); err != nil {
 				return err
 			}
-			if err := finishDocumentScan(&d, cuotasRaw, anticiposRaw, observationsRaw); err != nil {
+			if err := finishDocumentScan(&d, cuotasRaw, anticiposRaw, transporteCargaRaw, observationsRaw); err != nil {
 				return err
 			}
 			d.PaymentStatus = paymentStatus

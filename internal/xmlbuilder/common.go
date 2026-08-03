@@ -366,15 +366,59 @@ type additionalMonetaryTotal struct {
 
 // invoiceLine represents a single line item (for Invoice).
 type invoiceLine struct {
-	XMLName             xml.Name             `xml:"cac:InvoiceLine"`
-	ID                  string               `xml:"cbc:ID"`
-	InvoicedQuantity    quantity             `xml:"cbc:InvoicedQuantity"`
-	LineExtensionAmount currencyAmount       `xml:"cbc:LineExtensionAmount"`
-	PricingReference    *pricingReference    `xml:"cac:PricingReference,omitempty"`
-	AllowanceCharge     *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
-	TaxTotal            taxTotal             `xml:"cac:TaxTotal"`
-	Item                item                 `xml:"cac:Item"`
-	Price               price                `xml:"cac:Price"`
+	XMLName             xml.Name          `xml:"cac:InvoiceLine"`
+	ID                  string            `xml:"cbc:ID"`
+	InvoicedQuantity    quantity          `xml:"cbc:InvoicedQuantity"`
+	LineExtensionAmount currencyAmount    `xml:"cbc:LineExtensionAmount"`
+	PricingReference    *pricingReference `xml:"cac:PricingReference,omitempty"`
+	// UBL puts cac:Delivery between PricingReference and AllowanceCharge; only a
+	// detracción de transporte de carga (1004) populates it.
+	Delivery        *lineDelivery        `xml:"cac:Delivery,omitempty"`
+	AllowanceCharge *lineAllowanceCharge `xml:"cac:AllowanceCharge,omitempty"`
+	TaxTotal        taxTotal             `xml:"cac:TaxTotal"`
+	Item            item                 `xml:"cac:Item"`
+	Price           price                `xml:"cac:Price"`
+}
+
+// lineDelivery carries the transporte de carga (1004) trip data. Field order is
+// the UBL DeliveryType sequence — DeliveryLocation, then Despatch, then the
+// repeated DeliveryTerms — and reordering it fails XSD validation silently.
+type lineDelivery struct {
+	DeliveryLocation *deliveryLocation `xml:"cac:DeliveryLocation,omitempty"`
+	Despatch         *despatch         `xml:"cac:Despatch,omitempty"`
+	DeliveryTerms    []deliveryTerms   `xml:"cac:DeliveryTerms,omitempty"`
+}
+
+type deliveryLocation struct {
+	Address ubigeoAddress `xml:"cac:Address"`
+}
+
+// despatch holds the punto de origen. cbc:Instructions (the detalle del viaje)
+// precedes cac:DespatchAddress in UBL's DespatchType.
+type despatch struct {
+	Instructions    string        `xml:"cbc:Instructions,omitempty"`
+	DespatchAddress ubigeoAddress `xml:"cac:DespatchAddress"`
+}
+
+// ubigeoAddress is a Cat.13 ubigeo (cbc:ID) plus the detailed street. The
+// schemeName/schemeAgencyName attributes are optional (observations 4255/4256
+// only fire when present and wrong), but SUNAT documents them, so emit them.
+type ubigeoAddress struct {
+	ID          ubigeoID    `xml:"cbc:ID"`
+	AddressLine addressLine `xml:"cac:AddressLine"`
+}
+
+type ubigeoID struct {
+	Value            string `xml:",chardata"`
+	SchemeName       string `xml:"schemeName,attr,omitempty"`
+	SchemeAgencyName string `xml:"schemeAgencyName,attr,omitempty"`
+}
+
+// deliveryTerms is one valor referencial: cbc:ID is the type ("01" servicio,
+// "02" carga efectiva, "03" carga útil nominal) and cbc:Amount its PEN value.
+type deliveryTerms struct {
+	ID     string         `xml:"cbc:ID"`
+	Amount currencyAmount `xml:"cbc:Amount"`
 }
 
 // creditNoteLine represents a single line item (for CreditNote). SUNAT's
@@ -594,14 +638,32 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 }
 
 // detraccionOperationType returns the catálogo 51 code a document sujeto a
-// detracción must declare: "1002" for el transporte de bienes por vía terrestre
-// (Cat.54 código 027, which SUNAT tracks separately because its base is the
-// mayor between importe and valor referencial), "1001" for everything else.
+// detracción must declare. Three Cat.54 códigos have their own operación —
+// SUNAT tracks them separately because each carries extra mandatory data — and
+// the pairing is exact in both directions: declaring 1002/1003/1004 with the
+// wrong código, or the código with plain 1001, is fault 3129.
+//
+//	Cat.54 004 (recursos hidrobiológicos) → 1002
+//	Cat.54 028 (transporte de pasajeros)  → 1003
+//	Cat.54 027 (transporte de carga)      → 1004
+//	everything else                       → 1001
+//
+// Source: sheets Factura2_0 / Boleta2_0 of
+// resources/AjustesValidacionesCPEv20260212.xlsx.
 func detraccionOperationType(d *model.Detraccion) string {
-	if d != nil && d.Codigo == model.DetraccionTransporteCarga {
-		return model.OpDetraccionTransporte
+	if d == nil {
+		return model.OpDetraccion
 	}
-	return model.OpDetraccion
+	switch d.Codigo {
+	case model.DetraccionHidrobiologicos:
+		return model.OpDetraccionHidrobiologicos
+	case model.DetraccionTransportePasaj:
+		return model.OpDetraccionPasajeros
+	case model.DetraccionTransporteCarga:
+		return model.OpDetraccionTransporteCarga
+	default:
+		return model.OpDetraccion
+	}
 }
 
 // sunatOperationType maps an internally stored tipo de operación onto the code
@@ -615,12 +677,19 @@ func detraccionOperationType(d *model.Detraccion) string {
 // regularización is the PrepaidPayment / AllowanceCharge "04" block, not the
 // operation type.
 //
-// A factura de anticipo can also be sujeta a detracción: the SPOT obligation
-// arises per payment, computed on the monto of the comprobante that documents
-// it (so the anticipo declares SPOT on what it collected, and the factura de
-// regularización on its PayableAmount — the saldo). When that happens the
-// anticipo goes out as an operación sujeta a detracción, since 1001/1002 is
-// what pairs with the leyenda 2006 + cuenta BN block (fault 3127 otherwise).
+// A comprobante de anticipo can also be sujeto a detracción: the SPOT
+// obligation arises per payment, computed on the monto of the comprobante that
+// documents it (so the anticipo declares SPOT on what it collected, and the
+// comprobante de regularización on its PayableAmount — the saldo). When that
+// happens the anticipo goes out as an operación sujeta a detracción, since
+// 1001-1004 is what pairs with the leyenda 2006 + cuenta BN block (fault 3127
+// otherwise).
+//
+// It also RE-DERIVES the detracción operación from the Cat.54 código whenever
+// one is attached, rather than trusting what the caller stored. The pairing is
+// exact (fault 3129), and a draft can easily carry a stale 1001 — it was built
+// before the código changed, or the row predates this mapping being correct.
+// The código is the fact; the operación is a function of it.
 func sunatOperationType(operationType string, d *model.Detraccion) string {
 	if operationType == model.OpAnticipos {
 		if d != nil {
@@ -628,7 +697,19 @@ func sunatOperationType(operationType string, d *model.Detraccion) string {
 		}
 		return model.OpVentaInterna
 	}
+	if d != nil && isDetraccionOperationType(operationType) {
+		return detraccionOperationType(d)
+	}
 	return operationType
+}
+
+func isDetraccionOperationType(operationType string) bool {
+	switch operationType {
+	case model.OpDetraccion, model.OpDetraccionHidrobiologicos,
+		model.OpDetraccionPasajeros, model.OpDetraccionTransporteCarga:
+		return true
+	}
+	return false
 }
 
 func newInvoiceTypeCode(code, operationType string, d *model.Detraccion) invoiceTypeCode {

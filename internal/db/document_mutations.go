@@ -55,9 +55,10 @@ type CreateDocumentInput struct {
 	TaxInclusiveAmount  *string
 	Notes               *string
 
-	FormaPago *string
-	Cuotas    []model.CuotaCredito
-	Anticipos []model.Anticipo
+	FormaPago       *string
+	Cuotas          []model.CuotaCredito
+	Anticipos       []model.Anticipo
+	TransporteCarga *model.TransporteCarga
 	// VentaAnticipoID links this comprobante to a venta con anticipos, whether it
 	// is one of the advances or the factura final. Nil for ordinary comprobantes.
 	VentaAnticipoID *string
@@ -127,6 +128,9 @@ type UpdateDocumentInput struct {
 	CuotasIsSet    bool // true to overwrite (including with nil/empty); false leaves column untouched
 	Anticipos      []model.Anticipo
 	AnticiposIsSet bool // same overwrite semantics as CuotasIsSet
+
+	TransporteCarga      *model.TransporteCarga
+	TransporteCargaIsSet bool // same overwrite semantics as CuotasIsSet
 
 	DetraccionCodigo     *string
 	DetraccionPorcentaje *string
@@ -216,6 +220,14 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			}
 			anticiposJSON = b
 		}
+		var transporteCargaJSON any
+		if in.TransporteCarga != nil {
+			b, err := json.Marshal(in.TransporteCarga)
+			if err != nil {
+				return fmt.Errorf("marshal transporte_carga: %w", err)
+			}
+			transporteCargaJSON = b
+		}
 		row := tx.QueryRow(ctx, `
 			INSERT INTO issued_documents (
 				tenant_id, company_id, series_id, doc_type, series, correlative, status,
@@ -234,6 +246,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				exchange_rate,
 				billing_period_months,
 				anticipos,
+				transporte_carga,
 				venta_anticipo_id
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
@@ -252,7 +265,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$38,
 				$39,
 				$40,
-				$41
+				$41,
+				$42
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -271,6 +285,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.ExchangeRate,
 			in.BillingPeriodMonths,
 			anticiposJSON,
+			transporteCargaJSON,
 			in.VentaAnticipoID,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
@@ -449,6 +464,14 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 		} else {
 			b, _ := json.Marshal(in.Anticipos)
 			add("anticipos", b)
+		}
+	}
+	if in.TransporteCargaIsSet {
+		if in.TransporteCarga == nil {
+			add("transporte_carga", nil)
+		} else {
+			b, _ := json.Marshal(in.TransporteCarga)
+			add("transporte_carga", b)
 		}
 	}
 	if in.DetraccionCodigo != nil {

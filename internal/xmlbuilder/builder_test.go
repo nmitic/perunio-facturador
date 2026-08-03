@@ -199,6 +199,30 @@ func TestBuildDocumentXML_Detraccion(t *testing.T) {
 		is.True(t, strings.Contains(xml, `<cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>`), "should keep Contado entry")
 	})
 
+	// Catálogo 51 marks 1001-1004 "Factura, Boletas", and the Boleta2_0 sheet of
+	// SUNAT's validation pack carries the same detracción rules as Factura2_0.
+	// buildInvoiceXML serves both doc types, so the markup must be identical bar
+	// the InvoiceTypeCode value.
+	t.Run("boleta sujeta a detracción emits the same detracción markup as a factura", func(t *testing.T) {
+		req := newTestInvoice()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "1"
+		req.CustomerDocNumber = "12345678"
+		req.OperationType = "1001"
+		req.FormaPago = "contado"
+		req.Detraccion = det
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+		assertDetraccion(t, xml)
+		is.True(t, strings.Contains(xml, `<cbc:InvoiceTypeCode listID="1001"`), "InvoiceTypeCode carries the detracción listID")
+		is.True(t, strings.Contains(xml, `>03</cbc:InvoiceTypeCode>`), "still a boleta")
+		// schemeName contains "Operación" — ISO-8859-1 encoded in the output, so
+		// never byte-equal to a UTF-8 literal. Assert on the tail only.
+		is.True(t, strings.Contains(xml, `catalogos:catalogo17">1001</cbc:ProfileID>`), "ProfileID carries 1001")
+	})
+
 	t.Run("nota de crédito de una factura sujeta a detracción mirrors the detracción", func(t *testing.T) {
 		req := newTestInvoice()
 		req.DocType = "07"
@@ -261,6 +285,72 @@ func TestBuildDocumentXML_Detraccion(t *testing.T) {
 		xml := string(xmlBytes)
 		is.True(t, !strings.Contains(xml, `<cbc:ID>Detraccion</cbc:ID>`), "should not emit detracción block")
 		is.True(t, !strings.Contains(xml, `languageLocaleID="2006"`), "should not emit leyenda 2006")
+	})
+}
+
+// Cat.54 código 027 declares tipo de operación 1004, which SUNAT only accepts
+// with the trip block on cac:InvoiceLine/cac:Delivery. Every tag asserted here
+// is an ERROR-level requirement (faults 3116-3126), not an observation.
+func TestBuildDocumentXML_TransporteCarga(t *testing.T) {
+	newReq := func() model.IssueRequest {
+		req := newTestInvoice()
+		req.OperationType = "1004"
+		req.Detraccion = &model.Detraccion{
+			Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+			Monto: "47.20", CuentaBN: "00-123-456789",
+		}
+		req.TransporteCarga = &model.TransporteCarga{
+			OrigenUbigeo:                  "150101",
+			OrigenDireccion:               "AV. ARGENTINA 1234",
+			DestinoUbigeo:                 "040101",
+			DestinoDireccion:              "AV. EJERCITO 500",
+			DetalleViaje:                  "Lima - Arequipa",
+			ValorReferencialServicio:      "1500.00",
+			ValorReferencialCargaEfectiva: "1400.00",
+			ValorReferencialCargaUtil:     "1600.00",
+		}
+		return req
+	}
+
+	t.Run("emits the full cac:Delivery trip block on the first line", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newReq())
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		// UBL DeliveryType order: DeliveryLocation (destino), Despatch (origen,
+		// with the detalle del viaje first), then the repeated DeliveryTerms.
+		destino := `<cac:Delivery><cac:DeliveryLocation><cac:Address><cbc:ID schemeName="Ubigeos" schemeAgencyName="PE:INEI">040101</cbc:ID><cac:AddressLine><cbc:Line>AV. EJERCITO 500</cbc:Line></cac:AddressLine></cac:Address></cac:DeliveryLocation>`
+		is.True(t, strings.Contains(xml, destino), "punto de destino: ubigeo + dirección (faults 3118/3119)")
+
+		origen := `<cac:Despatch><cbc:Instructions>Lima - Arequipa</cbc:Instructions><cac:DespatchAddress><cbc:ID schemeName="Ubigeos" schemeAgencyName="PE:INEI">150101</cbc:ID><cac:AddressLine><cbc:Line>AV. ARGENTINA 1234</cbc:Line></cac:AddressLine></cac:DespatchAddress></cac:Despatch>`
+		is.True(t, strings.Contains(xml, origen), "detalle del viaje + punto de origen (faults 3116/3117/3120)")
+
+		terms := `<cac:DeliveryTerms><cbc:ID>01</cbc:ID><cbc:Amount currencyID="PEN">1500.00</cbc:Amount></cac:DeliveryTerms>` +
+			`<cac:DeliveryTerms><cbc:ID>02</cbc:ID><cbc:Amount currencyID="PEN">1400.00</cbc:Amount></cac:DeliveryTerms>` +
+			`<cac:DeliveryTerms><cbc:ID>03</cbc:ID><cbc:Amount currencyID="PEN">1600.00</cbc:Amount></cac:DeliveryTerms>`
+		is.True(t, strings.Contains(xml, terms), "the three valores referenciales, in PEN (faults 3122-3126)")
+
+		is.True(t, strings.Contains(xml, `listID="1004"`), "027 declares tipo de operación 1004, not 1002")
+		is.True(t, strings.Contains(xml, `catalogos:catalogo17">1004</cbc:ProfileID>`), "ProfileID 1004")
+	})
+
+	t.Run("the trip block rides on the first line only", func(t *testing.T) {
+		req := newReq()
+		req.Items = append(req.Items, model.LineItem{
+			LineNumber: 2, Description: "SEGUNDA LINEA", Quantity: "1",
+			UnitCode: "NIU", UnitPrice: "100.00", UnitPriceWithTax: "118.00",
+			TaxExemptionReasonCode: "10", IGVAmount: "18.00",
+			LineTotal: "100.00", PriceTypeCode: "01",
+		})
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		is.Equal(t, 1, strings.Count(string(xmlBytes), "<cac:Delivery>"))
+	})
+
+	t.Run("a comprobante without transporte de carga emits no Delivery block", func(t *testing.T) {
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(newTestInvoice())
+		is.NotError(t, err)
+		is.True(t, !strings.Contains(string(xmlBytes), "<cac:Delivery>"), "should not emit cac:Delivery")
 	})
 }
 
@@ -907,6 +997,37 @@ func TestBuildDocumentXML_Anticipos(t *testing.T) {
 			"no global discount here, so no AllowanceTotalAmount (fault 3300)")
 	})
 
+	// The Boleta2_0 sheet of SUNAT's validation pack carries the same anticipo
+	// rules as Factura2_0, fault 3287 included, and Cat.12 code 03 is
+	// "Boleta de Venta – emitida por anticipos". buildInvoiceXML serves both.
+	t.Run("boleta de regularización emits the same anticipo markup with Cat.12 code 03", func(t *testing.T) {
+		req := newRegularizacion()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "1"
+		req.CustomerDocNumber = "12345678"
+		req.Anticipos = []model.Anticipo{{
+			DocID: "B001-00000007", DocTypeCode: "03",
+			TotalAmount: "118.00", BaseAmount: "100.00",
+		}}
+		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
+		is.NotError(t, err)
+		xml := string(xmlBytes)
+
+		ref := `<cac:AdditionalDocumentReference><cbc:ID>B001-00000007</cbc:ID><cbc:DocumentTypeCode>03</cbc:DocumentTypeCode><cbc:DocumentStatusCode>1</cbc:DocumentStatusCode><cac:IssuerParty><cac:PartyIdentification><cbc:ID schemeID="6">20100113612</cbc:ID></cac:PartyIdentification></cac:IssuerParty></cac:AdditionalDocumentReference>`
+		is.True(t, strings.Contains(xml, ref),
+			"must reference the boleta de anticipo with Cat.12 type 03")
+		prepaid := `<cac:PrepaidPayment><cbc:ID schemeName="Anticipo" schemeAgencyName="PE:SUNAT">1</cbc:ID><cbc:PaidAmount currencyID="PEN">118.00</cbc:PaidAmount></cac:PrepaidPayment>`
+		is.True(t, strings.Contains(xml, prepaid), "must emit cac:PrepaidPayment on a boleta too")
+		// Fault 3287 applies to boletas exactly as it does to facturas.
+		allowance := `<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator><cbc:AllowanceChargeReasonCode>04</cbc:AllowanceChargeReasonCode><cbc:Amount currencyID="PEN">100.00</cbc:Amount></cac:AllowanceCharge>`
+		is.True(t, strings.Contains(xml, allowance),
+			"must emit the Cat.53 '04' allowance on a boleta (fault 3287)")
+		is.True(t, strings.Contains(xml, `<cbc:PrepaidAmount currencyID="PEN">118.00</cbc:PrepaidAmount><cbc:PayableAmount currencyID="PEN">1062.00</cbc:PayableAmount>`),
+			"hybrid totals hold on a boleta")
+		is.True(t, strings.Contains(xml, `>03</cbc:InvoiceTypeCode>`), "still a boleta")
+	})
+
 	t.Run("two anticipos are row-paired 1/2 and their totals summed", func(t *testing.T) {
 		req := newRegularizacion()
 		req.Anticipos = append(req.Anticipos, model.Anticipo{
@@ -1026,9 +1147,13 @@ func TestBuildDocumentXML_AnticipoConDetraccion(t *testing.T) {
 	}{
 		{name: "an anticipo without detracción stays a venta interna", operationType: model.OpAnticipos, detraccion: nil, expected: "0101"},
 		{name: "an anticipo sujeto a detracción declares 1001", operationType: model.OpAnticipos, detraccion: newDet("019"), expected: "1001"},
-		{name: "an anticipo de transporte de carga (027) declares 1002", operationType: model.OpAnticipos, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1002"},
 		{name: "a plain factura sujeta a detracción is unaffected", operationType: model.OpDetraccion, detraccion: newDet("019"), expected: "1001"},
-		{name: "an explicit 1002 is unaffected", operationType: model.OpDetraccionTransporte, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1002"},
+		// The Cat.54 → Cat.51 pairings SUNAT enforces with fault 3129.
+		{name: "recursos hidrobiológicos (004) declares 1002", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionHidrobiologicos), expected: "1002"},
+		{name: "transporte de pasajeros (028) declares 1003", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionTransportePasaj), expected: "1003"},
+		{name: "transporte de carga (027) declares 1004, not 1002", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
+		{name: "an anticipo de transporte de carga (027) declares 1004", operationType: model.OpAnticipos, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
+		{name: "an explicit 1004 is unaffected", operationType: model.OpDetraccionTransporteCarga, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
 	}
 
 	for _, test := range tests {

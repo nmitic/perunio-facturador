@@ -221,6 +221,37 @@ func toModelAnticipos(bodies []anticipoBody) []model.Anticipo {
 	return out
 }
 
+// transporteCargaBody is the trip block a detracción código 027 requires. The
+// field-level rules (all mandatory, ubigeo format, positive valores
+// referenciales) are enforced by validation.validateTransporteCarga at issue
+// time — same split as detraccionBody.
+type transporteCargaBody struct {
+	OrigenUbigeo                  string `json:"origenUbigeo"`
+	OrigenDireccion               string `json:"origenDireccion"`
+	DestinoUbigeo                 string `json:"destinoUbigeo"`
+	DestinoDireccion              string `json:"destinoDireccion"`
+	DetalleViaje                  string `json:"detalleViaje"`
+	ValorReferencialServicio      string `json:"valorReferencialServicio"`
+	ValorReferencialCargaEfectiva string `json:"valorReferencialCargaEfectiva"`
+	ValorReferencialCargaUtil     string `json:"valorReferencialCargaUtil"`
+}
+
+func (b *transporteCargaBody) toModel() *model.TransporteCarga {
+	if b == nil {
+		return nil
+	}
+	return &model.TransporteCarga{
+		OrigenUbigeo:                  b.OrigenUbigeo,
+		OrigenDireccion:               b.OrigenDireccion,
+		DestinoUbigeo:                 b.DestinoUbigeo,
+		DestinoDireccion:              b.DestinoDireccion,
+		DetalleViaje:                  b.DetalleViaje,
+		ValorReferencialServicio:      b.ValorReferencialServicio,
+		ValorReferencialCargaEfectiva: b.ValorReferencialCargaEfectiva,
+		ValorReferencialCargaUtil:     b.ValorReferencialCargaUtil,
+	}
+}
+
 type createDocumentBody struct {
 	SeriesID          string  `json:"seriesId"`
 	IssueDate         string  `json:"issueDate"`
@@ -258,6 +289,7 @@ type createDocumentBody struct {
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
+	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items"`
 }
 
@@ -419,6 +451,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		FormaPago:               b.FormaPago,
 		Cuotas:                  b.Cuotas,
 		Anticipos:               toModelAnticipos(b.Anticipos),
+		TransporteCarga:         b.TransporteCarga.toModel(),
 		VentaAnticipoID:         nilIfEmpty(b.VentaAnticipoID),
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
@@ -508,6 +541,7 @@ type updateDocumentBody struct {
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
+	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items,omitempty"`
 }
 
@@ -547,6 +581,10 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 	if b.Anticipos != nil {
 		in.AnticiposIsSet = true
 		in.Anticipos = toModelAnticipos(*b.Anticipos)
+	}
+	if b.TransporteCarga != nil {
+		in.TransporteCargaIsSet = true
+		in.TransporteCarga = b.TransporteCarga.toModel()
 	}
 	if d := b.Detraccion; d != nil {
 		in.DetraccionCodigo = &d.Codigo

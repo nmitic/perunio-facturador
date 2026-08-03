@@ -166,12 +166,19 @@ const (
 	// is stored and reported on but mapped to OpVentaInterna when building XML.
 	OpAnticipos = "0104"
 
-	OpExportBienes         = "0102" // retired — SUNAT rejects it
-	OpNoDomiciliados       = "0103" // retired — SUNAT rejects it
-	OpExportBienes2        = "0200"
-	OpExportServ           = "0201"
-	OpDetraccion           = "1001" // Operación sujeta a detracción
-	OpDetraccionTransporte = "1002" // Operación sujeta a detracción — transporte de carga
+	OpExportBienes   = "0102" // retired — SUNAT rejects it
+	OpNoDomiciliados = "0103" // retired — SUNAT rejects it
+	OpExportBienes2  = "0200"
+	OpExportServ     = "0201"
+
+	// The four detracción operation types. Each of the three specialised ones is
+	// pinned to exactly one Cat.54 código — SUNAT rejects any other pairing with
+	// fault 3129 ("el dato ingresado como codigo de BBSS de detracción no
+	// corresponde al valor esperado"). See detraccionOperationType.
+	OpDetraccion                = "1001" // Operación sujeta a detracción (general)
+	OpDetraccionHidrobiologicos = "1002" // …recursos hidrobiológicos    — Cat.54 004
+	OpDetraccionPasajeros       = "1003" // …transporte de pasajeros     — Cat.54 028
+	OpDetraccionTransporteCarga = "1004" // …transporte de carga         — Cat.54 027
 )
 
 // Cat54 — Bienes y servicios sujetos a detracción (SPOT).
@@ -179,10 +186,14 @@ const (
 // Only the códigos that change behaviour are named here; the full list lives in
 // the frontend catalogue (src/data/sunat/detracciones.ts), which is what
 // resolves código, porcentaje and umbral from the productos of a comprobante.
+//
+// These three are the ones that do NOT declare catálogo 51 "1001". Each also
+// drags extra mandatory item-level markup along with it — see
+// detraccionOperationType and validateDetraccion.
 const (
-	// DetraccionTransporteCarga is the one código whose operación declares
-	// catálogo 51 "1002" instead of "1001". See detraccionOperationType.
-	DetraccionTransporteCarga = "027"
+	DetraccionHidrobiologicos = "004" // → 1002
+	DetraccionTransporteCarga = "027" // → 1004
+	DetraccionTransportePasaj = "028" // → 1003
 )
 
 // Cat52 — Legends

@@ -192,11 +192,16 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 	// Monetary totals
 	inv.LegalMonetaryTotal = buildLegalMonetaryTotal(req)
 
-	// Lines
-	for _, li := range req.Items {
+	// Lines. The transporte de carga (1004) trip block describes the operation
+	// the whole comprobante documents, and SUNAT's rules only require one
+	// occurrence of each tag, so it rides on the first line alone.
+	for i, li := range req.Items {
 		line, err := buildInvoiceLine(li, req.CurrencyCode)
 		if err != nil {
 			return nil, err
+		}
+		if i == 0 {
+			line.Delivery = buildLineDelivery(req)
 		}
 		inv.InvoiceLines = append(inv.InvoiceLines, line)
 	}
@@ -636,6 +641,61 @@ func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
 		Item:                item{Description: li.Description},
 		Price:               price{PriceAmount: newCurrencyAmount(unitPrice, cur)},
 	}, nil
+}
+
+// buildLineDelivery emits the cac:Delivery block a detracción de transporte de
+// carga (Cat.54 027 → tipo de operación 1004) must carry, or nil for every
+// other comprobante.
+//
+// SUNAT requires, all as ERRORs: the ubigeo + detailed address of both ends of
+// the trip (faults 3116-3119), a free-text detalle del viaje (3120), and
+// exactly one of each of the three valores referenciales (3122/3124/3125/3126)
+// — it computes the SPOT base as the greater of the importe and the valor
+// referencial, which is why all three are declared. Amounts are always PEN,
+// like the detracción monto itself.
+//
+// The optional cac:Shipment/cac:Consignment extras (tramo id, per-tramo
+// preliminary value, carga útil in TNE) are deliberately not emitted: they are
+// OBSERV-only, never ERROR.
+func buildLineDelivery(req model.IssueRequest) *lineDelivery {
+	t := req.TransporteCarga
+	if t == nil {
+		return nil
+	}
+	return &lineDelivery{
+		DeliveryLocation: &deliveryLocation{
+			Address: newUbigeoAddress(t.DestinoUbigeo, t.DestinoDireccion),
+		},
+		Despatch: &despatch{
+			Instructions:    t.DetalleViaje,
+			DespatchAddress: newUbigeoAddress(t.OrigenUbigeo, t.OrigenDireccion),
+		},
+		DeliveryTerms: []deliveryTerms{
+			newValorReferencial("01", t.ValorReferencialServicio),
+			newValorReferencial("02", t.ValorReferencialCargaEfectiva),
+			newValorReferencial("03", t.ValorReferencialCargaUtil),
+		},
+	}
+}
+
+func newUbigeoAddress(ubigeo, direccion string) ubigeoAddress {
+	return ubigeoAddress{
+		ID: ubigeoID{
+			Value:            ubigeo,
+			SchemeName:       "Ubigeos",
+			SchemeAgencyName: "PE:INEI",
+		},
+		AddressLine: addressLine{Line: direccion},
+	}
+}
+
+// newValorReferencial builds one cac:DeliveryTerms entry. The monto is always
+// in soles — the valor referencial is a SPOT figure, like the detracción.
+func newValorReferencial(tipo, monto string) deliveryTerms {
+	return deliveryTerms{
+		ID:     tipo,
+		Amount: newCurrencyAmount(monto, "PEN"),
+	}
 }
 
 // buildLineDiscount returns the line-level descuento por ítem (Cat.53 "00")

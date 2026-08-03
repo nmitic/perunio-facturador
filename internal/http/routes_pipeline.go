@@ -144,6 +144,8 @@ func buildIssueRequestFromDoc(
 		FormaPago: derefString(doc.FormaPago, "contado"),
 		Cuotas:    doc.Cuotas,
 		Anticipos: doc.Anticipos,
+		// Trip block for a detracción de transporte de carga (027 → 1004).
+		TransporteCarga: doc.TransporteCarga,
 	}
 
 	if doc.Notes != nil && *doc.Notes != "" {

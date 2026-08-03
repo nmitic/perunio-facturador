@@ -11,9 +11,9 @@ import (
 // reads for a tenant's active certificate. Cert management (upload, list,
 // activate, delete) lives in perunio-backend now; this service only signs.
 type ActiveCertificateForSigning struct {
-	CertID                  string
-	EncryptedPrivateKeyPEM  string
-	CertificatePEM          string
+	CertID                 string
+	EncryptedPrivateKeyPEM string
+	CertificatePEM         string
 }
 
 // GetActiveCertificateForSigning loads the active cert for a company. The

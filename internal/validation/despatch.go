@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ubigeoRegex               = regexp.MustCompile(`^\d{6}$`)
+	ubigeoRegex                      = regexp.MustCompile(`^\d{6}$`)
 	despatchRemitenteSeriesRegex     = regexp.MustCompile(`^T[A-Z0-9]{3}$`)
 	despatchTransportistaSeriesRegex = regexp.MustCompile(`^V[A-Z0-9]{3}$`)
 )

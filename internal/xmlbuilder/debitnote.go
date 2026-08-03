@@ -32,9 +32,9 @@ type debitNote struct {
 	CustomerParty        accountingCustomerParty
 	// Detracción (cac:PaymentMeans + cac:PaymentTerms) — present only when the
 	// nota references a factura sujeta a detracción. nil/empty otherwise.
-	PaymentMeans         *paymentMeans
-	PaymentTerms         []paymentTerms
-	TaxTotal             taxTotal
+	PaymentMeans *paymentMeans
+	PaymentTerms []paymentTerms
+	TaxTotal     taxTotal
 	// UBL 2.1 asymmetry: Invoice and CreditNote name the totals block
 	// cac:LegalMonetaryTotal, but DebitNoteType requires it to be
 	// cac:RequestedMonetaryTotal in that exact slot. Emitting LegalMonetaryTotal
