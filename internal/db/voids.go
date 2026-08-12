@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
@@ -66,7 +67,7 @@ func (p *Pool) CreateVoidRequest(ctx context.Context, companyID, voidID, voidDat
 			// A Comunicación de Baja only covers facturas/notas (Cat.01
 			// 01/07/08/30/34/42). Boletas (03) have no RA equivalent — they are
 			// annulled with a nota de crédito motivo 01 (Anulación de la operación).
-			if !model.VoidableDocTypes[d.docType] {
+			if !sunat.Cat01Void(d.docType) {
 				return fmt.Errorf("%w: %s-%d no admite comunicación de baja", ErrInvalidDocStatus, d.series, d.correlative)
 			}
 			if d.status != "accepted" && d.status != "accepted_with_observations" {

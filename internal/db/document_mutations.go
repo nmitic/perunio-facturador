@@ -198,7 +198,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		// simple cash sale can be issued without an identified buyer. The
 		// > S/700 case is rejected later by validation, which forbids the
 		// consumidor-final doc type on high-value boletas.
-		if docType == model.DocTypeBoleta && in.CustomerDocType == "" {
+		if docType == sunat.Cat01Boleta && in.CustomerDocType == "" {
 			in.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 			in.CustomerDocNumber = model.ConsumidorFinalDocNumber
 			in.CustomerName = model.ConsumidorFinalName

@@ -3,6 +3,7 @@ package xmlbuilder
 import (
 	"fmt"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -11,11 +12,11 @@ import (
 // for signature injection.
 func BuildDocumentXML(req model.IssueRequest) ([]byte, error) {
 	switch req.DocType {
-	case model.DocTypeFactura, model.DocTypeBoleta:
+	case sunat.Cat01Factura, sunat.Cat01Boleta:
 		return buildInvoiceXML(req)
-	case model.DocTypeNotaCredito:
+	case sunat.Cat01NotaCredito:
 		return buildCreditNoteXML(req)
-	case model.DocTypeNotaDebito:
+	case sunat.Cat01NotaDebito:
 		return buildDebitNoteXML(req)
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", req.DocType)

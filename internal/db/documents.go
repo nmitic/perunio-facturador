@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -433,9 +434,9 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 		// this NC is their anulación. Flip the referenced boleta to 'voided' so it
 		// shows as anulada and can't be annulled again. Mirrors the RA path, which
 		// voids its target on acceptance.
-		if res.MarkAccepted && doc.DocType == model.DocTypeNotaCredito &&
+		if res.MarkAccepted && doc.DocType == sunat.Cat01NotaCredito &&
 			doc.CreditDebitReasonCode != nil && *doc.CreditDebitReasonCode == "01" &&
-			doc.ReferenceDocType != nil && *doc.ReferenceDocType == model.DocTypeBoleta &&
+			doc.ReferenceDocType != nil && *doc.ReferenceDocType == sunat.Cat01Boleta &&
 			doc.ReferenceDocSeries != nil && doc.ReferenceDocCorrelative != nil {
 			if _, err := tx.Exec(ctx,
 				`UPDATE issued_documents SET status = 'voided', updated_at = now()

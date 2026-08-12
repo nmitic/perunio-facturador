@@ -1,15 +1,11 @@
 package model
 
-// Cat01 — Document Types
-const (
-	DocTypeFactura      = "01"
-	DocTypeBoleta       = "03"
-	DocTypeNotaCredito  = "07"
-	DocTypeNotaDebito   = "08"
-	DocTypeGuiaRemision = "09"
-	DocTypeRetencion    = "20"
-	DocTypePercepcion   = "40"
-)
+// Cat.01 (tipo de documento) has moved to sunat-catalogs: sunat.Cat01Factura,
+// Cat01Boleta, Cat01NotaCredito, Cat01NotaDebito and the rest, with
+// sunat.Cat01Void replacing the VoidableDocTypes map.
+//
+// DocTypeRetencion and DocTypePercepcion went with it unreferenced: this service
+// emits neither, so they had no callers.
 
 // Cat.05 (tributos) has moved to sunat-catalogs: sunat.Cat05IGV, Cat05Name,
 // Cat05TaxTypeCode, Cat05TaxCategoryId, Cat05Rate.
@@ -144,16 +140,6 @@ const LegendDetraccionText = "Operación sujeta a detracción"
 // IGVRate was the IGV rate as a decimal string ("0.18"). Dead — declared here and
 // read nowhere. The rate a line declares is sunat.Cat07Percent (a percentage
 // string for cbc:Percent); the multiplier the totals use is xmlbuilder.igvRate.
-
-// VoidableDocTypes are document types that can be included in a Comunicacion de Baja.
-var VoidableDocTypes = map[string]bool{
-	"01": true,
-	"07": true,
-	"08": true,
-	"30": true,
-	"34": true,
-	"42": true,
-}
 
 // The Attr* block that used to live here was dead: every constant was declared
 // and none was ever read — internal/xmlbuilder spells the attribute values out at

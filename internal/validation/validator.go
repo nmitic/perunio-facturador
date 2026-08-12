@@ -1,6 +1,7 @@
 package validation
 
 import (
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -17,13 +18,13 @@ func Validate(req model.IssueRequest) []model.ValidationError {
 	errs = append(errs, validateAnticipos(req)...)
 	errs = append(errs, validateDetraccion(req)...)
 
-	if req.DocType == model.DocTypeFactura || req.DocType == model.DocTypeBoleta {
+	if req.DocType == sunat.Cat01Factura || req.DocType == sunat.Cat01Boleta {
 		errs = append(errs, validatePaymentTerms(req)...)
 	}
-	if req.DocType == model.DocTypeNotaCredito {
+	if req.DocType == sunat.Cat01NotaCredito {
 		errs = append(errs, validateCreditNote(req)...)
 	}
-	if req.DocType == model.DocTypeNotaDebito {
+	if req.DocType == sunat.Cat01NotaDebito {
 		errs = append(errs, validateDebitNote(req)...)
 	}
 

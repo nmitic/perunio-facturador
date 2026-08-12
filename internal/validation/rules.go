@@ -56,7 +56,7 @@ func validateHeader(req model.IssueRequest) []model.ValidationError {
 
 	// DocType must be valid
 	switch req.DocType {
-	case model.DocTypeFactura, model.DocTypeBoleta, model.DocTypeNotaCredito, model.DocTypeNotaDebito:
+	case sunat.Cat01Factura, sunat.Cat01Boleta, sunat.Cat01NotaCredito, sunat.Cat01NotaDebito:
 		// ok
 	default:
 		errs = append(errs, model.ValidationError{Code: 1003, Message: fmt.Sprintf("invalid document type: %s", req.DocType), Field: "docType"})
@@ -65,11 +65,11 @@ func validateHeader(req model.IssueRequest) []model.ValidationError {
 	// Document ID format
 	docID := fmt.Sprintf("%s-%08d", req.Series, req.Correlative)
 	switch req.DocType {
-	case model.DocTypeFactura:
+	case sunat.Cat01Factura:
 		if !facturaIDRegex.MatchString(docID) {
 			errs = append(errs, model.ValidationError{Code: 1001, Message: "factura ID must match F[A-Z0-9]{3}-NNNNNNNN", Field: "series"})
 		}
-	case model.DocTypeBoleta:
+	case sunat.Cat01Boleta:
 		if !boletaIDRegex.MatchString(docID) {
 			errs = append(errs, model.ValidationError{Code: 1001, Message: "boleta ID must match B[A-Z0-9]{3}-NNNNNNNN", Field: "series"})
 		}
@@ -139,7 +139,7 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 	}
 
 	// Factura: customer must have RUC (type "6") in most cases
-	if req.DocType == model.DocTypeFactura && req.CustomerDocType != sunat.Cat06RUC {
+	if req.DocType == sunat.Cat01Factura && req.CustomerDocType != sunat.Cat06RUC {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "factura customer must have document type 6 (RUC)", Field: "customerDocType"})
 	}
 
@@ -157,7 +157,7 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 	// (IdentityDocTribNoRUC) is only valid for boletas <= S/700, so reject it
 	// here too — otherwise the consumidor-final default could carry a
 	// high-value boleta through.
-	if req.DocType == model.DocTypeBoleta {
+	if req.DocType == sunat.Cat01Boleta {
 		total, err := strconv.ParseFloat(req.TotalAmount, 64)
 		if err == nil && total > 700.00 {
 			if !hasIdentifiedCustomer(req) {
@@ -178,7 +178,7 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 	//
 	// A DNI is enough; do not require a RUC (type "6"). Natural persons are the
 	// normal receptor of a boleta.
-	if req.DocType == model.DocTypeBoleta && !hasIdentifiedCustomer(req) {
+	if req.DocType == sunat.Cat01Boleta && !hasIdentifiedCustomer(req) {
 		switch {
 		case req.Detraccion != nil:
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "una boleta sujeta a detracción requiere identificar al adquirente (DNI o RUC), no consumidor final", Field: "customerDocType"})
@@ -370,7 +370,7 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 	if gd <= 0 {
 		return errs
 	}
-	if req.DocType != model.DocTypeFactura && req.DocType != model.DocTypeBoleta && req.DocType != model.DocTypeNotaCredito {
+	if req.DocType != sunat.Cat01Factura && req.DocType != sunat.Cat01Boleta && req.DocType != sunat.Cat01NotaCredito {
 		return append(errs, model.ValidationError{Code: 2800, Message: "descuento global solo aplica a factura/boleta/nota de crédito", Field: "globalDiscount"})
 	}
 	var gravado float64
@@ -414,7 +414,7 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 		return errs
 	}
 	switch req.DocType {
-	case model.DocTypeFactura, model.DocTypeBoleta:
+	case sunat.Cat01Factura, sunat.Cat01Boleta:
 	default:
 		return append(errs, model.ValidationError{Code: 2800, Message: "anticipos solo aplican a facturas y boletas", Field: "anticipos"})
 	}
@@ -498,10 +498,10 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	// mirrors the detracción of the operation it corrects, so it follows
 	// whatever that comprobante could carry.
 	switch req.DocType {
-	case model.DocTypeFactura, model.DocTypeBoleta:
-	case model.DocTypeNotaCredito, model.DocTypeNotaDebito:
+	case sunat.Cat01Factura, sunat.Cat01Boleta:
+	case sunat.Cat01NotaCredito, sunat.Cat01NotaDebito:
 		switch req.ReferenceDocType {
-		case model.DocTypeFactura, model.DocTypeBoleta:
+		case sunat.Cat01Factura, sunat.Cat01Boleta:
 		default:
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "detracción solo aplica a notas que referencian una factura o boleta", Field: "detraccion"})
 		}
@@ -645,7 +645,7 @@ func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 	}
 
 	// NC on boletas: codes 04, 05, 08 not allowed
-	if req.ReferenceDocType == model.DocTypeBoleta && model.NCTypesNotAllowedOnBoleta[req.ReasonCode] {
+	if req.ReferenceDocType == sunat.Cat01Boleta && model.NCTypesNotAllowedOnBoleta[req.ReasonCode] {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("NC reason code %s not allowed for boletas", req.ReasonCode), Field: "reasonCode"})
 	}
 
