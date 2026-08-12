@@ -80,6 +80,62 @@ func TestSharedCatalogAgreesWithModel(t *testing.T) {
 		is.Equal(t, "1.0", sunat.UblDocumentCustomizationId(sunat.UblDocumentVoidedDocuments))
 	})
 
+	// Cat.07 replaced model.TaxCodeForAffectation, which mapped código to tributo
+	// with range comparisons ("code >= 11 && code <= 16"). This pins the whole
+	// mapping to what that function returned, so the move is provably a rename.
+	t.Run("should map every Cat.07 código to the tributo TaxCodeForAffectation returned", func(t *testing.T) {
+		for code, want := range map[string]string{
+			"10": "1000",
+			"11": "9996", "12": "9996", "13": "9996", "14": "9996", "15": "9996", "16": "9996",
+			"17": "1016",
+			"20": "9997",
+			"21": "9996",
+			"30": "9998",
+			"31": "9996", "32": "9996", "33": "9996", "34": "9996", "35": "9996", "36": "9996", "37": "9996",
+			"40": "9995",
+		} {
+			is.Equal(t, want, sunat.Cat07TaxSchemeCode(code))
+			is.True(t, sunat.Cat05Valid(sunat.Cat07TaxSchemeCode(code)))
+		}
+		// The old function returned "" for anything else; so does the lookup.
+		is.Equal(t, "", sunat.Cat07TaxSchemeCode("99"))
+	})
+
+	t.Run("should treat exactly the gratuito códigos as gratuito", func(t *testing.T) {
+		// Includes 37, which both frontend lists omitted while Go and the backend
+		// already accepted it. Every gratuito código declares tributo 9996.
+		gratuito := []string{"11", "12", "13", "14", "15", "16", "21", "31", "32", "33", "34", "35", "36", "37"}
+		for _, code := range gratuito {
+			is.True(t, sunat.Cat07Gratuito(code))
+			is.Equal(t, sunat.Cat05Gratuita, sunat.Cat07TaxSchemeCode(code))
+		}
+		for _, code := range []string{"10", "17", "20", "30", "40"} {
+			is.True(t, !sunat.Cat07Gratuito(code))
+		}
+
+		// Gravado-gratuito is the subset that declares IGV it would have carried.
+		for _, code := range []string{"11", "12", "13", "14", "15", "16"} {
+			is.True(t, sunat.Cat07GravadoGratuito(code))
+		}
+		for _, code := range []string{"21", "31", "37", "10", "20"} {
+			is.True(t, !sunat.Cat07GravadoGratuito(code))
+		}
+	})
+
+	t.Run("should declare the cbc:Percent each código carries, and none where the tag is omitted", func(t *testing.T) {
+		is.Equal(t, "18.00", sunat.Cat07Percent("10"))
+		is.Equal(t, "4.00", sunat.Cat07Percent("17"))
+		// Gravado-gratuito declares the 18% it would have carried (fault 2992);
+		// exonerado/inafecto gratuito declare 0.00, matching their zero TaxAmount.
+		is.Equal(t, "18.00", sunat.Cat07Percent("15"))
+		is.Equal(t, "0.00", sunat.Cat07Percent("21"))
+		is.Equal(t, "0.00", sunat.Cat07Percent("37"))
+		// Empty means cbc:Percent is omitted entirely — the element is omitempty.
+		is.Equal(t, "", sunat.Cat07Percent("20"))
+		is.Equal(t, "", sunat.Cat07Percent("30"))
+		is.Equal(t, "", sunat.Cat07Percent("40"))
+	})
+
 	t.Run("should reject a code SUNAT does not define", func(t *testing.T) {
 		is.True(t, !sunat.Cat16Valid("99"))
 

@@ -37,40 +37,15 @@ const (
 )
 
 // Cat07 — IGV Affectation Types
-const (
-	AffectGravadoOnerosa   = "10"
-	AffectGravadoGratuita  = "11" // through 16
-	AffectGravadoIVAP      = "17"
-	AffectExoneradoOnerosa = "20"
-	AffectExoneradoGrat    = "21"
-	AffectInafectoOnerosa  = "30"
-	AffectInafectoGratuita = "31" // through 37
-	AffectExportacion      = "40"
-)
-
-// TaxCodeForAffectation maps Cat.07 affectation code to the corresponding Cat.05 tax code.
-func TaxCodeForAffectation(code string) string {
-	switch {
-	case code == "10":
-		return "1000" // IGV
-	case code >= "11" && code <= "16":
-		return "9996" // Gratuita
-	case code == "17":
-		return "1016" // IVAP
-	case code == "20":
-		return "9997" // Exonerado
-	case code == "21":
-		return "9996" // Gratuita
-	case code == "30":
-		return "9998" // Inafecto
-	case code >= "31" && code <= "37":
-		return "9996" // Gratuita
-	case code == "40":
-		return "9995" // Exportacion
-	default:
-		return ""
-	}
-}
+// Cat.07 (afectación del IGV) has moved to sunat-catalogs. The Cat.07 -> Cat.05
+// mapping this file used to compute with range comparisons is now
+// sunat.Cat07TaxSchemeCode, a declared prop on each código; the rate a line
+// declares is sunat.Cat07Percent; and the two gratuito predicates are
+// sunat.Cat07Gratuito and sunat.Cat07GravadoGratuito.
+//
+// The Affect* constants went with it. They were dead — nothing outside this file
+// ever referred to one, and two of them ("11 // through 16", "31 // through 37")
+// stood for ranges a constant cannot express.
 
 // Cat09 — Nota de Credito Types
 var notaCreditoTypes = map[string]string{
@@ -172,8 +147,9 @@ const (
 // LegendDetraccionText is the fixed legend text SUNAT expects for a detracción.
 const LegendDetraccionText = "Operación sujeta a detracción"
 
-// IGVRate is the IGV rate as a decimal (18%).
-const IGVRate = "0.18"
+// IGVRate was the IGV rate as a decimal string ("0.18"). Dead — declared here and
+// read nowhere. The rate a line declares is sunat.Cat07Percent (a percentage
+// string for cbc:Percent); the multiplier the totals use is xmlbuilder.igvRate.
 
 // VoidableDocTypes are document types that can be included in a Comunicacion de Baja.
 var VoidableDocTypes = map[string]bool{

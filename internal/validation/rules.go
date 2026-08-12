@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -18,6 +19,17 @@ var (
 	boletaIDRegex  = regexp.MustCompile(`^[B][A-Z0-9]{3}-\d{1,8}$`)
 	isoDateRegex   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
+
+// cat07RateFraction converts the cbc:Percent a Cat.07 código declares ("18.00")
+// into the fraction the tolerance checks multiply by (0.18). Zero for a código
+// that declares no rate.
+func cat07RateFraction(code string) float64 {
+	pct, err := strconv.ParseFloat(sunat.Cat07Percent(code), 64)
+	if err != nil {
+		return 0
+	}
+	return pct / 100
+}
 
 func validateHeader(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
@@ -210,27 +222,31 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 			errs = append(errs, model.ValidationError{Code: 2025, Message: fmt.Sprintf("line %d: description is required", li.LineNumber), Field: fmt.Sprintf("items[%d].description", li.LineNumber)})
 		}
 
-		// Tax exemption reason code required
+		// Tax exemption reason code required, and must be one SUNAT defines.
+		// Membership was never checked here: an código outside catálogo 07 used to
+		// reach SUNAT and come back as a fault.
 		if li.TaxExemptionReasonCode == "" {
 			errs = append(errs, model.ValidationError{Code: 3105, Message: fmt.Sprintf("line %d: tax exemption reason code is required", li.LineNumber), Field: fmt.Sprintf("items[%d].taxExemptionReasonCode", li.LineNumber)})
+		} else if !sunat.Cat07Valid(li.TaxExemptionReasonCode) {
+			errs = append(errs, model.ValidationError{Code: 3105, Message: fmt.Sprintf("line %d: %q is not a catálogo 07 code", li.LineNumber, li.TaxExemptionReasonCode), Field: fmt.Sprintf("items[%d].taxExemptionReasonCode", li.LineNumber)})
 		}
 
-		// IGV tolerance check (±1 cent) for gravado onerosa lines.
-		// IGV base = valor_venta + ISC when ISC applies (SUNAT spec).
-		if li.TaxExemptionReasonCode == "10" {
-			errs = append(errs, validateIGVTolerance(li, 0.18, true)...)
-		}
-
-		// IVAP tolerance check (±1 cent) at 4 % for arroz pilado lines.
-		// IVAP base = valor_venta only — does not stack on ISC.
-		if li.TaxExemptionReasonCode == "17" {
-			errs = append(errs, validateIGVTolerance(li, 0.04, false)...)
+		// Tolerance check (±1 cent) on the tax an onerosa gravado line declares.
+		// Which tributo applies and at what rate both come from the código, so the
+		// checked rate and the emitted cbc:Percent cannot disagree.
+		switch sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) {
+		case sunat.Cat05IGV:
+			// IGV base = valor_venta + ISC when ISC applies (SUNAT spec).
+			errs = append(errs, validateIGVTolerance(li, cat07RateFraction(li.TaxExemptionReasonCode), true)...)
+		case sunat.Cat05IVAP:
+			// IVAP base = valor_venta only — does not stack on ISC.
+			errs = append(errs, validateIGVTolerance(li, cat07RateFraction(li.TaxExemptionReasonCode), false)...)
 		}
 
 		// Gratuito-specific rules: priceTypeCode must be '02' (precio
 		// referencial), LineTotal must be 0 (the value goes into
 		// PricingReference, not LineExtensionAmount).
-		if isGratuitoLineCode(li.TaxExemptionReasonCode) {
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			if li.PriceTypeCode != "02" {
 				errs = append(errs, model.ValidationError{
 					Code:    2010,
@@ -257,7 +273,7 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 			// Gravado-gratuito (11-16) is still gravado IGV: SUNAT requires a
 			// non-zero IGV tribute on the line (rule 3111; surfaces as 3105
 			// when the tribute is effectively absent).
-			if isGravadoGratuitoLineCode(li.TaxExemptionReasonCode) && isZeroDecimal(li.IGVAmount) {
+			if sunat.Cat07GravadoGratuito(li.TaxExemptionReasonCode) && isZeroDecimal(li.IGVAmount) {
 				errs = append(errs, model.ValidationError{
 					Code:    3111,
 					Message: fmt.Sprintf("line %d: igvAmount debe ser > 0 para gravado-gratuito (cat.07 codes 11-16)", li.LineNumber),
@@ -274,28 +290,6 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 	}
 
 	return errs
-}
-
-// isGravadoGratuitoLineCode reports whether a Cat.07 affectation code is
-// gravado-gratuito (11-16): IGV-subject but free of charge.
-func isGravadoGratuitoLineCode(code string) bool {
-	switch code {
-	case "11", "12", "13", "14", "15", "16":
-		return true
-	}
-	return false
-}
-
-// isGratuitoLineCode reports whether a Cat.07 affectation code marks the line
-// as a transferencia/retiro a título gratuito.
-func isGratuitoLineCode(code string) bool {
-	switch code {
-	case "11", "12", "13", "14", "15", "16",
-		"21",
-		"31", "32", "33", "34", "35", "36", "37":
-		return true
-	}
-	return false
 }
 
 // isZeroDecimal returns true for decimal strings representing zero.
@@ -355,10 +349,10 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 	}
 	var gravado float64
 	for _, li := range req.Items {
-		if isGratuitoLineCode(li.TaxExemptionReasonCode) {
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			continue
 		}
-		switch model.TaxCodeForAffectation(li.TaxExemptionReasonCode) {
+		switch sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) {
 		case "1000", "1016":
 			v, _ := strconv.ParseFloat(li.LineTotal, 64)
 			gravado += v

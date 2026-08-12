@@ -51,29 +51,6 @@ func formatUnitPrice(v float64) string {
 	return s
 }
 
-// isGratuitoCode reports whether a Cat.07 affectation code marks the line as
-// transferencia/retiro a título gratuito (codes 11-16, 21, 31-37).
-func isGratuitoCode(code string) bool {
-	switch code {
-	case "11", "12", "13", "14", "15", "16",
-		"21",
-		"31", "32", "33", "34", "35", "36", "37":
-		return true
-	}
-	return false
-}
-
-// isGravadoGratuitoCode reports whether a Cat.07 code is gravado-gratuito
-// (would have been subject to IGV had it been onerosa). SUNAT requires these
-// to declare a non-zero IGV at 18% (rule 3111).
-func isGravadoGratuitoCode(code string) bool {
-	switch code {
-	case "11", "12", "13", "14", "15", "16":
-		return true
-	}
-	return false
-}
-
 // invoice is the UBL 2.1 Invoice XML root element.
 type invoice struct {
 	XMLName              xml.Name `xml:"Invoice"`
@@ -259,8 +236,8 @@ type docTaxBuckets struct {
 func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 	var b docTaxBuckets
 	for _, li := range items {
-		taxCode := model.TaxCodeForAffectation(li.TaxExemptionReasonCode)
-		if isGratuitoCode(li.TaxExemptionReasonCode) {
+		taxCode := sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode)
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			// Every gratuito line contributes its referential base (+ would-be
 			// IGV) to the 9996 bucket. IGV is 18% for gravado-gratuito (11-16)
 			// and 0 for exonerado/inafecto gratuito (21, 31-37).
@@ -544,7 +521,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 
 func hasGratuitoLine(items []model.LineItem) bool {
 	for _, li := range items {
-		if isGratuitoCode(li.TaxExemptionReasonCode) {
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			return true
 		}
 	}
@@ -625,7 +602,7 @@ func buildInvoiceLine(li model.LineItem, cur string) (invoiceLine, error) {
 	// customer is charged nothing). FreeOfChargeIndicator is intentionally NOT
 	// emitted (greenter doesn't, and it's not what SUNAT keys on).
 	unitPrice := li.UnitPrice
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
+	if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		unitPrice = "0.00"
 	}
 
@@ -708,7 +685,7 @@ func newValorReferencial(tipo, monto string) deliveryTerms {
 // matches the net line total. Gratuito lines have a zero price and never carry
 // a discount, so they are skipped.
 func buildLineDiscount(li model.LineItem, cur string) *lineAllowanceCharge {
-	if isZeroAmount(li.DiscountAmount) || isGratuitoCode(li.TaxExemptionReasonCode) {
+	if isZeroAmount(li.DiscountAmount) || sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		return nil
 	}
 	discount := parseDecimal(li.DiscountAmount)
@@ -752,7 +729,7 @@ func buildPricingReference(li model.LineItem, cur string) (*pricingReference, er
 	// Reusing the IGV-inclusive price for gravado-gratuito (codes 11-16, IGV > 0)
 	// makes the two diverge, so derive the IGV-exclusive per-unit base instead.
 	refPrice := li.UnitPriceWithTax
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
+	if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		if qty := parseDecimal(li.Quantity); qty != 0 {
 			refPrice = formatDecimal(gratuitoReferentialBase(li) / qty)
 		}
@@ -792,7 +769,7 @@ func gratuitoReferentialBase(li model.LineItem) float64 {
 // (greenter's Factura-Gratuita emits both as the same value). Onerosa lines use
 // the ordinary valor de venta (li.LineTotal), which already matches their base.
 func lineExtensionAmountFor(li model.LineItem) string {
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
+	if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		return formatDecimal(gratuitoReferentialBase(li))
 	}
 	return li.LineTotal
@@ -807,7 +784,7 @@ func lineExtensionAmountFor(li model.LineItem) string {
 // not declared as a separate AllowanceCharge (which SUNAT ignores → fault 3271).
 // Gratuito lines charge nothing, so the price is 0.
 func noteLineUnitPrice(li model.LineItem) string {
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
+	if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		return "0.00"
 	}
 	qty := parseDecimal(li.Quantity)
@@ -825,7 +802,7 @@ func noteLineUnitPrice(li model.LineItem) string {
 func buildAdditionalMonetaryTotals(req model.IssueRequest) []additionalMonetaryTotal {
 	var totalFreeBase float64
 	for _, li := range req.Items {
-		if isGratuitoCode(li.TaxExemptionReasonCode) {
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			totalFreeBase += gratuitoReferentialBase(li)
 		}
 	}
@@ -858,7 +835,7 @@ func buildInvoiceExtensions(req model.IssueRequest) []ublExtension {
 }
 
 func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
-	taxCode := model.TaxCodeForAffectation(li.TaxExemptionReasonCode)
+	taxCode := sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode)
 	if !sunat.Cat05Valid(taxCode) {
 		taxCode = sunat.Cat05IGV
 	}
@@ -873,7 +850,7 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	// so the base must be the referential, NOT 0 — otherwise the operation looks
 	// onerosa. TaxAmount is the declared (would-be) IGV: 18% for gravado-gratuito
 	// (11-16, rules 3103 + 3111), 0 for exonerado/inafecto gratuito (21, 31-37).
-	if isGratuitoCode(li.TaxExemptionReasonCode) {
+	if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		taxableAmount = formatDecimal(gratuitoReferentialBase(li))
 		taxAmount = li.IGVAmount
 	} else {
@@ -896,7 +873,7 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	}
 
 	// ✅ ISC subtotal (only for onerosa)
-	if !isZeroAmount(li.ISCAmount) && !isGratuitoCode(li.TaxExemptionReasonCode) {
+	if !isZeroAmount(li.ISCAmount) && !sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 		iscCat := newTaxCategory("S", "", sunat.Cat05ISC)
 		iscCat.TierRange = li.ISCTierRange
 
@@ -941,20 +918,16 @@ func newTaxCategory(categoryID, percent, taxCode string) taxCategory {
 func newLineTaxCategory(exemptionReasonCode, taxCode string) taxCategory {
 	tc := newTaxCategory(sunat.Cat05TaxCategoryId(taxCode), "", taxCode)
 
-	// Set percent based on tax type
-	switch taxCode {
-	case sunat.Cat05IGV, sunat.Cat05IVAP:
-		tc.Percent = sunat.Cat05Rate(taxCode)
-	case sunat.Cat05Gratuita:
-		// SUNAT requires the rate tag on every line tributo (fault 2992).
-		// Gravado-gratuito (11-16) declares the IGV rate it would have carried;
-		// exonerado/inafecto gratuito (21, 31-37) are not IGV-subject, so the rate
-		// is 0.00, consistent with their zero TaxAmount.
-		if isGravadoGratuitoCode(exemptionReasonCode) {
-			tc.Percent = sunat.Cat05Rate(sunat.Cat05IGV)
-		} else {
-			tc.Percent = "0.00"
-		}
+	// cbc:Percent is the rate the line declares, which Cat.07 carries per código:
+	// 18.00 for gravado, 4.00 for IVAP, 18.00 for gravado-gratuito (the IGV it
+	// would have carried — SUNAT wants the tag on every tributo that has a rate,
+	// fault 2992), 0.00 for exonerado/inafecto gratuito, and empty for exonerado,
+	// inafecto and exportación, which omit the element entirely.
+	tc.Percent = sunat.Cat07Percent(exemptionReasonCode)
+	if !sunat.Cat07Valid(exemptionReasonCode) {
+		// Unknown código: buildLineTaxTotal has already fallen back to IGV, so
+		// declare IGV's rate rather than emitting a tributo with no rate.
+		tc.Percent = sunat.Cat05Rate(sunat.Cat05IGV)
 	}
 
 	if exemptionReasonCode != "" {

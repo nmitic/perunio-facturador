@@ -144,10 +144,10 @@ func distributeGlobalDiscountToNoteLines(items []model.LineItem, discount float6
 	var gravadoGross float64
 	var gravadoIdx []int
 	for i, li := range items {
-		if isGratuitoCode(li.TaxExemptionReasonCode) {
+		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			continue
 		}
-		switch model.TaxCodeForAffectation(li.TaxExemptionReasonCode) {
+		switch sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) {
 		case "1000", "1016":
 			gravadoGross += parseDecimal(li.LineTotal)
 			gravadoIdx = append(gravadoIdx, i)

@@ -43,8 +43,8 @@ type StatusResponse struct {
 	// ArcCdr is the base64-encoded CDR ZIP (present on codRespuesta="0").
 	ArcCdr string `json:"arcCdr"`
 	// IndCdrGenerado is "1" when a CDR was generated, "0" otherwise.
-	IndCdrGenerado string        `json:"indCdrGenerado"`
-	Error          *StatusError  `json:"error,omitempty"`
+	IndCdrGenerado string       `json:"indCdrGenerado"`
+	Error          *StatusError `json:"error,omitempty"`
 }
 
 // StatusError is the error node on codRespuesta="99".
