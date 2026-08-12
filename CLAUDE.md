@@ -172,6 +172,47 @@ SUNAT_GRE_BETA_URL=         # default: https://api-cpe.sunat.gob.pe
 SUNAT_GRE_PRODUCTION_URL=   # default: https://api-cpe.sunat.gob.pe
 ```
 
+## SUNAT catalogs
+
+Every SUNAT código comes from the
+[`sunat-catalogs`](https://github.com/nmitic/perunio-sunat-catalogs) module, which
+`perunio-backend` and `perunio-frontend` consume from the same tag.
+
+```go
+import "github.com/nmitic/perunio-sunat-catalogs/sunat"
+
+if !sunat.Cat07Valid(code) { /* reject before it reaches SUNAT */ }
+scheme := sunat.Cat07TaxScheme(code)   // Cat.07 -> Cat.05, one definition
+```
+
+Codes are plain `string`. Go has no literal-union type, so a defined string type
+would buy no compile-time safety while forcing a conversion at every JSON,
+database and XML boundary.
+
+**Never declare a code list, switch or map over códigos here.** `internal/model/catalog.go`
+is being emptied into the shared module one catálogo at a time;
+`internal/model/catalog_shared_test.go` pins the two together until each moves, so
+a disagreement fails in `make test` rather than at SUNAT. Delete each subtest as
+its catálogo leaves `catalog.go`.
+
+The generated API per catálogo:
+
+| Symbol | Purpose |
+|---|---|
+| `sunat.CatNN(code)` | entry + ok |
+| `sunat.CatNNValid(code)` | membership |
+| `sunat.CatNNEmit(code)` | may go on the wire |
+| `sunat.CatNNSelect(code)` | the issuance UI offers it |
+| `sunat.CatNNCodes` / `CatNNSelectCodes` | ordered lists, for error messages |
+| `sunat.CatNN<Name>` | named constant, e.g. `sunat.Cat16PrecioUnitario` |
+
+The validator and the frontend's picker are generated from the same `select`
+capability, which is what stops the two from drifting — the GRE motivo de traslado
+list is the case where they already had.
+
+To change a catálogo, edit it in `perunio-sunat-catalogs`, tag, then
+`go get github.com/nmitic/perunio-sunat-catalogs@vX.Y.Z`.
+
 ## Critical SUNAT Gotchas
 
 - RC/RA use UBL **2.0**, NOT 2.1 — #1 cause of silent rejections
