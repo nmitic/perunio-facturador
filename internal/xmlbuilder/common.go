@@ -6,8 +6,10 @@ import (
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
+// The XMLDSig algorithm identifiers. These are W3C protocol constants, not SUNAT
+// códigos — they stay here. The xmldsig namespace itself is not: it lives in
+// ubl-namespace.json and reaches this package as nsDS in ubl.go.
 const (
-	nsDS        = "http://www.w3.org/2000/09/xmldsig#"
 	algC14N     = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
 	algRSASHA1  = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
 	algSHA1     = "http://www.w3.org/2000/09/xmldsig#sha1"

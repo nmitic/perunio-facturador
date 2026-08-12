@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -47,20 +48,22 @@ func voidDocumentID(issueDate string, correlative int) string {
 func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
 	voidID := voidDocumentID(req.IssueDate, req.Correlative)
 
+	root := ublRootFor(sunat.UblDocumentVoidedDocuments)
+
 	doc := voidedDocuments{
-		XMLNS:    NSVoidedDocuments,
-		XMLNSCAC: NSCAC,
-		XMLNSCBC: NSCBC,
-		XMLNSDS:  NSDS,
-		XMLNSEXT: NSEXT,
-		XMLNSSAC: NSSAC,
+		XMLNS:    root.NS,
+		XMLNSCAC: nsCAC,
+		XMLNSCBC: nsCBC,
+		XMLNSDS:  nsDS,
+		XMLNSEXT: nsEXT,
+		XMLNSSAC: nsSAC,
 
 		UBLExtensions: ublExtensions{
 			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
-		UBLVersionID:    UBLVersion20,
-		CustomizationID: CustomizationIDRA,
+		UBLVersionID:    root.UBLVersionID,
+		CustomizationID: root.CustomizationID,
 		ID:              voidID,
 		ReferenceDate:   req.IssueDate, // reference date = issue date for RA
 		IssueDate:       req.IssueDate,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -44,19 +45,21 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 	docID := fmt.Sprintf("%s-%08d", req.Series, req.Correlative)
 	refID := fmt.Sprintf("%s-%08d", req.ReferenceDocSeries, req.ReferenceDocCorrelative)
 
+	root := ublRootFor(sunat.UblDocumentCreditNote)
+
 	cn := creditNote{
-		XMLNS:    NSCreditNote,
-		XMLNSCAC: NSCAC,
-		XMLNSCBC: NSCBC,
-		XMLNSEXT: NSEXT,
-		XMLNSDS:  NSDS,
+		XMLNS:    root.NS,
+		XMLNSCAC: nsCAC,
+		XMLNSCBC: nsCBC,
+		XMLNSEXT: nsEXT,
+		XMLNSDS:  nsDS,
 
 		UBLExtensions: ublExtensions{
 			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
-		UBLVersionID:    UBLVersion21,
-		CustomizationID: CustomizationID20,
+		UBLVersionID:    root.UBLVersionID,
+		CustomizationID: root.CustomizationID,
 		ProfileID:       newProfileID(req.OperationType, req.Detraccion),
 		ID:              docID,
 		IssueDate:       req.IssueDate,

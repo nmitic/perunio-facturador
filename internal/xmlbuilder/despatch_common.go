@@ -4,11 +4,9 @@ import (
 	"encoding/xml"
 	"fmt"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
-
-// UBL 2.1 DespatchAdvice namespace (distinct from Invoice/CreditNote).
-const NSDespatchAdvice = "urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2"
 
 // despatchAdvice is the UBL 2.1 DespatchAdvice root used by all three
 // GRE flavors (Remitente 09, Transportista 31, por Eventos). Unlike
@@ -430,20 +428,22 @@ func buildDespatchLines(lines []model.DespatchLine) []despatchLineXML {
 // supplier/customer parties, seller party, references).
 func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, companyName string) despatchAdvice {
 	docID := fmt.Sprintf("%s-%08d", d.Series, d.Correlative)
+	root := ublRootFor(sunat.UblDocumentDespatchAdvice)
+
 	adv := despatchAdvice{
-		XMLNS:    NSDespatchAdvice,
-		XMLNSCAC: NSCAC,
-		XMLNSCBC: NSCBC,
-		XMLNSEXT: NSEXT,
-		XMLNSDS:  NSDS,
-		XMLNSSAC: NSSAC,
+		XMLNS:    root.NS,
+		XMLNSCAC: nsCAC,
+		XMLNSCBC: nsCBC,
+		XMLNSEXT: nsEXT,
+		XMLNSDS:  nsDS,
+		XMLNSSAC: nsSAC,
 
 		UBLExtensions: ublExtensions{
 			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
-		UBLVersionID:    UBLVersion21,
-		CustomizationID: CustomizationID20,
+		UBLVersionID:    root.UBLVersionID,
+		CustomizationID: root.CustomizationID,
 		ID:              docID,
 		IssueDate:       d.IssueDate.Format("2006-01-02"),
 

@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -111,20 +112,22 @@ func BuildSummaryXML(req model.SummaryRequest) ([]byte, error) {
 		formatDateCompact(req.IssueDate),
 		req.Correlative)
 
+	root := ublRootFor(sunat.UblDocumentSummaryDocuments)
+
 	doc := summaryDocuments{
-		XMLNS:    NSSummaryDocuments,
-		XMLNSCAC: NSCAC,
-		XMLNSCBC: NSCBC,
-		XMLNSDS:  NSDS,
-		XMLNSEXT: NSEXT,
-		XMLNSSAC: NSSAC,
+		XMLNS:    root.NS,
+		XMLNSCAC: nsCAC,
+		XMLNSCBC: nsCBC,
+		XMLNSDS:  nsDS,
+		XMLNSEXT: nsEXT,
+		XMLNSSAC: nsSAC,
 
 		UBLExtensions: ublExtensions{
 			Extension: []ublExtension{{ExtensionContent: newExtensionContent()}},
 		},
 
-		UBLVersionID:    UBLVersion20,
-		CustomizationID: CustomizationIDRC,
+		UBLVersionID:    root.UBLVersionID,
+		CustomizationID: root.CustomizationID,
 		ID:              summaryID,
 		ReferenceDate:   req.ReferenceDate,
 		IssueDate:       req.IssueDate,
@@ -222,31 +225,32 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 
 	// TaxTotal: one cac:TaxTotal per tributo present (IGV, ISC, otros).
 	if !isZeroAmount(item.TotalIGV) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, cur, "1000", "IGV", "VAT"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, cur, sunat.Cat05IGV))
 	}
 	if !isZeroAmount(item.TotalISC) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, "2000", "ISC", "EXC"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, sunat.Cat05ISC))
 	}
 	if !isZeroAmount(item.TotalOtherTaxes) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalOtherTaxes, cur, "9999", "OTROS", "OTH"))
+		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalOtherTaxes, cur, sunat.Cat05Otros))
 	}
 
 	return line
 }
 
 // newSummaryTax builds a cac:TaxTotal for an RC line from a tax amount, its line
-// currency, and its SUNAT catalog-05 scheme (IGV 1000/VAT, ISC 2000/EXC, otros
-// 9999/OTH).
-func newSummaryTax(amount, currency, schemeID, schemeName, taxTypeCode string) summaryTaxTotal {
+// currency and its Cat.05 código. The scheme's name and cbc:TaxTypeCode come from
+// the catálogo, so an RC line and the equivalent Invoice line cannot describe the
+// same tributo differently.
+func newSummaryTax(amount, currency, taxCode string) summaryTaxTotal {
 	return summaryTaxTotal{
 		TaxAmount: newCurrencyAmount(amount, currency),
 		TaxSubtotal: summaryTaxSubtotal{
 			TaxAmount: newCurrencyAmount(amount, currency),
 			TaxCategory: summaryTaxCategory{
 				TaxScheme: summaryTaxScheme{
-					ID:          schemeID,
-					Name:        schemeName,
-					TaxTypeCode: taxTypeCode,
+					ID:          taxCode,
+					Name:        sunat.Cat05Name(taxCode),
+					TaxTypeCode: sunat.Cat05TaxTypeCode(taxCode),
 				},
 			},
 		},

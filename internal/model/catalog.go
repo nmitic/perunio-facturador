@@ -11,44 +11,8 @@ const (
 	DocTypePercepcion   = "40"
 )
 
-// TaxSchemeType holds Cat.05 tax scheme metadata.
-type TaxSchemeType struct {
-	Code          string
-	Name          string
-	UNECEID       string
-	TaxTypeCode   string
-	TaxCategoryID string
-}
-
-var (
-	TaxIGV         = TaxSchemeType{"1000", "IGV", "1000", "VAT", "S"}
-	TaxIVAP        = TaxSchemeType{"1016", "IVAP", "1016", "VAT", "S"}
-	TaxISC         = TaxSchemeType{"2000", "ISC", "2000", "EXC", "S"}
-	TaxICBPER      = TaxSchemeType{"7152", "ICBPER", "7152", "OTH", "S"}
-	TaxExportacion = TaxSchemeType{"9995", "EXP", "9995", "FRE", "G"}
-	TaxGratuita    = TaxSchemeType{"9996", "GRA", "9996", "FRE", "E"}
-	TaxExonerado   = TaxSchemeType{"9997", "EXO", "9997", "VAT", "E"}
-	TaxInafecto    = TaxSchemeType{"9998", "INA", "9998", "FRE", "O"}
-	TaxOtros       = TaxSchemeType{"9999", "OTROS", "9999", "OTH", "S"}
-)
-
-var taxSchemeByCode = map[string]TaxSchemeType{
-	"1000": TaxIGV,
-	"1016": TaxIVAP,
-	"2000": TaxISC,
-	"7152": TaxICBPER,
-	"9995": TaxExportacion,
-	"9996": TaxGratuita,
-	"9997": TaxExonerado,
-	"9998": TaxInafecto,
-	"9999": TaxOtros,
-}
-
-// TaxSchemeByCode returns the tax scheme for a given Cat.05 code.
-func TaxSchemeByCode(code string) (TaxSchemeType, bool) {
-	ts, ok := taxSchemeByCode[code]
-	return ts, ok
-}
+// Cat.05 (tributos) has moved to sunat-catalogs: sunat.Cat05IGV, Cat05Name,
+// Cat05TaxTypeCode, Cat05TaxCategoryId, Cat05Rate.
 
 // Cat06 — Identity Document Types
 const (
@@ -221,26 +185,8 @@ var VoidableDocTypes = map[string]bool{
 	"42": true,
 }
 
-// XML attribute constants required by SUNAT.
-const (
-	AttrIdentitySchemeName       = "Documento de Identidad"
-	AttrIdentitySchemeAgencyName = "PE:SUNAT"
-	AttrIdentitySchemeURI        = "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06"
-
-	AttrDocTypeListAgencyName = "PE:SUNAT"
-	AttrDocTypeListName       = "Tipo de Documento"
-	AttrDocTypeListURI        = "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01"
-
-	AttrCurrencyListID     = "ISO 4217 Alpha"
-	AttrCurrencyListName   = "Currency"
-	AttrCurrencyListAgency = "United Nations Economic Commission for Europe"
-
-	AttrUnitCodeListID = "UN/ECE rec 20"
-
-	AttrTaxSchemeID       = "UN/ECE 5305"
-	AttrTaxSchemeAgencyID = "6"
-
-	AttrPriceTypeListName   = "Tipo de Precio"
-	AttrPriceTypeListAgency = "PE:SUNAT"
-	AttrPriceTypeListURI    = "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16"
-)
+// The Attr* block that used to live here was dead: every constant was declared
+// and none was ever read — internal/xmlbuilder spells the attribute values out at
+// the element that carries them. It also mislabelled one of them, naming
+// "UN/ECE 5305" (the tax *category* code list) AttrTaxSchemeID. Deleted rather
+// than migrated: XML attribute boilerplate is not a catálogo.

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -119,20 +120,22 @@ type invoice struct {
 func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 	docID := fmt.Sprintf("%s-%08d", req.Series, req.Correlative)
 
+	root := ublRootFor(sunat.UblDocumentInvoice)
+
 	inv := invoice{
-		XMLNS:    NSInvoice,
-		XMLNSCAC: NSCAC,
-		XMLNSCBC: NSCBC,
-		XMLNSEXT: NSEXT,
-		XMLNSSAC: NSSAC,
-		XMLNSDS:  NSDS,
+		XMLNS:    root.NS,
+		XMLNSCAC: nsCAC,
+		XMLNSCBC: nsCBC,
+		XMLNSEXT: nsEXT,
+		XMLNSSAC: nsSAC,
+		XMLNSDS:  nsDS,
 
 		UBLExtensions: ublExtensions{
 			Extension: buildInvoiceExtensions(req),
 		},
 
-		UBLVersionID:    UBLVersion21,
-		CustomizationID: CustomizationID20,
+		UBLVersionID:    root.UBLVersionID,
+		CustomizationID: root.CustomizationID,
 		ProfileID:       newProfileID(req.OperationType, req.Detraccion),
 		ID:              docID,
 		IssueDate:       req.IssueDate,
@@ -474,7 +477,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.regularBase), cur),
 			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.regularIGV), cur),
-			TaxCategory:   newTaxCategory("S", "18.00", model.TaxIGV),
+			TaxCategory:   newTaxCategory("S", sunat.Cat05Rate(sunat.Cat05IGV), sunat.Cat05IGV),
 		})
 	}
 
@@ -483,7 +486,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.ivapBase), cur),
 			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.ivapIGV), cur),
-			TaxCategory:   newTaxCategory("S", "4.00", model.TaxIVAP),
+			TaxCategory:   newTaxCategory("S", sunat.Cat05Rate(sunat.Cat05IVAP), sunat.Cat05IVAP),
 		})
 	}
 
@@ -504,7 +507,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.gratBase), cur),
 			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.gratIGV), cur),
-			TaxCategory:   newTaxCategory(model.TaxGratuita.TaxCategoryID, gratPercent, model.TaxGratuita),
+			TaxCategory:   newTaxCategory(sunat.Cat05TaxCategoryId(sunat.Cat05Gratuita), gratPercent, sunat.Cat05Gratuita),
 		})
 	}
 
@@ -513,7 +516,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount(req.TotalISC, cur),
-			TaxCategory:   newTaxCategory("S", "", model.TaxISC),
+			TaxCategory:   newTaxCategory("S", "", sunat.Cat05ISC),
 		})
 	}
 
@@ -522,7 +525,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount(req.TotalOtherTaxes, cur),
-			TaxCategory:   newTaxCategory("S", "", model.TaxOtros),
+			TaxCategory:   newTaxCategory("S", "", sunat.Cat05Otros),
 		})
 	}
 
@@ -532,7 +535,7 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
 			TaxAmount:     newCurrencyAmount("0.00", cur),
-			TaxCategory:   newTaxCategory("S", "18.00", model.TaxIGV),
+			TaxCategory:   newTaxCategory("S", sunat.Cat05Rate(sunat.Cat05IGV), sunat.Cat05IGV),
 		})
 	}
 
@@ -856,10 +859,8 @@ func buildInvoiceExtensions(req model.IssueRequest) []ublExtension {
 
 func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	taxCode := model.TaxCodeForAffectation(li.TaxExemptionReasonCode)
-
-	ts, ok := model.TaxSchemeByCode(taxCode)
-	if !ok {
-		ts = model.TaxIGV
+	if !sunat.Cat05Valid(taxCode) {
+		taxCode = sunat.Cat05IGV
 	}
 
 	// Default (onerosa)
@@ -889,14 +890,14 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 			{
 				TaxableAmount: newCurrencyAmount(taxableAmount, cur),
 				TaxAmount:     newCurrencyAmount(taxAmount, cur),
-				TaxCategory:   newLineTaxCategory(li.TaxExemptionReasonCode, ts),
+				TaxCategory:   newLineTaxCategory(li.TaxExemptionReasonCode, taxCode),
 			},
 		},
 	}
 
 	// ✅ ISC subtotal (only for onerosa)
 	if !isZeroAmount(li.ISCAmount) && !isGratuitoCode(li.TaxExemptionReasonCode) {
-		iscCat := newTaxCategory("S", "", model.TaxISC)
+		iscCat := newTaxCategory("S", "", sunat.Cat05ISC)
 		iscCat.TierRange = li.ISCTierRange
 
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
@@ -909,7 +910,12 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	return tt
 }
 
-func newTaxCategory(categoryID, percent string, ts model.TaxSchemeType) taxCategory {
+// newTaxCategory builds a cac:TaxCategory for a Cat.05 tributo. The two UN/ECE
+// scheme identifiers are different code lists on different elements and are both
+// correct as written: 5305 ("duty or tax or fee category code") qualifies the
+// category S/E/O/G, 5153 ("duty or tax or fee type name code") qualifies the
+// tributo itself.
+func newTaxCategory(categoryID, percent, taxCode string) taxCategory {
 	tc := taxCategory{
 		ID: taxCategoryID{
 			Value:          categoryID,
@@ -918,12 +924,12 @@ func newTaxCategory(categoryID, percent string, ts model.TaxSchemeType) taxCateg
 		},
 		TaxScheme: taxSchemeXML{
 			ID: taxSchemeID{
-				Value:          ts.Code,
+				Value:          taxCode,
 				SchemeID:       "UN/ECE 5153",
 				SchemeAgencyID: "6",
 			},
-			Name:        ts.Name,
-			TaxTypeCode: ts.TaxTypeCode,
+			Name:        sunat.Cat05Name(taxCode),
+			TaxTypeCode: sunat.Cat05TaxTypeCode(taxCode),
 		},
 	}
 	if percent != "" {
@@ -932,22 +938,20 @@ func newTaxCategory(categoryID, percent string, ts model.TaxSchemeType) taxCateg
 	return tc
 }
 
-func newLineTaxCategory(exemptionReasonCode string, ts model.TaxSchemeType) taxCategory {
-	tc := newTaxCategory(ts.TaxCategoryID, "", ts)
+func newLineTaxCategory(exemptionReasonCode, taxCode string) taxCategory {
+	tc := newTaxCategory(sunat.Cat05TaxCategoryId(taxCode), "", taxCode)
 
 	// Set percent based on tax type
-	switch ts.Code {
-	case "1000": // IGV
-		tc.Percent = "18.00"
-	case "1016": // IVAP
-		tc.Percent = "4.00"
-	case "9996": // Gratuita — gravado-gratuito (11-16) declares IGV at 18%
+	switch taxCode {
+	case sunat.Cat05IGV, sunat.Cat05IVAP:
+		tc.Percent = sunat.Cat05Rate(taxCode)
+	case sunat.Cat05Gratuita:
 		// SUNAT requires the rate tag on every line tributo (fault 2992).
-		// Gravado-gratuito (11-16) declares IGV at 18%; exonerado/inafecto
-		// gratuito (21, 31-37) are not IGV-subject, so the rate is 0.00,
-		// consistent with their zero TaxAmount.
+		// Gravado-gratuito (11-16) declares the IGV rate it would have carried;
+		// exonerado/inafecto gratuito (21, 31-37) are not IGV-subject, so the rate
+		// is 0.00, consistent with their zero TaxAmount.
 		if isGravadoGratuitoCode(exemptionReasonCode) {
-			tc.Percent = "18.00"
+			tc.Percent = sunat.Cat05Rate(sunat.Cat05IGV)
 		} else {
 			tc.Percent = "0.00"
 		}

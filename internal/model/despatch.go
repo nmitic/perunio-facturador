@@ -60,46 +60,46 @@ type Despatch struct {
 	RecipientAddress   *string `json:"recipientAddress"`
 
 	// Transport.
-	TransportModality string  `json:"transportModality"` // Cat.18
-	TransferReason    string  `json:"transferReason"`    // Cat.20
-	TransferReasonDesc *string `json:"transferReasonDesc"`
-	StartDate         *time.Time `json:"startDate"`      // fecha de inicio del traslado
-	TotalWeightKg     string  `json:"totalWeightKg"`
-	WeightUnitCode    string  `json:"weightUnitCode"`    // "KGM" per SUNAT
-	TotalPackages     *int    `json:"totalPackages"`
+	TransportModality  string     `json:"transportModality"` // Cat.18
+	TransferReason     string     `json:"transferReason"`    // Cat.20
+	TransferReasonDesc *string    `json:"transferReasonDesc"`
+	StartDate          *time.Time `json:"startDate"` // fecha de inicio del traslado
+	TotalWeightKg      string     `json:"totalWeightKg"`
+	WeightUnitCode     string     `json:"weightUnitCode"` // "KGM" per SUNAT
+	TotalPackages      *int       `json:"totalPackages"`
 
 	// Addresses — both punto de partida (origin) and punto de llegada
 	// (arrival) require 6-digit ubigeo codes.
-	StartUbigeo     string  `json:"startUbigeo"`
-	StartAddress    string  `json:"startAddress"`
-	ArrivalUbigeo   string  `json:"arrivalUbigeo"`
-	ArrivalAddress  string  `json:"arrivalAddress"`
+	StartUbigeo    string `json:"startUbigeo"`
+	StartAddress   string `json:"startAddress"`
+	ArrivalUbigeo  string `json:"arrivalUbigeo"`
+	ArrivalAddress string `json:"arrivalAddress"`
 
 	// Private transport only — required when TransportModality = "02"
 	// (and always for Transportista). Driver license + at least one
 	// vehicle plate are hard-required by SUNAT.
-	DriverDocType    *string `json:"driverDocType"`    // Cat.06
-	DriverDocNumber  *string `json:"driverDocNumber"`
-	DriverLicense    *string `json:"driverLicense"`
-	DriverName       *string `json:"driverName"`
-	VehiclePlate     *string `json:"vehiclePlate"`
-	VehiclePlates    []string `json:"vehiclePlates"` // additional (secundarios)
+	DriverDocType   *string  `json:"driverDocType"` // Cat.06
+	DriverDocNumber *string  `json:"driverDocNumber"`
+	DriverLicense   *string  `json:"driverLicense"`
+	DriverName      *string  `json:"driverName"`
+	VehiclePlate    *string  `json:"vehiclePlate"`
+	VehiclePlates   []string `json:"vehiclePlates"` // additional (secundarios)
 
 	// Public transport only — required when TransportModality = "01".
 	// The third-party carrier.
 	CarrierRUC  *string `json:"carrierRuc"`
 	CarrierName *string `json:"carrierName"`
 	// Optional MTC registration number for the carrier.
-	CarrierMTC  *string `json:"carrierMtc"`
+	CarrierMTC *string `json:"carrierMtc"`
 
 	// Por Eventos only.
 	EventCode     *string `json:"eventCode"`     // Cat.59
 	OriginalGreID *string `json:"originalGreId"` // FK to despatches.id
 
 	// Related document reference (optional — e.g. the invoice/order).
-	RelatedDocType    *string `json:"relatedDocType"`
-	RelatedDocSeries  *string `json:"relatedDocSeries"`
-	RelatedDocNumber  *string `json:"relatedDocNumber"`
+	RelatedDocType   *string `json:"relatedDocType"`
+	RelatedDocSeries *string `json:"relatedDocSeries"`
+	RelatedDocNumber *string `json:"relatedDocNumber"`
 
 	Status string `json:"status"`
 

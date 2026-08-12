@@ -39,3 +39,5 @@ require (
 	github.com/nmitic/perunio-sunat-catalogs v0.1.0
 	golang.org/x/sync v0.20.0 // indirect
 )
+
+replace github.com/nmitic/perunio-sunat-catalogs => ../perunio-sunat-catalogs
