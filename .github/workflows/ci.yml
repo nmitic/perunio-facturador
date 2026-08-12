@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # sunat-catalogs is a public module, so this resolves through the module
+      # proxy with no credentials and nothing to configure.
+      - name: Download modules
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -shuffle on ./...
+
+      # `make lint` (golangci-lint) is deliberately not run here: the repo has no
+      # golangci config, so CI would enforce the tool's defaults rather than a
+      # choice this project made. Add it once a .golangci.yml exists.
