@@ -20,6 +20,26 @@ var (
 	isoDateRegex   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
 
+// cat06Patterns compiles, once, the número format each Cat.06 código declares.
+// A código with no declared pattern is absent — SUNAT documents no length rule
+// for it, so there is nothing to check.
+var cat06Patterns = func() map[string]*regexp.Regexp {
+	m := make(map[string]*regexp.Regexp)
+	for _, code := range sunat.Cat06Codes {
+		if p := sunat.Cat06NumberPattern(code); p != "" {
+			m[code] = regexp.MustCompile(p)
+		}
+	}
+	return m
+}()
+
+// cat06NumberMatches reports whether a documento de identidad número matches the
+// format its código declares. True when the código declares no format.
+func cat06NumberMatches(code, number string) bool {
+	re, ok := cat06Patterns[code]
+	return !ok || re.MatchString(number)
+}
+
 // cat07RateFraction converts the cbc:Percent a Cat.07 código declares ("18.00")
 // into the fraction the tolerance checks multiply by (0.18). Zero for a código
 // that declares no rate.
@@ -104,7 +124,7 @@ func validateSupplier(req model.IssueRequest) []model.ValidationError {
 // ("0"/"0"/"CLIENTES VARIOS" — see db.document_mutations).
 func hasIdentifiedCustomer(req model.IssueRequest) bool {
 	return req.CustomerDocType != "" &&
-		req.CustomerDocType != model.IdentityDocTribNoRUC &&
+		req.CustomerDocType != sunat.Cat06DocTribNoDomSinRUC &&
 		req.CustomerDocNumber != "" &&
 		req.CustomerDocNumber != model.ConsumidorFinalDocNumber
 }
@@ -112,18 +132,24 @@ func hasIdentifiedCustomer(req model.IssueRequest) bool {
 func validateCustomer(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 
+	// Document type must be one SUNAT defines. Never checked before: an invented
+	// type reached SUNAT and came back as a fault.
+	if req.CustomerDocType != "" && !sunat.Cat06Valid(req.CustomerDocType) {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("%q is not a catálogo 06 document type", req.CustomerDocType), Field: "customerDocType"})
+	}
+
 	// Factura: customer must have RUC (type "6") in most cases
-	if req.DocType == model.DocTypeFactura && req.CustomerDocType != "6" {
+	if req.DocType == model.DocTypeFactura && req.CustomerDocType != sunat.Cat06RUC {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "factura customer must have document type 6 (RUC)", Field: "customerDocType"})
 	}
 
-	// RUC validation
-	if req.CustomerDocType == "6" && !rucRegex.MatchString(req.CustomerDocNumber) {
+	// RUC and DNI número formats. The patterns come from the catálogo, so the
+	// rule the facturador enforces and the rule the backend's cliente form
+	// enforces are one string.
+	if req.CustomerDocType == sunat.Cat06RUC && !cat06NumberMatches(sunat.Cat06RUC, req.CustomerDocNumber) {
 		errs = append(errs, model.ValidationError{Code: 2017, Message: "customer RUC must be 11 digits", Field: "customerDocNumber"})
 	}
-
-	// DNI validation
-	if req.CustomerDocType == "1" && !dniRegex.MatchString(req.CustomerDocNumber) {
+	if req.CustomerDocType == sunat.Cat06DNI && !cat06NumberMatches(sunat.Cat06DNI, req.CustomerDocNumber) {
 		errs = append(errs, model.ValidationError{Code: 2801, Message: "customer DNI must be 8 digits", Field: "customerDocNumber"})
 	}
 

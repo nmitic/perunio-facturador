@@ -14,19 +14,13 @@ const (
 // Cat.05 (tributos) has moved to sunat-catalogs: sunat.Cat05IGV, Cat05Name,
 // Cat05TaxTypeCode, Cat05TaxCategoryId, Cat05Rate.
 
-// Cat06 — Identity Document Types
-const (
-	IdentityDocTribNoRUC      = "0"
-	IdentityDNI               = "1"
-	IdentityCarnetExtranjeria = "4"
-	IdentityRUC               = "6"
-	IdentityPasaporte         = "7"
-	IdentityCedDiplomatica    = "A"
-	IdentityDocPaisResidencia = "B"
-	IdentityTIN               = "C"
-	IdentityIN                = "D"
-	IdentityNITE              = "E"
-)
+// Cat.06 (tipo de documento de identidad) has moved to sunat-catalogs:
+// sunat.Cat06RUC, Cat06DNI, Cat06DocTribNoDomSinRUC and the rest.
+//
+// The block here named ten códigos and stopped at E; SUNAT's catálogo has
+// thirteen (F permiso temporal de permanencia, G salvoconducto, H carné CPP were
+// missing). It also mislabelled E as NITE — it is the Tarjeta Andina de
+// Migración, so the constant is now sunat.Cat06TAM.
 
 // Consumidor final is the anonymous buyer used on boletas with no identified
 // customer: Cat.06 doc type IdentityDocTribNoRUC ("0"), with this number and

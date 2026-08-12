@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
@@ -198,7 +199,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		// > S/700 case is rejected later by validation, which forbids the
 		// consumidor-final doc type on high-value boletas.
 		if docType == model.DocTypeBoleta && in.CustomerDocType == "" {
-			in.CustomerDocType = model.IdentityDocTribNoRUC
+			in.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 			in.CustomerDocNumber = model.ConsumidorFinalDocNumber
 			in.CustomerName = model.ConsumidorFinalName
 		}

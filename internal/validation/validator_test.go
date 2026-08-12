@@ -6,6 +6,7 @@ import (
 
 	"maragu.dev/is"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 	"github.com/perunio/perunio-facturador/internal/validation"
 )
@@ -100,7 +101,7 @@ func TestValidate(t *testing.T) {
 
 	t.Run("should pass for a consumidor final boleta at or under 700", func(t *testing.T) {
 		req := newBoletaUnder700()
-		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
 		req.CustomerName = model.ConsumidorFinalName
 		errs := validation.Validate(req)
@@ -117,7 +118,7 @@ func TestValidate(t *testing.T) {
 		req.Items[0].UnitPriceWithTax = "944.00"
 		req.Items[0].IGVAmount = "144.00"
 		req.Items[0].LineTotal = "800.00"
-		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
 		req.CustomerName = model.ConsumidorFinalName
 		errs := validation.Validate(req)
@@ -134,7 +135,7 @@ func TestValidate(t *testing.T) {
 		req.Items[0].UnitPriceWithTax = "944.00"
 		req.Items[0].IGVAmount = "144.00"
 		req.Items[0].LineTotal = "800.00"
-		req.CustomerDocType = model.IdentityDNI
+		req.CustomerDocType = sunat.Cat06DNI
 		req.CustomerDocNumber = "12345678"
 		req.CustomerName = "JUAN PEREZ"
 		errs := validation.Validate(req)
@@ -232,7 +233,7 @@ func newBoletaDetraccion() *model.Detraccion {
 // asConsumidorFinal strips the receptor down to the anonymous placeholder a
 // boleta falls back to when nobody is entered.
 func asConsumidorFinal(req model.IssueRequest) model.IssueRequest {
-	req.CustomerDocType = model.IdentityDocTribNoRUC
+	req.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 	req.CustomerDocNumber = model.ConsumidorFinalDocNumber
 	req.CustomerName = model.ConsumidorFinalName
 	return req

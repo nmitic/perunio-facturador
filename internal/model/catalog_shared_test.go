@@ -136,6 +136,51 @@ func TestSharedCatalogAgreesWithModel(t *testing.T) {
 		is.Equal(t, "", sunat.Cat07Percent("40"))
 	})
 
+	// Cat.06 replaced a ten-constant block in catalog.go. The códigos it named
+	// keep their values; the three SUNAT defines that it never named are new.
+	t.Run("should keep the Cat.06 códigos model already named", func(t *testing.T) {
+		is.Equal(t, "0", sunat.Cat06DocTribNoDomSinRUC)
+		is.Equal(t, "1", sunat.Cat06DNI)
+		is.Equal(t, "4", sunat.Cat06CarnetExtranjeria)
+		is.Equal(t, "6", sunat.Cat06RUC)
+		is.Equal(t, "7", sunat.Cat06Pasaporte)
+		is.Equal(t, "A", sunat.Cat06CedulaDiplomatica)
+		is.Equal(t, "B", sunat.Cat06DocPaisResidencia)
+		is.Equal(t, "C", sunat.Cat06TIN)
+		is.Equal(t, "D", sunat.Cat06IN)
+	})
+
+	t.Run("should carry the three códigos model never named, and rename E", func(t *testing.T) {
+		// catalog.go stopped at E and called it NITE. SUNAT's catálogo sheet gives
+		// E as the Tarjeta Andina de Migración and continues F, G, H.
+		is.Equal(t, "E", sunat.Cat06TAM)
+		is.Equal(t, "F", sunat.Cat06PTP)
+		is.Equal(t, "G", sunat.Cat06Salvoconducto)
+		is.Equal(t, "H", sunat.Cat06CPP)
+		is.Equal(t, 13, len(sunat.Cat06Codes))
+	})
+
+	t.Run("should declare a número format only for RUC and DNI", func(t *testing.T) {
+		// These two strings are the validation rule itself, shared with the
+		// backend's cliente form. An empty pattern means SUNAT documents no
+		// length rule, not that anything goes unvalidated.
+		is.Equal(t, `^\d{11}$`, sunat.Cat06NumberPattern(sunat.Cat06RUC))
+		is.Equal(t, `^\d{8}$`, sunat.Cat06NumberPattern(sunat.Cat06DNI))
+		for _, code := range []string{"0", "4", "7", "A", "B", "C", "D", "E", "F", "G", "H"} {
+			is.Equal(t, "", sunat.Cat06NumberPattern(code))
+		}
+	})
+
+	t.Run("should treat only the sin-documento código as unidentifying", func(t *testing.T) {
+		// hasIdentifiedCustomer turns on this: consumidor final is código 0.
+		is.True(t, !sunat.Cat06Identifica(sunat.Cat06DocTribNoDomSinRUC))
+		for _, code := range sunat.Cat06Codes {
+			if code != sunat.Cat06DocTribNoDomSinRUC {
+				is.True(t, sunat.Cat06Identifica(code))
+			}
+		}
+	})
+
 	t.Run("should reject a code SUNAT does not define", func(t *testing.T) {
 		is.True(t, !sunat.Cat16Valid("99"))
 

@@ -6,6 +6,7 @@ import (
 
 	"maragu.dev/is"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 	"github.com/perunio/perunio-facturador/internal/xmlbuilder"
 )
@@ -117,7 +118,7 @@ func TestBuildDocumentXML_Boleta(t *testing.T) {
 		req := newTestInvoice()
 		req.DocType = "03"
 		req.Series = "B001"
-		req.CustomerDocType = model.IdentityDocTribNoRUC
+		req.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
 		req.CustomerDocNumber = model.ConsumidorFinalDocNumber
 		req.CustomerName = model.ConsumidorFinalName
 		req.CustomerAddress = ""
