@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -192,6 +193,8 @@ func validateDespatchLines(lines []model.DespatchLine) []model.ValidationError {
 		}
 		if l.UnitCode == "" {
 			errs = append(errs, model.ValidationError{Code: 2832, Field: fmt.Sprintf("lines[%d].unitCode", i), Message: "line unit code is required"})
+		} else if !sunat.Cat03Valid(l.UnitCode) {
+			errs = append(errs, model.ValidationError{Code: 2832, Field: fmt.Sprintf("lines[%d].unitCode", i), Message: fmt.Sprintf("%q is not a catálogo 03 unidad de medida", l.UnitCode)})
 		}
 		if l.Quantity == "" {
 			errs = append(errs, model.ValidationError{Code: 2833, Field: fmt.Sprintf("lines[%d].quantity", i), Message: "line quantity is required"})

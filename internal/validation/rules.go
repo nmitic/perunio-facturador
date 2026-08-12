@@ -95,9 +95,12 @@ func validateHeader(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2329, Message: "issue date is required", Field: "issueDate"})
 	}
 
-	// CurrencyCode required
+	// CurrencyCode required, and must be one catálogo 02 defines. Membership was
+	// never checked: any three letters reached SUNAT as the documentCurrencyCode.
 	if req.CurrencyCode == "" {
 		errs = append(errs, model.ValidationError{Code: 2071, Message: "currency code is required", Field: "currencyCode"})
+	} else if !sunat.Cat02Valid(req.CurrencyCode) {
+		errs = append(errs, model.ValidationError{Code: 2071, Message: fmt.Sprintf("%q is not a catálogo 02 currency", req.CurrencyCode), Field: "currencyCode"})
 	}
 
 	return errs
@@ -246,6 +249,12 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 		// Description required
 		if strings.TrimSpace(li.Description) == "" {
 			errs = append(errs, model.ValidationError{Code: 2025, Message: fmt.Sprintf("line %d: description is required", li.LineNumber), Field: fmt.Sprintf("items[%d].description", li.LineNumber)})
+		}
+
+		// Unidad de medida must be a real UN/ECE Rec. 20 code. This service used to
+		// accept any string and let SUNAT reject the typo.
+		if li.UnitCode != "" && !sunat.Cat03Valid(li.UnitCode) {
+			errs = append(errs, model.ValidationError{Code: 2026, Message: fmt.Sprintf("line %d: %q is not a catálogo 03 unidad de medida", li.LineNumber, li.UnitCode), Field: fmt.Sprintf("items[%d].unitCode", li.LineNumber)})
 		}
 
 		// Tax exemption reason code required, and must be one SUNAT defines.

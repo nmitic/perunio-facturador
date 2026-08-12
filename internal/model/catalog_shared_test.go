@@ -181,6 +181,23 @@ func TestSharedCatalogAgreesWithModel(t *testing.T) {
 		}
 	})
 
+	t.Run("should carry every unidad de medida, and only KGM for a guía weight", func(t *testing.T) {
+		// This service had no Cat.03 list at all and accepted any string as a
+		// unitCode, so a typo reached SUNAT. The frontend had 41 but its line
+		// editor offered the first 15.
+		is.Equal(t, 41, len(sunat.Cat03Codes))
+		is.True(t, sunat.Cat03Valid("NIU"))
+		is.True(t, !sunat.Cat03Valid("XXX"))
+		is.Equal(t, 1, len(sunat.Cat03GreWeightCodes))
+		is.Equal(t, "KGM", sunat.Cat03GreWeightCodes[0])
+	})
+
+	t.Run("should offer only the three monedas the issuance UI supports", func(t *testing.T) {
+		is.Equal(t, 3, len(sunat.Cat02SelectCodes))
+		is.True(t, sunat.Cat02Valid("PEN"))
+		is.True(t, !sunat.Cat02Valid("XYZ"))
+	})
+
 	t.Run("should reject a code SUNAT does not define", func(t *testing.T) {
 		is.True(t, !sunat.Cat16Valid("99"))
 
