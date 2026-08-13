@@ -15,14 +15,6 @@ var (
 	despatchTransportistaSeriesRegex = regexp.MustCompile(`^V[A-Z0-9]{3}$`)
 )
 
-// validTransferReasons is Cat.20 (motivo de traslado). Codes 01–19
-// are defined; SUNAT may add new codes — we validate the known set
-// and reject the rest.
-var validTransferReasons = map[string]struct{}{
-	"01": {}, "02": {}, "04": {}, "08": {}, "09": {},
-	"13": {}, "14": {}, "18": {}, "19": {},
-}
-
 // ValidateDespatch runs pre-submission validation on a GRE before the
 // pipeline hits SUNAT. It returns an empty slice when the despatch is
 // ready to sign+send.
@@ -39,7 +31,7 @@ func ValidateDespatch(d *model.Despatch, lines []model.DespatchLine) []model.Val
 	errs = append(errs, validateDespatchTransport(d)...)
 	errs = append(errs, validateDespatchLines(lines)...)
 
-	if d.DocType == model.DespatchTypeEvento {
+	if d.DocType == sunat.GreDocTypeEvento {
 		errs = append(errs, validateDespatchEvento(d)...)
 	}
 
@@ -50,7 +42,7 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 	var errs []model.ValidationError
 
 	switch d.DocType {
-	case model.DespatchTypeRemitente, model.DespatchTypeTransportista, model.DespatchTypeEvento:
+	case sunat.GreDocTypeRemitente, sunat.GreDocTypeTransportista, sunat.GreDocTypeEvento:
 		// ok
 	default:
 		errs = append(errs, model.ValidationError{
@@ -63,15 +55,15 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 	// Transportista uses V###. por-Eventos uses whichever underlying
 	// flavor it supersedes, so we accept either.
 	switch d.DocType {
-	case model.DespatchTypeRemitente:
+	case sunat.GreDocTypeRemitente:
 		if !despatchRemitenteSeriesRegex.MatchString(d.Series) {
 			errs = append(errs, model.ValidationError{Code: 1001, Field: "series", Message: "remitente series must match T[A-Z0-9]{3}"})
 		}
-	case model.DespatchTypeTransportista:
+	case sunat.GreDocTypeTransportista:
 		if !despatchTransportistaSeriesRegex.MatchString(d.Series) {
 			errs = append(errs, model.ValidationError{Code: 1001, Field: "series", Message: "transportista series must match V[A-Z0-9]{3}"})
 		}
-	case model.DespatchTypeEvento:
+	case sunat.GreDocTypeEvento:
 		if !despatchRemitenteSeriesRegex.MatchString(d.Series) &&
 			!despatchTransportistaSeriesRegex.MatchString(d.Series) {
 			errs = append(errs, model.ValidationError{Code: 1001, Field: "series", Message: "por-eventos series must match T[A-Z0-9]{3} or V[A-Z0-9]{3}"})
@@ -99,7 +91,7 @@ func validateDespatchRecipient(d *model.Despatch) []model.ValidationError {
 func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 	var errs []model.ValidationError
 
-	if _, ok := validTransferReasons[d.TransferReason]; !ok {
+	if !sunat.Cat20Emit(d.TransferReason) {
 		errs = append(errs, model.ValidationError{
 			Code: 2800, Field: "transferReason",
 			Message: fmt.Sprintf("invalid transfer reason %q (Cat.20)", d.TransferReason),
@@ -128,12 +120,16 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 		}
 	}
 
+	// The unidad a guía's peso bruto may use is the Cat.03 `gre-weight` subset,
+	// which is KGM alone. Widening it is a data change in the catálogo rather
+	// than an edit here — and the issuance form reads the same subset, so it can
+	// no longer offer a unidad this rejects.
 	unit := d.WeightUnitCode
 	if unit == "" {
-		unit = "KGM"
+		unit = sunat.Cat03KGM
 	}
-	if unit != "KGM" {
-		errs = append(errs, model.ValidationError{Code: 2806, Field: "weightUnitCode", Message: "weight unit must be KGM"})
+	if !sunat.Cat03GreWeight(unit) {
+		errs = append(errs, model.ValidationError{Code: 2806, Field: "weightUnitCode", Message: fmt.Sprintf("weight unit must be one of %v", sunat.Cat03GreWeightCodes)})
 	}
 
 	return errs
@@ -169,7 +165,7 @@ func validateDespatchTransport(d *model.Despatch) []model.ValidationError {
 	// Transportista (31) always carries goods on the carrier's own
 	// vehicle, so driver + plate are mandatory regardless of the
 	// modality field.
-	if d.DocType == model.DespatchTypeTransportista {
+	if d.DocType == sunat.GreDocTypeTransportista {
 		if d.DriverLicense == nil || *d.DriverLicense == "" {
 			errs = append(errs, model.ValidationError{Code: 2820, Field: "driverLicense", Message: "driver license is required for transportista guías"})
 		}

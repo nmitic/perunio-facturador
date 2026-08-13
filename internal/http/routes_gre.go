@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/cdr"
 	facturadorCrypto "github.com/perunio/perunio-facturador/internal/crypto"
@@ -538,9 +539,9 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	// Por-eventos guías still serialize as 09 or 31 on the wire — the
 	// base doc type defaults to Remitente (09). A future iteration can
 	// accept it from the request body.
-	eventBase := model.DespatchTypeRemitente
-	if d.DocType == model.DespatchTypeEvento && len(d.Series) > 0 && d.Series[0] == 'V' {
-		eventBase = model.DespatchTypeTransportista
+	eventBase := sunat.GreDocTypeRemitente
+	if d.DocType == sunat.GreDocTypeEvento && len(d.Series) > 0 && d.Series[0] == 'V' {
+		eventBase = sunat.GreDocTypeTransportista
 	}
 
 	xmlBytes, err := xmlbuilder.BuildDespatchXML(xmlbuilder.DespatchXMLInput{

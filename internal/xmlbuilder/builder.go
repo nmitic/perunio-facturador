@@ -54,11 +54,11 @@ func BuildDespatchXML(in DespatchXMLInput) ([]byte, error) {
 		return nil, fmt.Errorf("despatch is required")
 	}
 	switch in.Despatch.DocType {
-	case model.DespatchTypeRemitente:
+	case sunat.GreDocTypeRemitente:
 		return buildDespatchRemitenteXML(in.Despatch, in.Lines, in.RUC, in.CompanyName, in.CompanyAddress)
-	case model.DespatchTypeTransportista:
+	case sunat.GreDocTypeTransportista:
 		return buildDespatchTransportistaXML(in.Despatch, in.Lines, in.RUC, in.CompanyName, in.CompanyAddress)
-	case model.DespatchTypeEvento:
+	case sunat.GreDocTypeEvento:
 		return buildDespatchEventoXML(in.Despatch, in.Lines, in.RUC, in.CompanyName, in.CompanyAddress, in.EventBaseDocType)
 	default:
 		return nil, fmt.Errorf("unsupported despatch type: %s", in.Despatch.DocType)
@@ -70,7 +70,7 @@ func BuildDespatchXML(in DespatchXMLInput) ([]byte, error) {
 // base doc type (09 or 31) is used — the "EV" marker is an internal
 // discriminator and is never part of the filename SUNAT sees.
 func DespatchFilename(ruc, docType, series string, correlative int, eventBaseDocType string) string {
-	if docType == model.DespatchTypeEvento {
+	if docType == sunat.GreDocTypeEvento {
 		docType = eventBaseDocType
 	}
 	return fmt.Sprintf("%s-%s-%s-%08d", ruc, docType, series, correlative)

@@ -2,15 +2,10 @@ package model
 
 import "time"
 
-// Despatch type codes (Cat.01 for Remitente/Transportista; "EV" is a local
-// discriminator for "Por Eventos" — the SUNAT XML still carries 09/31 in
-// DespatchAdviceTypeCode, but "EV" lets the pipeline know to emit the
-// event-specific references).
-const (
-	DespatchTypeRemitente     = "09"
-	DespatchTypeTransportista = "31"
-	DespatchTypeEvento        = "EV"
-)
+// Despatch type codes have moved to sunat-catalogs: sunat.GreDocTypeRemitente,
+// GreDocTypeTransportista and GreDocTypeEvento. "EV" is not a Cat.01 código — it
+// is a Perunio marker meaning "guía por eventos", and the XML it produces still
+// carries 09 or 31, which the catálogo states as props.wireEquivalent.
 
 // Transport modality (Cat.18):
 //
