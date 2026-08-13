@@ -649,12 +649,14 @@ func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 
 	// Reason code must be valid Cat.09
-	if !model.ValidNCType(req.ReasonCode) {
+	if !sunat.Cat09Emit(req.ReasonCode) {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("invalid NC reason code: %s", req.ReasonCode), Field: "reasonCode"})
 	}
 
-	// NC on boletas: codes 04, 05, 08 not allowed
-	if req.ReferenceDocType == sunat.Cat01Boleta && model.NCTypesNotAllowedOnBoleta[req.ReasonCode] {
+	// NC on boletas: codes 04, 05, 08 not allowed. Guarded on Cat09Emit so an
+	// código that already failed the check above reports one error, not two —
+	// the old negative map could only ever match an emittable código.
+	if req.ReferenceDocType == sunat.Cat01Boleta && sunat.Cat09Emit(req.ReasonCode) && !sunat.Cat09OnBoleta(req.ReasonCode) {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("NC reason code %s not allowed for boletas", req.ReasonCode), Field: "reasonCode"})
 	}
 
@@ -740,7 +742,7 @@ func validateDebitNote(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 
 	// Only codes 01 and 02 are valid for ND
-	if !model.ValidNDType(req.ReasonCode) {
+	if !sunat.Cat10Emit(req.ReasonCode) {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("invalid ND reason code: %s (only 01, 02 allowed)", req.ReasonCode), Field: "reasonCode"})
 	}
 

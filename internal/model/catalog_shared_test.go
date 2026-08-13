@@ -198,6 +198,39 @@ func TestSharedCatalogAgreesWithModel(t *testing.T) {
 		is.True(t, !sunat.Cat02Valid("XYZ"))
 	})
 
+	// Cat.09/Cat.10 replaced ValidNCType/ValidNDType and the negative
+	// NCTypesNotAllowedOnBoleta map. `emit` is the right predicate, not `Valid`:
+	// SUNAT defines more motivos than this pipeline supports.
+	t.Run("should emit exactly the nota motivos the model used to accept", func(t *testing.T) {
+		for _, code := range []string{"01", "02", "03", "04", "05", "06", "07", "08", "09"} {
+			is.True(t, sunat.Cat09Emit(code))
+		}
+		// SUNAT defines 10-13 as well; the pipeline never emitted them.
+		for _, code := range []string{"10", "11", "12", "13"} {
+			is.True(t, sunat.Cat09Valid(code))
+			is.True(t, !sunat.Cat09Emit(code))
+		}
+		is.Equal(t, 13, len(sunat.Cat09Codes))
+
+		is.True(t, sunat.Cat10Emit("01"))
+		is.True(t, sunat.Cat10Emit("02"))
+		for _, code := range []string{"03", "11", "12"} {
+			is.True(t, sunat.Cat10Valid(code))
+			is.True(t, !sunat.Cat10Emit(code))
+		}
+	})
+
+	t.Run("should invert NCTypesNotAllowedOnBoleta without changing which motivos it blocks", func(t *testing.T) {
+		// The old map was {04, 05, 08}. Its complement over the emittable set must
+		// still be exactly those three.
+		for _, code := range []string{"04", "05", "08"} {
+			is.True(t, !sunat.Cat09OnBoleta(code))
+		}
+		for _, code := range []string{"01", "02", "03", "06", "07", "09"} {
+			is.True(t, sunat.Cat09OnBoleta(code))
+		}
+	})
+
 	t.Run("should reject a code SUNAT does not define", func(t *testing.T) {
 		is.True(t, !sunat.Cat16Valid("99"))
 

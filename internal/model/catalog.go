@@ -37,43 +37,15 @@ const (
 // ever referred to one, and two of them ("11 // through 16", "31 // through 37")
 // stood for ranges a constant cannot express.
 
-// Cat09 — Nota de Credito Types
-var notaCreditoTypes = map[string]string{
-	"01": "Anulación de la operación",
-	"02": "Anulación por error en el RUC",
-	"03": "Corrección por error en la descripción",
-	"04": "Descuento global",
-	"05": "Descuento por ítem",
-	"06": "Devolución total",
-	"07": "Devolución por ítem",
-	"08": "Bonificación",
-	"09": "Disminución en el valor",
-}
-
-// NCTypesNotAllowedOnBoleta are NC reason codes that cannot be used on boletas.
-var NCTypesNotAllowedOnBoleta = map[string]bool{
-	"04": true,
-	"05": true,
-	"08": true,
-}
-
-// Cat10 — Nota de Debito Types (only 2 allowed)
-var notaDebitoTypes = map[string]string{
-	"01": "Intereses por mora",
-	"02": "Aumento en el valor",
-}
-
-// ValidNCType checks if the code is a valid Cat.09 NC type.
-func ValidNCType(code string) bool {
-	_, ok := notaCreditoTypes[code]
-	return ok
-}
-
-// ValidNDType checks if the code is a valid Cat.10 ND type.
-func ValidNDType(code string) bool {
-	_, ok := notaDebitoTypes[code]
-	return ok
-}
+// Cat.09 and Cat.10 (motivos de nota) have moved to sunat-catalogs.
+// ValidNCType/ValidNDType are sunat.Cat09Emit/sunat.Cat10Emit — `emit` rather
+// than `Valid` on purpose: SUNAT defines 13 NC motivos and 5 ND motivos, and
+// this pipeline supports 9 and 2 of them. The rest stay displayable so an
+// imported or historical nota still renders a motivo name.
+//
+// NCTypesNotAllowedOnBoleta was a negative map of {04, 05, 08}. It is the
+// positive sunat.Cat09OnBoleta now: asking whether a motivo IS allowed reads the
+// same way the validator uses it.
 
 // Cat16 — Price Type
 const (
