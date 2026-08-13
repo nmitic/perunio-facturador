@@ -501,7 +501,7 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Guía no encontrada")
 		return
 	}
-	if d.Status == model.DespatchStatusAccepted {
+	if d.Status == sunat.EstadoGuiaAccepted {
 		writeError(w, http.StatusBadRequest, "ALREADY_ACCEPTED",
 			"La guía ya fue aceptada por SUNAT")
 		return
@@ -598,7 +598,7 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.log.Error("gre send", "error", err, "despatchId", despatchID)
 		// Persist R2 artifacts + error state.
-		errStatus := model.DespatchStatusError
+		errStatus := sunat.EstadoGuiaError
 		errMsg := err.Error()
 		_, _ = s.pool.ApplyDespatchResult(r.Context(), despatchID, db.DespatchIssueResult{
 			Status:                   errStatus,
@@ -613,7 +613,7 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 
 	ticket := sendResp.NumTicket
 	updated, err := s.pool.ApplyDespatchResult(r.Context(), despatchID, db.DespatchIssueResult{
-		Status:         model.DespatchStatusSent,
+		Status:         sunat.EstadoGuiaSent,
 		SunatTicket:    &ticket,
 		R2XmlKey:       &xmlKey,
 		R2SignedXmlKey: &signedKey,
@@ -698,9 +698,9 @@ func (s *Server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		finalStatus := model.DespatchStatusAccepted
+		finalStatus := sunat.EstadoGuiaAccepted
 		if !parsed.Accepted {
-			finalStatus = model.DespatchStatusRejected
+			finalStatus = sunat.EstadoGuiaRejected
 		}
 		code := parsed.ResponseCode
 		desc := parsed.Description
@@ -726,7 +726,7 @@ func (s *Server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			desErr = status.Error.DesError
 		}
 		updated, err := s.pool.ApplyDespatchResult(r.Context(), despatchID, db.DespatchIssueResult{
-			Status:                   model.DespatchStatusRejected,
+			Status:                   sunat.EstadoGuiaRejected,
 			SunatResponseCode:        &numErr,
 			SunatResponseDescription: &desErr,
 		})

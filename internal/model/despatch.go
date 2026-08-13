@@ -16,16 +16,10 @@ const (
 	TransportModalityPrivate = "02"
 )
 
-// DespatchStatus values mirror the lifecycle of summaries/voids: drafts
-// until issued, then sent → accepted|rejected once SUNAT replies.
-const (
-	DespatchStatusDraft    = "draft"
-	DespatchStatusSigned   = "signed"
-	DespatchStatusSent     = "sent"
-	DespatchStatusAccepted = "accepted"
-	DespatchStatusRejected = "rejected"
-	DespatchStatusError    = "error"
-)
+// DespatchStatus has moved to sunat-catalogs: sunat.EstadoGuiaDraft and the
+// rest. It is its own catálogo rather than sharing estado-comprobante — a guía
+// has no "voided" or "accepted_with_observations" estado, and merging the two
+// would let one be assigned.
 
 // Despatch is a row in the `despatches` table — a single Guía de Remisión
 // Electrónica. Unlike invoices this carries goods metadata (weight,
