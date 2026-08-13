@@ -189,11 +189,14 @@ Codes are plain `string`. Go has no literal-union type, so a defined string type
 would buy no compile-time safety while forcing a conversion at every JSON,
 database and XML boundary.
 
-**Never declare a code list, switch or map over códigos here.** `internal/model/catalog.go`
-is being emptied into the shared module one catálogo at a time;
-`internal/model/catalog_shared_test.go` pins the two together until each moves, so
-a disagreement fails in `make test` rather than at SUNAT. Delete each subtest as
-its catálogo leaves `catalog.go`.
+**Never declare a code list, switch or map over códigos here.**
+`internal/model/catalog.go` is gone — all 246 lines of it moved into the shared
+module, and its pinning test went with it.
+`internal/model/no_catalog_literals_test.go` now fails `make test` if a switch or
+map over código-shaped literals reappears. Exempting a file means adding it to
+that test's `allow` list **with a reason**; today that is the two files with
+Cat.51 `0104` inside raw SQL, where interpolating a constant would be uglier than
+the literal.
 
 The generated API per catálogo:
 
