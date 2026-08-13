@@ -706,18 +706,10 @@ func buildLineDiscount(li model.LineItem, cur string) *lineAllowanceCharge {
 	}
 }
 
-// validPriceTypeCodes is the set of accepted Cat.16 PriceTypeCode values.
-// 01 = onerosa, 02 = referencial gratuita, 03 = referencial exportación.
-var validPriceTypeCodes = map[string]struct{}{
-	"01": {},
-	"02": {},
-	"03": {},
-}
-
 func buildPricingReference(li model.LineItem, cur string) (*pricingReference, error) {
 	// SUNAT requires cac:PricingReference / cac:AlternativeConditionPrice on
 	// every line, including gratuito (fault 2028 fires otherwise).
-	if _, ok := validPriceTypeCodes[li.PriceTypeCode]; !ok {
+	if !sunat.Cat16Emit(li.PriceTypeCode) {
 		return nil, fmt.Errorf("xmlbuilder: line %d has invalid Cat.16 PriceTypeCode %q", li.LineNumber, li.PriceTypeCode)
 	}
 

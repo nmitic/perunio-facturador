@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/db"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
@@ -44,11 +45,9 @@ func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Datos inválidos")
 		return
 	}
-	switch req.DocType {
-	// Invoice/note types plus GRE despatch types (09=Remitente, 31=Transportista,
-	// EV=por Eventos) — GRE series (e.g. T001, V001) live in document_series too.
-	case "01", "03", "07", "08", "09", "31", "EV":
-	default:
+	// Everything the pipeline emits, plus the por-eventos marker: GRE series
+	// (T001, V001) live in document_series too, and 'EV' is not a Cat.01 código.
+	if !sunat.Cat01Emit(req.DocType) && req.DocType != sunat.GreDocTypeEvento {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "docType inválido")
 		return
 	}
