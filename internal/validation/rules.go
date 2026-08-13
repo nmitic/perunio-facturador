@@ -187,7 +187,7 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "una boleta sujeta a detracción requiere identificar al adquirente (DNI o RUC), no consumidor final", Field: "customerDocType"})
 		case len(req.Anticipos) > 0:
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "una boleta que aplica anticipos requiere identificar al adquirente (DNI o RUC), no consumidor final", Field: "customerDocType"})
-		case req.OperationType == model.OpAnticipos:
+		case req.OperationType == sunat.Cat51Anticipos:
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "una boleta de anticipo requiere identificar al adquirente (DNI o RUC), no consumidor final", Field: "customerDocType"})
 		}
 	}
@@ -427,7 +427,7 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 	default:
 		return append(errs, model.ValidationError{Code: 2800, Message: "anticipos solo aplican a facturas y boletas", Field: "anticipos"})
 	}
-	if req.OperationType == model.OpAnticipos {
+	if req.OperationType == sunat.Cat51Anticipos {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "una factura de anticipo (0104) no puede aplicar anticipos", Field: "operationType"})
 	}
 
@@ -519,8 +519,8 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	}
 
 	switch req.OperationType {
-	case model.OpDetraccion, model.OpDetraccionHidrobiologicos, model.OpDetraccionPasajeros,
-		model.OpDetraccionTransporteCarga, model.OpAnticipos:
+	case sunat.Cat51DetraccionGeneral, sunat.Cat51DetraccionHidrobiologicos, sunat.Cat51DetraccionPasajeros,
+		sunat.Cat51DetraccionTransporteCarga, sunat.Cat51Anticipos:
 	default:
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "operationType debe ser 1001/1002/1003/1004 (o 0104 para un comprobante de anticipo) en una operación sujeta a detracción", Field: "operationType"})
 	}
@@ -544,11 +544,11 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	// xmlbuilder.detraccionOperationType, so lifting either block is only a
 	// matter of building the missing markup.
 	switch d.Codigo {
-	case model.DetraccionHidrobiologicos:
+	case sunat.Cat54RecursosHidrobiologicos:
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la detracción de recursos hidrobiológicos (004) aún no está soportada: requiere matrícula de embarcación, especies y fecha de descarga por ítem", Field: "detraccion.codigo"})
-	case model.DetraccionTransportePasaj:
+	case sunat.Cat54TransporteDePasajeros:
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la detracción de transporte de pasajeros (028) aún no está soportada: se liquida por monto fijo por vehículo, no como porcentaje del importe", Field: "detraccion.codigo"})
-	case model.DetraccionTransporteCarga:
+	case sunat.Cat54ServicioDeTransporteDeCarga:
 		errs = append(errs, validateTransporteCarga(req)...)
 	}
 	if strings.TrimSpace(d.CuentaBN) == "" {

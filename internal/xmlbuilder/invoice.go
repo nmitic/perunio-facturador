@@ -136,10 +136,10 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 	// SUNAT leyenda 1002 — auto-injected when any line is gratuito and the
 	// caller didn't already supply it. Required by Anexo 8 for documents that
 	// include transferencia/retiro a título gratuito lines.
-	if hasGratuitoLine(req.Items) && !hasNoteWithCode(inv.Notes, model.LegendTransfGratuita) {
+	if hasGratuitoLine(req.Items) && !hasNoteWithCode(inv.Notes, sunat.Cat52TransfGratuita) {
 		inv.Notes = append(inv.Notes, noteElement{
 			Value:            "TRANSFERENCIA GRATUITA O A TITULO GRATUITO",
-			LanguageLocaleID: model.LegendTransfGratuita,
+			LanguageLocaleID: sunat.Cat52TransfGratuita,
 		})
 	}
 

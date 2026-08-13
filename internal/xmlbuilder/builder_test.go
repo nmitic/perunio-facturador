@@ -297,7 +297,7 @@ func TestBuildDocumentXML_TransporteCarga(t *testing.T) {
 		req := newTestInvoice()
 		req.OperationType = "1004"
 		req.Detraccion = &model.Detraccion{
-			Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+			Codigo: sunat.Cat54ServicioDeTransporteDeCarga, Porcentaje: "4.00",
 			Monto: "47.20", CuentaBN: "00-123-456789",
 		}
 		req.TransporteCarga = &model.TransporteCarga{
@@ -1098,7 +1098,7 @@ func TestBuildDocumentXML_Anticipos(t *testing.T) {
 	// internal anticipo marker must never reach the wire — it degrades to 0101.
 	t.Run("a factura de anticipo emits 0101, never the retired 0104", func(t *testing.T) {
 		req := newTestInvoice()
-		req.OperationType = model.OpAnticipos
+		req.OperationType = sunat.Cat51Anticipos
 
 		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
 		is.NotError(t, err)
@@ -1113,7 +1113,7 @@ func TestBuildDocumentXML_Anticipos(t *testing.T) {
 
 	t.Run("a regularización factura keeps its own operation type on the wire", func(t *testing.T) {
 		req := newTestInvoice()
-		req.OperationType = model.OpVentaInterna
+		req.OperationType = sunat.Cat51VentaInterna
 		req.Anticipos = []model.Anticipo{
 			{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "118.00", BaseAmount: "100.00"},
 		}
@@ -1146,15 +1146,15 @@ func TestBuildDocumentXML_AnticipoConDetraccion(t *testing.T) {
 		detraccion    *model.Detraccion
 		expected      string
 	}{
-		{name: "an anticipo without detracción stays a venta interna", operationType: model.OpAnticipos, detraccion: nil, expected: "0101"},
-		{name: "an anticipo sujeto a detracción declares 1001", operationType: model.OpAnticipos, detraccion: newDet("019"), expected: "1001"},
-		{name: "a plain factura sujeta a detracción is unaffected", operationType: model.OpDetraccion, detraccion: newDet("019"), expected: "1001"},
+		{name: "an anticipo without detracción stays a venta interna", operationType: sunat.Cat51Anticipos, detraccion: nil, expected: "0101"},
+		{name: "an anticipo sujeto a detracción declares 1001", operationType: sunat.Cat51Anticipos, detraccion: newDet("019"), expected: "1001"},
+		{name: "a plain factura sujeta a detracción is unaffected", operationType: sunat.Cat51DetraccionGeneral, detraccion: newDet("019"), expected: "1001"},
 		// The Cat.54 → Cat.51 pairings SUNAT enforces with fault 3129.
-		{name: "recursos hidrobiológicos (004) declares 1002", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionHidrobiologicos), expected: "1002"},
-		{name: "transporte de pasajeros (028) declares 1003", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionTransportePasaj), expected: "1003"},
-		{name: "transporte de carga (027) declares 1004, not 1002", operationType: model.OpDetraccion, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
-		{name: "an anticipo de transporte de carga (027) declares 1004", operationType: model.OpAnticipos, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
-		{name: "an explicit 1004 is unaffected", operationType: model.OpDetraccionTransporteCarga, detraccion: newDet(model.DetraccionTransporteCarga), expected: "1004"},
+		{name: "recursos hidrobiológicos (004) declares 1002", operationType: sunat.Cat51DetraccionGeneral, detraccion: newDet(sunat.Cat54RecursosHidrobiologicos), expected: "1002"},
+		{name: "transporte de pasajeros (028) declares 1003", operationType: sunat.Cat51DetraccionGeneral, detraccion: newDet(sunat.Cat54TransporteDePasajeros), expected: "1003"},
+		{name: "transporte de carga (027) declares 1004, not 1002", operationType: sunat.Cat51DetraccionGeneral, detraccion: newDet(sunat.Cat54ServicioDeTransporteDeCarga), expected: "1004"},
+		{name: "an anticipo de transporte de carga (027) declares 1004", operationType: sunat.Cat51Anticipos, detraccion: newDet(sunat.Cat54ServicioDeTransporteDeCarga), expected: "1004"},
+		{name: "an explicit 1004 is unaffected", operationType: sunat.Cat51DetraccionTransporteCarga, detraccion: newDet(sunat.Cat54ServicioDeTransporteDeCarga), expected: "1004"},
 	}
 
 	for _, test := range tests {
@@ -1175,7 +1175,7 @@ func TestBuildDocumentXML_AnticipoConDetraccion(t *testing.T) {
 
 	t.Run("an anticipo sujeto a detracción emits the full SPOT block", func(t *testing.T) {
 		req := newTestInvoice()
-		req.OperationType = model.OpAnticipos
+		req.OperationType = sunat.Cat51Anticipos
 		req.Detraccion = newDet("019")
 
 		xmlBytes, err := xmlbuilder.BuildDocumentXML(req)
@@ -1193,7 +1193,7 @@ func TestBuildDocumentXML_AnticipoConDetraccion(t *testing.T) {
 	t.Run("a regularización sujeta a detracción keeps the hybrid anticipo shape", func(t *testing.T) {
 		req := newTestInvoice()
 		req.Notes = nil
-		req.OperationType = model.OpDetraccion
+		req.OperationType = sunat.Cat51DetraccionGeneral
 		req.TotalAmount = "1062.00" // 1180.00 sale − 118.00 already collected
 		req.Anticipos = []model.Anticipo{{
 			DocID: "F001-00000042", DocTypeCode: "02",

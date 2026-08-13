@@ -3,6 +3,7 @@ package xmlbuilder
 import (
 	"encoding/xml"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
@@ -317,12 +318,12 @@ func buildDetraccionPaymentTerms(req model.IssueRequest) *paymentTerms {
 // detracción") when the document is subject to detracción and the note is not
 // already present. Shared by Invoice, CreditNote and DebitNote builders.
 func appendDetraccionLegend(notes []noteElement, req model.IssueRequest) []noteElement {
-	if req.Detraccion == nil || hasNoteWithCode(notes, model.LegendDetraccion) {
+	if req.Detraccion == nil || hasNoteWithCode(notes, sunat.Cat52Detraccion) {
 		return notes
 	}
 	return append(notes, noteElement{
-		Value:            model.LegendDetraccionText,
-		LanguageLocaleID: model.LegendDetraccion,
+		Value:            sunat.Cat52Texto(sunat.Cat52Detraccion),
+		LanguageLocaleID: sunat.Cat52Detraccion,
 	})
 }
 
@@ -654,17 +655,17 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 // resources/AjustesValidacionesCPEv20260212.xlsx.
 func detraccionOperationType(d *model.Detraccion) string {
 	if d == nil {
-		return model.OpDetraccion
+		return sunat.Cat51DetraccionGeneral
 	}
 	switch d.Codigo {
-	case model.DetraccionHidrobiologicos:
-		return model.OpDetraccionHidrobiologicos
-	case model.DetraccionTransportePasaj:
-		return model.OpDetraccionPasajeros
-	case model.DetraccionTransporteCarga:
-		return model.OpDetraccionTransporteCarga
+	case sunat.Cat54RecursosHidrobiologicos:
+		return sunat.Cat51DetraccionHidrobiologicos
+	case sunat.Cat54TransporteDePasajeros:
+		return sunat.Cat51DetraccionPasajeros
+	case sunat.Cat54ServicioDeTransporteDeCarga:
+		return sunat.Cat51DetraccionTransporteCarga
 	default:
-		return model.OpDetraccion
+		return sunat.Cat51DetraccionGeneral
 	}
 }
 
@@ -693,11 +694,11 @@ func detraccionOperationType(d *model.Detraccion) string {
 // before the código changed, or the row predates this mapping being correct.
 // The código is the fact; the operación is a function of it.
 func sunatOperationType(operationType string, d *model.Detraccion) string {
-	if operationType == model.OpAnticipos {
+	if operationType == sunat.Cat51Anticipos {
 		if d != nil {
 			return detraccionOperationType(d)
 		}
-		return model.OpVentaInterna
+		return sunat.Cat51VentaInterna
 	}
 	if d != nil && isDetraccionOperationType(operationType) {
 		return detraccionOperationType(d)
@@ -707,8 +708,8 @@ func sunatOperationType(operationType string, d *model.Detraccion) string {
 
 func isDetraccionOperationType(operationType string) bool {
 	switch operationType {
-	case model.OpDetraccion, model.OpDetraccionHidrobiologicos,
-		model.OpDetraccionPasajeros, model.OpDetraccionTransporteCarga:
+	case sunat.Cat51DetraccionGeneral, sunat.Cat51DetraccionHidrobiologicos,
+		sunat.Cat51DetraccionPasajeros, sunat.Cat51DetraccionTransporteCarga:
 		return true
 	}
 	return false

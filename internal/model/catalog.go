@@ -47,67 +47,17 @@ const (
 // positive sunat.Cat09OnBoleta now: asking whether a motivo IS allowed reads the
 // same way the validator uses it.
 
+// Cat.51, Cat.52 and Cat.54 have moved to sunat-catalogs. The anticipo marker
+// 0104 keeps its "stored and reported on, but sent as 0101" behaviour as
+// props.wireEquivalent; the detracción -> operación pinning that fault 3129
+// enforces is props.operationType on each Cat.54 código; and the fixed leyenda
+// text is sunat.Cat52Texto.
+
 // Cat16 — Price Type
 const (
 	PriceTypeUnitWithIGV = "01"
 	PriceTypeReferential = "02"
 )
-
-// Cat51 — Operation Types.
-//
-// SUNAT retired the original 01xx block (beyond 0101) from catálogo 51; sending
-// one now fails validation with fault 3206. OpExportBienes/OpNoDomiciliados are
-// kept only to document the old codes — use OpExportBienes2/OpExportServ. See
-// sunatOperationType in internal/xmlbuilder for how OpAnticipos survives as an
-// internal-only marker that never reaches the wire.
-const (
-	OpVentaInterna = "0101"
-
-	// OpAnticipos marks a factura de anticipo. Retired from catálogo 51, so it
-	// is stored and reported on but mapped to OpVentaInterna when building XML.
-	OpAnticipos = "0104"
-
-	OpExportBienes   = "0102" // retired — SUNAT rejects it
-	OpNoDomiciliados = "0103" // retired — SUNAT rejects it
-	OpExportBienes2  = "0200"
-	OpExportServ     = "0201"
-
-	// The four detracción operation types. Each of the three specialised ones is
-	// pinned to exactly one Cat.54 código — SUNAT rejects any other pairing with
-	// fault 3129 ("el dato ingresado como codigo de BBSS de detracción no
-	// corresponde al valor esperado"). See detraccionOperationType.
-	OpDetraccion                = "1001" // Operación sujeta a detracción (general)
-	OpDetraccionHidrobiologicos = "1002" // …recursos hidrobiológicos    — Cat.54 004
-	OpDetraccionPasajeros       = "1003" // …transporte de pasajeros     — Cat.54 028
-	OpDetraccionTransporteCarga = "1004" // …transporte de carga         — Cat.54 027
-)
-
-// Cat54 — Bienes y servicios sujetos a detracción (SPOT).
-//
-// Only the códigos that change behaviour are named here; the full list lives in
-// the frontend catalogue (src/data/sunat/detracciones.ts), which is what
-// resolves código, porcentaje and umbral from the productos of a comprobante.
-//
-// These three are the ones that do NOT declare catálogo 51 "1001". Each also
-// drags extra mandatory item-level markup along with it — see
-// detraccionOperationType and validateDetraccion.
-const (
-	DetraccionHidrobiologicos = "004" // → 1002
-	DetraccionTransporteCarga = "027" // → 1004
-	DetraccionTransportePasaj = "028" // → 1003
-)
-
-// Cat52 — Legends
-const (
-	LegendMontoLetras    = "1000"
-	LegendTransfGratuita = "1002"
-	LegendPercepcion     = "2000"
-	LegendDetraccion     = "2006" // Operación sujeta a detracción
-	LegendCodInterno     = "3000"
-)
-
-// LegendDetraccionText is the fixed legend text SUNAT expects for a detracción.
-const LegendDetraccionText = "Operación sujeta a detracción"
 
 // IGVRate was the IGV rate as a decimal string ("0.18"). Dead — declared here and
 // read nowhere. The rate a line declares is sunat.Cat07Percent (a percentage

@@ -386,7 +386,7 @@ func TestValidateDetraccion(t *testing.T) {
 		req := newValidInvoice()
 		req.OperationType = "1002"
 		d := newDetraccion()
-		d.Codigo = model.DetraccionHidrobiologicos
+		d.Codigo = sunat.Cat54RecursosHidrobiologicos
 		req.Detraccion = d
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion.codigo"), "004 needs AdditionalItemProperty we do not emit")
@@ -396,7 +396,7 @@ func TestValidateDetraccion(t *testing.T) {
 		req := newValidInvoice()
 		req.OperationType = "1003"
 		d := newDetraccion()
-		d.Codigo = model.DetraccionTransportePasaj
+		d.Codigo = sunat.Cat54TransporteDePasajeros
 		req.Detraccion = d
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion.codigo"), "028 is a fixed amount per vehicle")
@@ -430,7 +430,7 @@ func newTransporteCargaInvoice() model.IssueRequest {
 	req := newValidInvoice()
 	req.OperationType = "1004"
 	req.Detraccion = &model.Detraccion{
-		Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+		Codigo: sunat.Cat54ServicioDeTransporteDeCarga, Porcentaje: "4.00",
 		Monto: "47.20", CuentaBN: "00-123-456789", // 4% of 1180.00
 	}
 	req.TransporteCarga = newTransporteCarga()
@@ -493,7 +493,7 @@ func TestValidateTransporteCarga(t *testing.T) {
 		req := newBoletaUnder700()
 		req.OperationType = "1004"
 		req.Detraccion = &model.Detraccion{
-			Codigo: model.DetraccionTransporteCarga, Porcentaje: "4.00",
+			Codigo: sunat.Cat54ServicioDeTransporteDeCarga, Porcentaje: "4.00",
 			Monto: "4.72", CuentaBN: "00-123-456789", // 4% of 118.00
 		}
 		req.TransporteCarga = newTransporteCarga()
