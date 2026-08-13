@@ -626,8 +626,8 @@ func validateTransporteCarga(req model.IssueRequest) []model.ValidationError {
 		{t.OrigenUbigeo, "transporteCarga.origenUbigeo"},
 		{t.DestinoUbigeo, "transporteCarga.destinoUbigeo"},
 	} {
-		if v := strings.TrimSpace(u.value); v != "" && !ubigeoRegex.MatchString(v) {
-			errs = append(errs, model.ValidationError{Code: 2800, Message: "el ubigeo debe tener 6 dígitos (catálogo 13)", Field: u.field})
+		if v := strings.TrimSpace(u.value); v != "" && !sunat.UbigeoDistritoValid(v) {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: "el ubigeo no corresponde a un distrito INEI", Field: u.field})
 		}
 	}
 	// SUNAT wants all three declared and greater than zero: the SPOT base is the

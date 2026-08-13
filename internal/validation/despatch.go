@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	ubigeoRegex                      = regexp.MustCompile(`^\d{6}$`)
 	despatchRemitenteSeriesRegex     = regexp.MustCompile(`^T[A-Z0-9]{3}$`)
 	despatchTransportistaSeriesRegex = regexp.MustCompile(`^V[A-Z0-9]{3}$`)
 )
@@ -98,11 +97,13 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 		})
 	}
 
-	if !ubigeoRegex.MatchString(d.StartUbigeo) {
-		errs = append(errs, model.ValidationError{Code: 2801, Field: "startUbigeo", Message: "start ubigeo must be 6 digits"})
+	// Membership, not just shape: a syntactically valid ubigeo that INEI does not
+	// define reached SUNAT before and came back as a rejection.
+	if !sunat.UbigeoDistritoValid(d.StartUbigeo) {
+		errs = append(errs, model.ValidationError{Code: 2801, Field: "startUbigeo", Message: "start ubigeo is not an INEI distrito code"})
 	}
-	if !ubigeoRegex.MatchString(d.ArrivalUbigeo) {
-		errs = append(errs, model.ValidationError{Code: 2802, Field: "arrivalUbigeo", Message: "arrival ubigeo must be 6 digits"})
+	if !sunat.UbigeoDistritoValid(d.ArrivalUbigeo) {
+		errs = append(errs, model.ValidationError{Code: 2802, Field: "arrivalUbigeo", Message: "arrival ubigeo is not an INEI distrito code"})
 	}
 	if d.StartAddress == "" {
 		errs = append(errs, model.ValidationError{Code: 2803, Field: "startAddress", Message: "start address is required"})
