@@ -508,10 +508,19 @@ type noteElement struct {
 	LanguageLocaleID string   `xml:"languageLocaleID,attr,omitempty"`
 }
 
-// invoiceTypeCode with SUNAT-required attributes. The element value is
-// catalog 01 (document type, e.g. "01" Factura). The @listID attribute
-// carries catalog 51 (operation type, e.g. "0101" Venta interna) — SUNAT
-// rejects with error 3205 if missing.
+// invoiceTypeCode carries two different catálogos in one element, by SUNAT's
+// design. The element value is catálogo 01 (document type, e.g. "01" Factura).
+// The @listID attribute is a separate mandatory field holding catálogo 51
+// (operation type, e.g. "0101" Venta interna). @listURI names catalogo01
+// because it describes the *value*, not @listID.
+//
+// This reads like a código copied into the wrong attribute. It is not — it is
+// what the wire accepts, and what greenter emits. SUNAT rejects with fault 3205
+// when @listID is missing, 3206 when it is not a catálogo 51 code, and 3129
+// when it contradicts the detracción's Cat.54 código.
+//
+// @listID must always equal cbc:ProfileID, which is why newInvoiceTypeCode and
+// newProfileID both resolve it through sunatOperationType.
 type invoiceTypeCode struct {
 	XMLName        xml.Name `xml:"cbc:InvoiceTypeCode"`
 	Value          string   `xml:",chardata"`
@@ -717,7 +726,7 @@ func isDetraccionOperationType(operationType string) bool {
 
 func newInvoiceTypeCode(code, operationType string, d *model.Detraccion) invoiceTypeCode {
 	if operationType == "" {
-		operationType = "0101"
+		operationType = sunat.Cat51VentaInterna
 	}
 	return invoiceTypeCode{
 		Value:          code,
@@ -728,11 +737,13 @@ func newInvoiceTypeCode(code, operationType string, d *model.Detraccion) invoice
 	}
 }
 
-// newProfileID returns the SUNAT cbc:ProfileID element carrying the
-// operation type (catalog 17). Defaults to "0101" (Venta interna).
+// newProfileID returns the SUNAT cbc:ProfileID element carrying the operation
+// type. The @schemeURI names catalogo17, but the códigos themselves come from
+// catálogo 51 — SUNAT's own inconsistency. Defaults to Venta interna, and
+// always agrees with cbc:InvoiceTypeCode/@listID.
 func newProfileID(operationType string, d *model.Detraccion) profileIDElement {
 	if operationType == "" {
-		operationType = "0101"
+		operationType = sunat.Cat51VentaInterna
 	}
 	return profileIDElement{
 		Value:            sunatOperationType(operationType, d),

@@ -148,9 +148,15 @@ Rules:
   <cbc:ID>F001-1</cbc:ID>
   <cbc:IssueDate>2026-05-04</cbc:IssueDate>
   <cbc:IssueTime>10:30:00</cbc:IssueTime>
+  <!-- Two catalogs, one element. The VALUE is Cat.01 (tipo de documento); the
+       @listID is Cat.51 (tipo de operación) and must match cbc:ProfileID above.
+       @listURI describes the value, hence catalogo01. This is not a copy-paste
+       bug — SUNAT rejects with fault 3205 if @listID is absent and 3206 if it
+       is not a Cat.51 code. -->
   <cbc:InvoiceTypeCode
+      listID="0101"
       listAgencyName="PE:SUNAT"
-      listName="SUNAT:Identificador de Tipo de Documento"
+      listName="Tipo de Documento"
       listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">01</cbc:InvoiceTypeCode>
   <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
 
@@ -164,12 +170,12 @@ Rules:
 ```
 
 ### Nota de Crédito (UBL 2.1, root `/CreditNote`)
-Use `cbc:CreditNoteTypeCode` (catalog 09) instead of `InvoiceTypeCode`. Add `cac:DiscrepancyResponse` (with `cbc:ResponseCode` from catalog 09) and `cac:BillingReference` pointing to the original document.
+There is **no** type-code element — no `cbc:CreditNoteTypeCode`, no `InvoiceTypeCode`. The doc type (`07`) is implicit in the root element and the filename. The motivo (catalog 09) goes in `cac:DiscrepancyResponse/cbc:ResponseCode`, alongside `cac:BillingReference` pointing at the original document. `cbc:ProfileID` is still present and still carries the tipo de operación.
 
 ### Nota de Débito (UBL 2.1, root `/DebitNote`)
-Use `cbc:DebitNoteTypeCode` (catalog 10). Same `DiscrepancyResponse` + `BillingReference` pattern.
+Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResponse/cbc:ResponseCode`, plus `cac:BillingReference`.
 
-> **Document type code (`01`, `03`, `07`, `08`) lives in different elements depending on root.** Don't conflate with `ProfileID` (which is the operation type, e.g. `0101 = Venta interna`).
+> **Document type code (`01`, `03`, `07`, `08`) lives in different elements depending on root** — and on notas, in no element at all. Don't conflate it with the *operation* type (`0101 = Venta interna`), which lives in `cbc:ProfileID` and in `cbc:InvoiceTypeCode/@listID`.
 
 ---
 
@@ -177,7 +183,7 @@ Use `cbc:DebitNoteTypeCode` (catalog 10). Same `DiscrepancyResponse` + `BillingR
 
 | Catalog | Purpose                              | Used in element |
 | ------- | ------------------------------------ | --------------- |
-| 01      | Tipo de documento (CPE)              | `cbc:InvoiceTypeCode`, `cbc:DocumentTypeCode` |
+| 01      | Tipo de documento (CPE)              | `cbc:InvoiceTypeCode` (**el valor**), `cbc:DocumentTypeCode`, `cbc:DespatchAdviceTypeCode` |
 | 02      | Monedas (ISO 4217)                   | `currencyID` attrs |
 | 05      | Tipos de tributo                     | `cac:TaxScheme/cbc:ID` |
 | 06      | Tipo de documento de identidad       | `schemeID` of `PartyIdentification/cbc:ID` |
@@ -187,8 +193,8 @@ Use `cbc:DebitNoteTypeCode` (catalog 10). Same `DiscrepancyResponse` + `BillingR
 | 10      | Tipo de nota de débito               | `cbc:ResponseCode` (en DebitNote) |
 | 12      | Tipo de operación (guía)             | — |
 | 16      | Tipo de precio                       | `cbc:PriceTypeCode` (`01` = con IGV, `02` = gratuito) |
-| 17      | Tipo de operación (factura)          | `cbc:ProfileID` (`0101` = Venta interna) |
-| 51      | Tipo de operación (catálogo extendido) | `cbc:ProfileID` (algunos casos) |
+| 17      | Tipo de operación — **sólo la URI**  | `cbc:ProfileID/@schemeURI` dice `catalogo17`, pero los **valores salen del catálogo 51**. Inconsistencia de la propia SUNAT; greenter hace lo mismo. |
+| 51      | Tipo de operación                    | `cbc:ProfileID` (el valor) **y** `cbc:InvoiceTypeCode/@listID` — los dos, siempre iguales (`0101` = Venta interna, `1001`-`1004` = sujeta a detracción) |
 | 52      | Códigos de leyendas                  | `cbc:Note/@languageLocaleID` (`1000`, `2000`, etc.) |
 
 ### Catalog 06 — document identity (`schemeID`)
@@ -414,17 +420,18 @@ The CDR is a UBL 2.0 `ApplicationResponse`, signed by SUNAT, returned inside a Z
 
 1. **Encoding lock-in.** XML declaration must be `ISO-8859-1`. Bytes-on-the-wire must match. UTF-8 with `ñ` or accents → rejected.
 2. **Sign last, change nothing after.** Any whitespace, attribute reorder, or namespace prefix change after signing breaks the digest.
-3. **Series doesn't encode the doc type.** `F001` can be a Factura *or* a Nota de Crédito on a Factura. `cbc:InvoiceTypeCode` / `cbc:CreditNoteTypeCode` is the source of truth — use it to route, not the series prefix.
-4. **`ProfileID` ≠ document type.** ProfileID is the *operation* (catalog 17, e.g. `0101` Venta interna). The doc type code is in `InvoiceTypeCode` (catalog 01).
-5. **`UBLVersionID` mismatch by root.** Invoice/CreditNote/DebitNote/DespatchAdvice = `2.1`; SummaryDocuments/VoidedDocuments = `2.0`. `CustomizationID`: comprobantes = `2.0`, RC = `1.1`, RA/RR = `1.0`.
-6. **Boletas don't go via `sendBill`.** Submit them in batches via Resumen Diario (RC) — unless you're using SEE-SOL portal mode.
-7. **Filename casing.** `.XML`/`.ZIP` uppercase or `.xml`/`.zip` lowercase both work, but the **base name** (RUC-TT-SERIE-CORR) must match between zip and xml exactly.
-8. **Duplicate IDs.** Once a `{RUC, TipoDoc, Serie, Correlativo}` is **accepted**, that number is consumed forever. Rechazos on Factura/Nota also burn the number — generate a new one.
-9. **Tolerance is per-line and per-total.** ±0.01 each. Don't accumulate rounding across many lines without compensating on the totals.
-10. **`cac:Signature` is mandatory in the body** even though the actual XMLDSig lives in `<ext:UBLExtensions>`. They are two different blocks.
-11. **WS-Security `Username` is concatenated.** `{RUC}{usuario_sol}` with **no separator**. The 11-digit RUC is glued directly to the SOL user.
-12. **Resumen Diario blocks ≤ 500 lines** since 2018-01-01. Split larger days into multiple correlatives — they accumulate, they don't replace.
-13. **Lote `sendPack`** ≤ 500 docs per ZIP, all from same RUC. Mix of 01/07/08 OK.
+3. **Series doesn't encode the doc type.** `F001` can be a Factura *or* a Nota de Crédito on a Factura. Route on the root element plus `cbc:InvoiceTypeCode` — not on the series prefix. (Notas carry no type-code element at all.)
+4. **`ProfileID` ≠ document type.** ProfileID is the *operation*, e.g. `0101` Venta interna. Its `@schemeURI` names `catalogo17`, but the codes themselves come from **catálogo 51** — SUNAT's own inconsistency, kept because that is what the wire accepts.
+5. **`InvoiceTypeCode` carries two catalogs at once, on purpose.** The element value is the tipo de documento (Cat.01, `01`); `@listID` is the tipo de operación (Cat.51, `0101`) and must equal `ProfileID`. It looks like a code copied into the wrong attribute; it isn't. Dropping `@listID` → fault **3205**; a non-Cat.51 value there → fault **3206**; a value that contradicts the detracción's Cat.54 código → fault **3129**. `newInvoiceTypeCode` and `newProfileID` both go through `sunatOperationType` so the two can never drift.
+6. **`UBLVersionID` mismatch by root.** Invoice/CreditNote/DebitNote/DespatchAdvice = `2.1`; SummaryDocuments/VoidedDocuments = `2.0`. `CustomizationID`: comprobantes = `2.0`, RC = `1.1`, RA/RR = `1.0`.
+7. **Boletas don't go via `sendBill`.** Submit them in batches via Resumen Diario (RC) — unless you're using SEE-SOL portal mode.
+8. **Filename casing.** `.XML`/`.ZIP` uppercase or `.xml`/`.zip` lowercase both work, but the **base name** (RUC-TT-SERIE-CORR) must match between zip and xml exactly.
+9. **Duplicate IDs.** Once a `{RUC, TipoDoc, Serie, Correlativo}` is **accepted**, that number is consumed forever. Rechazos on Factura/Nota also burn the number — generate a new one.
+10. **Tolerance is per-line and per-total.** ±0.01 each. Don't accumulate rounding across many lines without compensating on the totals.
+11. **`cac:Signature` is mandatory in the body** even though the actual XMLDSig lives in `<ext:UBLExtensions>`. They are two different blocks.
+12. **WS-Security `Username` is concatenated.** `{RUC}{usuario_sol}` with **no separator**. The 11-digit RUC is glued directly to the SOL user.
+13. **Resumen Diario blocks ≤ 500 lines** since 2018-01-01. Split larger days into multiple correlatives — they accumulate, they don't replace.
+14. **Lote `sendPack`** ≤ 500 docs per ZIP, all from same RUC. Mix of 01/07/08 OK.
 
 ---
 
@@ -503,7 +510,7 @@ For Retención/Percepción contingencia: same flow, types `40` / `41` / `20`, fi
 | `cbc:UBLVersionID`, `cbc:CustomizationID`, `cbc:ProfileID` | header | see §1, §6 |
 | `cbc:ID` | header | series-correlativo or RC/RA filename |
 | `cbc:IssueDate`, `cbc:IssueTime` | header | `YYYY-MM-DD`, `HH:MM:SS` |
-| `cbc:InvoiceTypeCode` / `CreditNoteTypeCode` / `DebitNoteTypeCode` | header | catalog 01 / 09 / 10 |
+| `cbc:InvoiceTypeCode` | header | value = catalog 01, `@listID` = catalog 51 (see §13.5). NC/ND emit **no** type-code element — their catalog 09 / 10 motivo lives in `cac:DiscrepancyResponse/cbc:ResponseCode` |
 | `cbc:DocumentCurrencyCode` | header | ISO 4217 |
 | `cac:AccountingSupplierParty` | header | emisor: RUC (cat 06 = `6`), razón social, dirección |
 | `cac:AccountingCustomerParty` | header | cliente: doc id (cat 06), nombre |
