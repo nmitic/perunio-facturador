@@ -9,6 +9,7 @@ var (
 	ErrNotDraft           = errors.New("only draft documents can be modified")
 	ErrSeriesInactive     = errors.New("series not found or inactive")
 	ErrSeriesHasDocuments = errors.New("series has associated documents")
+	ErrCorrelativeTooLow  = errors.New("correlative must be raised past the last number already used")
 	ErrDuplicate          = errors.New("duplicate")
 	ErrQuotaExceeded      = errors.New("document quota exceeded")
 	ErrNoBoletas          = errors.New("no unsummarized accepted boletas found for this date")

@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 
@@ -29,12 +30,24 @@ func (s *Server) listSeriesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type createSeriesRequest struct {
-	DocType     string  `json:"docType"`
-	Series      string  `json:"series"`
-	Description *string `json:"description,omitempty"`
+	DocType         string  `json:"docType"`
+	Series          string  `json:"series"`
+	Description     *string `json:"description,omitempty"`
+	NextCorrelative *int    `json:"nextCorrelative,omitempty"`
 }
 
 var seriesCodeRegex = regexp.MustCompile(`^[A-Z0-9]{1,4}$`)
+
+// SUNAT's correlativo is 8 digits, so 99999999 is the last number a serie can
+// ever reach. A company migrating from another facturador seeds the counter with
+// wherever it left off there.
+const maxCorrelative = 99_999_999
+
+// validCorrelative reports whether an optional correlative is in range. A nil
+// pointer means the caller didn't send the field, which is always fine.
+func validCorrelative(n *int) bool {
+	return n == nil || (*n >= 1 && *n <= maxCorrelative)
+}
 
 // createSeriesHandler inserts a new document_series row.
 func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +72,17 @@ func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "description too long")
 		return
 	}
+	if !validCorrelative(req.NextCorrelative) {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"El correlativo debe estar entre 1 y 99999999")
+		return
+	}
 
 	created, err := s.pool.CreateSeries(r.Context(), companyID, db.CreateSeriesInput{
-		DocType:     req.DocType,
-		Series:      req.Series,
-		Description: req.Description,
+		DocType:         req.DocType,
+		Series:          req.Series,
+		Description:     req.Description,
+		NextCorrelative: req.NextCorrelative,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrDuplicate) {
@@ -78,8 +97,9 @@ func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateSeriesRequest struct {
-	Description *string `json:"description,omitempty"`
-	IsActive    *bool   `json:"isActive,omitempty"`
+	Description     *string `json:"description,omitempty"`
+	IsActive        *bool   `json:"isActive,omitempty"`
+	NextCorrelative *int    `json:"nextCorrelative,omitempty"`
 }
 
 // updateSeriesHandler patches description / isActive.
@@ -96,18 +116,32 @@ func (s *Server) updateSeriesHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "description too long")
 		return
 	}
+	if !validCorrelative(req.NextCorrelative) {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"El correlativo debe estar entre 1 y 99999999")
+		return
+	}
 
 	updated, err := s.pool.UpdateSeries(r.Context(), companyID, seriesID, db.UpdateSeriesInput{
-		Description: req.Description,
-		IsActive:    req.IsActive,
+		Description:     req.Description,
+		IsActive:        req.IsActive,
+		NextCorrelative: req.NextCorrelative,
 	})
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		var tooLow *db.CorrelativeTooLowError
+		switch {
+		case errors.Is(err, db.ErrNotFound):
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Serie no encontrada")
-			return
+		case errors.As(err, &tooLow):
+			// Name the minimum: the user is copying a number off their previous
+			// facturador and has no way to guess what we already have.
+			writeError(w, http.StatusConflict, "CORRELATIVE_TOO_LOW", fmt.Sprintf(
+				"El correlativo debe ser mayor que %d — es el último número ya usado en esta serie",
+				tooLow.Floor))
+		default:
+			s.log.Error("update series", "error", err, "companyId", companyID, "seriesId", seriesID)
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		}
-		s.log.Error("update series", "error", err, "companyId", companyID, "seriesId", seriesID)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		return
 	}
 	writeSuccess(w, updated)

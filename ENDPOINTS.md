@@ -49,9 +49,28 @@ CRUD over the `document_series` table. `docType` ∈ `01` (factura), `03` (bolet
 | Method & path | Purpose | Contract |
 |---|---|---|
 | `GET /series/{companyId}` | List every series row for a company (populates series dropdowns when issuing). | → `Series[]` |
-| `POST /series/{companyId}` | Create a series. Enforces uniqueness on `(docType, series)`. | Body `{ docType, series, description? }` → `201 Series`. `409 SERIES_DUPLICATE` if it exists. |
-| `PUT /series/{companyId}/{seriesId}` | Patch `description` / `isActive` (e.g. retire a series). | Body `{ description?, isActive? }` → `Series`. `404 NOT_FOUND`. |
+| `POST /series/{companyId}` | Create a series. Enforces uniqueness on `(docType, series)`. | Body `{ docType, series, description?, nextCorrelative? }` → `201 Series`. `409 SERIES_DUPLICATE` if it exists. |
+| `PUT /series/{companyId}/{seriesId}` | Patch `description` / `isActive` (e.g. retire a series) / `nextCorrelative`. | Body `{ description?, isActive?, nextCorrelative? }` → `Series`. `404 NOT_FOUND`, `409 CORRELATIVE_TOO_LOW`. |
 | `DELETE /series/{companyId}/{seriesId}` | Delete a series — **only if it has no documents**. | → `{message}`. `409 SERIES_HAS_DOCUMENTS` if documents reference it. |
+
+### `nextCorrelative` — migrating from another facturador
+
+A company arriving with `F001` already in use at 4312 seeds the counter so its
+first comprobante here is 4313 instead of 1. Range `1 … 99999999` (SUNAT's
+correlativo is 8 digits); omit the field for a brand-new serie.
+
+It seeds **`next_correlative` (producción) only** — `next_correlative_beta` is an
+independent sandbox sequence at SUNAT's side, and neither counter resets on an
+environment switch, so a user can test in beta from 1 and still resume at 4313 in
+producción.
+
+On `PUT` it is **raise-only** and must clear every number the serie already put on
+the wire (`MAX(correlative)` over production `issued_documents` **and**
+`despatches` — GRE series share `document_series`). Violations return `409
+CORRELATIVE_TOO_LOW` with the minimum named in the message. The check and the
+write share one transaction with the row locked, so a concurrent draft creation
+cannot interleave. Changes are recorded in `audit_logs` as
+`series_correlative_set` — the only `audit_logs` writer in this service.
 
 ---
 

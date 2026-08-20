@@ -76,9 +76,14 @@ All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS
 
 ### Series
 - `GET /series/{companyId}`
-- `POST /series/{companyId}` — create (unique on docType+series)
-- `PUT /series/{companyId}/{seriesId}`
+- `POST /series/{companyId}` — create (unique on docType+series); optional `nextCorrelative` seeds the counter for a company migrating from another facturador
+- `PUT /series/{companyId}/{seriesId}` — `description` / `isActive` / `nextCorrelative` (raise-only, `409 CORRELATIVE_TOO_LOW`)
 - `DELETE /series/{companyId}/{seriesId}` — refuses if docs exist
+
+`nextCorrelative` seeds **producción only**; beta keeps its independent sandbox
+sequence, and neither counter resets on an environment switch. See ENDPOINTS.md
+for the guard (raise-only, past `MAX(correlative)` across `issued_documents` +
+`despatches`, one locked transaction, audited as `series_correlative_set`).
 
 ### Documents
 - `GET /documents/{companyId}` — paginated, filterable
