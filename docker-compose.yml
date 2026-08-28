@@ -1,0 +1,28 @@
+# Local dev only — NOT used in prod (Railway deploys straight from Dockerfile).
+# Builds the same multi-stage Dockerfile prod uses (correct xmlsec 1.3.7 pin),
+# so you get a working xmlsec1 binary without installing anything on the host.
+#
+# Postgres runs on the Windows host (localhost:5432), not in this compose file.
+# From inside the container that's host.docker.internal, which Docker Desktop
+# on Windows resolves to the host automatically.
+#
+# Usage:
+#   docker compose up --build     # rebuild + run after code changes
+#   docker compose up -d --build  # detached
+#   docker compose down
+services:
+  facturador:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      # Override localhost -> host.docker.internal so the container reaches
+      # the Postgres instance running natively on Windows.
+      DATABASE_URL: postgresql://perunio_app:perunio_password_password@host.docker.internal:5432/perunio_db
+      DATABASE_ADMIN_URL: postgresql://perunio_admin:perunio_admin_password_password@host.docker.internal:5432/perunio_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
