@@ -27,14 +27,35 @@ func (p *Pool) GetUserByID(ctx context.Context, userID string) (*auth.UserRecord
 	return &u, nil
 }
 
-// IsTokenBlacklisted checks whether a JWT JTI has been revoked. Runs inside a
-// tenant-scoped tx because token_blacklist has RLS enabled.
-func (p *Pool) IsTokenBlacklisted(ctx context.Context, jti, tenantID string) (bool, error) {
-	var blacklisted bool
+// IsSessionAlive reports whether the session a token descends from is still
+// usable. Runs inside a tenant-scoped tx because user_sessions has RLS enabled.
+//
+// This replaces the old token_blacklist lookup, and the polarity is inverted in
+// a way worth being explicit about: the blacklist was a DENY-list, where finding
+// no row meant "fine, carry on". user_sessions is an ALLOW-list, where finding
+// no row means the session is gone. The query therefore has to prove the session
+// is alive rather than prove it is dead.
+//
+// That inversion is what makes the check fail closed. The tenantID handed to
+// set_config comes from the JWT itself, so a forged tenantId picks its own RLS
+// scope and finds nothing there — which under deny-list semantics would have
+// read as a valid session. Requiring a present, unrevoked, unexpired row means
+// the attacker's empty result denies the request instead of allowing it.
+//
+// Mirrors SessionService.isSessionAlive in
+// perunio-backend/src/auth/session.service.ts, including both expiry columns:
+// absolute is the cap that is never extended, idle moves forward on each refresh.
+func (p *Pool) IsSessionAlive(ctx context.Context, sid, tenantID string) (bool, error) {
+	var alive bool
 	err := p.WithExplicitTenant(ctx, tenantID, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx,
-			`SELECT 1 FROM token_blacklist WHERE jti = $1 LIMIT 1`,
-			jti,
+			`SELECT 1 FROM user_sessions
+			 WHERE id = $1
+			   AND revoked_at IS NULL
+			   AND absolute_expires_at > now()
+			   AND idle_expires_at > now()
+			 LIMIT 1`,
+			sid,
 		)
 		var x int
 		if err := row.Scan(&x); err != nil {
@@ -43,8 +64,8 @@ func (p *Pool) IsTokenBlacklisted(ctx context.Context, jti, tenantID string) (bo
 			}
 			return err
 		}
-		blacklisted = true
+		alive = true
 		return nil
 	})
-	return blacklisted, err
+	return alive, err
 }
