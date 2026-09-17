@@ -17,7 +17,16 @@ const (
 // JWTPayload mirrors the JWT payload created by perunio-backend/src/auth/jwt.ts.
 // JSON tags match the Node.js field names exactly.
 type JWTPayload struct {
-	JTI                       string `json:"jti"`
+	JTI string `json:"jti"`
+	// SID is the user_sessions row this token descends from. Unlike JTI it is
+	// stable across a refresh, so revocation can target a session rather than a
+	// single token.
+	//
+	// Optional, and it must stay optional: tokens minted before sessions existed
+	// carry no sid and have to keep verifying until they expire. Parsed but not
+	// yet acted on — the blacklist and token-version checks in middleware.go are
+	// still what enforce revocation here.
+	SID                       string `json:"sid,omitempty"`
 	UserID                    string `json:"userId"`
 	TenantID                  string `json:"tenantId"`
 	Email                     string `json:"email"`
