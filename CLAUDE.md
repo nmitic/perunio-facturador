@@ -22,6 +22,35 @@ Run a specific test:
 go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
 ```
 
+### Without a Go toolchain on the host
+
+Everyone here already needs Docker (that's what the xmlsec pin is for), but Go
+on the host is optional — and on a fresh Windows machine it usually isn't there.
+These run the same gates inside `golang:1.26-alpine`, the image the Dockerfile
+builds from, so the compiler and stdlib match production rather than whatever is
+on PATH:
+
+```bash
+make docker-check   # build + vet + test — exactly what CI enforces
+make docker-build
+make docker-vet
+make docker-test
+make docker-fmt     # read-only formatting check (see below)
+make docker-shell   # a shell in the same image
+```
+
+Module and build caches live in named volumes, so only the first run pays for
+downloading the module graph; later runs take seconds.
+
+`make docker-fmt` is not `gofmt -l .`. On a Windows checkout the working tree has
+CRLF line endings, so plain `gofmt -l` reports nearly every file in the repo and
+is useless as a gate. The target strips CR before comparing and reports only
+files whose formatting is genuinely wrong. It never rewrites anything.
+
+> `make test-prod` is currently broken for an unrelated reason: `Dockerfile.test`
+> is referenced but does not exist in the repo. The target is left in place as
+> the declared intent rather than deleted.
+
 ### Testing signing against the production xmlsec
 
 `make test` uses whatever `xmlsec1` is on your host. That version can differ
