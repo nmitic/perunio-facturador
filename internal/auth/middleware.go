@@ -112,6 +112,15 @@ func extractToken(r *http.Request) string {
 	return ""
 }
 
+// clearAuthCookie removes the access-token cookie only.
+//
+// The Node backend also sets a `refresh_token` cookie (Path=/api/auth), and this
+// deliberately leaves it alone. Every call site here is a rejection of the ACCESS
+// token — expired, revoked, or invalid — and the most common of those, expiry, is
+// precisely when the browser is supposed to go and refresh. Clearing the refresh
+// cookie here would turn a routine renewal into a forced login.
+//
+// Ending the session is /auth/logout's job on the Node side, which clears both.
 func clearAuthCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
