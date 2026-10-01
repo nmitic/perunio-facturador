@@ -8,11 +8,20 @@ It talks directly to the shared PostgreSQL DB (RLS-isolated by tenant), Cloudfla
 
 ## Development Commands
 
+Local development runs natively on Ubuntu (no Docker). First time:
+
 ```bash
+sudo apt install make
+make setup          # apt-installs Go + xmlsec1, downloads modules, runs doctor
+```
+
+```bash
+make run            # Run from source; the app loads .env itself
+make start          # Build bin/facturador and run the binary
+make check          # build + vet + test — exactly what CI enforces
+make doctor         # Verify Go, xmlsec1 and .env are in place
 make build          # Build binary to bin/facturador
-make run            # Run with go run
 make test           # go test -shuffle on ./...
-make test-prod      # signing tests against prod's exact xmlsec (Docker)
 make lint           # golangci-lint run
 make fmt            # gofmt -w .
 ```
@@ -22,52 +31,24 @@ Run a specific test:
 go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
 ```
 
-### Without a Go toolchain on the host
+apt's Go can be a patch release behind `go.mod`; Go then downloads the exact
+pinned toolchain on first use (Ubuntu's default `GOTOOLCHAIN=auto`).
 
-Everyone here already needs Docker (that's what the xmlsec pin is for), but Go
-on the host is optional — and on a fresh Windows machine it usually isn't there.
-These run the same gates inside `golang:1.26-alpine`, the image the Dockerfile
-builds from, so the compiler and stdlib match production rather than whatever is
-on PATH:
+`xmlsec1` is a runtime dependency: the service starts without it, but every
+issue call fails at the signing step.
 
-```bash
-make docker-check   # build + vet + test — exactly what CI enforces
-make docker-build
-make docker-vet
-make docker-test
-make docker-fmt     # read-only formatting check (see below)
-make docker-shell   # a shell in the same image
-```
+The `Dockerfile` is for production only — Railway builds from it
+(`railway.json`). Keep it; it carries the prod xmlsec pin.
 
-Module and build caches live in named volumes, so only the first run pays for
-downloading the module graph; later runs take seconds.
+### Host xmlsec vs. production xmlsec
 
-`make docker-fmt` is not `gofmt -l .`. On a Windows checkout the working tree has
-CRLF line endings, so plain `gofmt -l` reports nearly every file in the repo and
-is useless as a gate. The target strips CR before comparing and reports only
-files whose formatting is genuinely wrong. It never rewrites anything.
-
-> `make test-prod` is currently broken for an unrelated reason: `Dockerfile.test`
-> is referenced but does not exist in the repo. The target is left in place as
-> the declared intent rather than deleted.
-
-### Testing signing against the production xmlsec
-
-`make test` uses whatever `xmlsec1` is on your host. That version can differ
-from production and behave differently: xmlsec >=1.3 made key search strict
+`make test` uses whatever `xmlsec1` is on your host; prod pins
+`xmlsec=1.3.7-r0` on `alpine:3.21`. xmlsec >=1.3 made key search strict
 (KEY-NOT-FOUND on our empty `ds:KeyInfo` template — `signer.go` adds
-`--lax-key-search` to compensate). Ubuntu's apt ships 1.2.x, so `make test`
-locally never exercises the 1.3.x path that runs in prod.
-
-`make test-prod` closes that gap. It builds `Dockerfile.test`, which compiles
-the signature test binary and runs it inside the **exact** runtime prod ships
-(`alpine:3.21` + `xmlsec=1.3.7-r0`). The test binary is run *during the image
-build*, so a failing test aborts the build with a non-zero exit — no volume
-mounts, no changes to your host xmlsec.
-
-Run it before shipping any change to `internal/signature`, `internal/xmlbuilder`
-(signature template), or the xmlsec pin in `Dockerfile`. Keep the alpine tag and
-xmlsec pin in `Dockerfile.test` in sync with `Dockerfile`.
+`--lax-key-search` to compensate). Ubuntu 26.04 ships 1.3.9, so local runs take
+the same 1.3.x code path as prod, but the exact version still differs. Re-verify
+a real SUNAT beta signing before shipping any change to `internal/signature`,
+`internal/xmlbuilder` (signature template), or the xmlsec pin in `Dockerfile`.
 
 ## Architecture
 

@@ -1,27 +1,58 @@
-.PHONY: build run test test-prod lint fmt \
-        docker-build docker-vet docker-test docker-fmt docker-check docker-shell
+.PHONY: help setup doctor run build start vet test check lint fmt clean
 
-# ---------------------------------------------------------------------------
-# Host targets — require a local Go toolchain.
-# ---------------------------------------------------------------------------
+# Local development on Ubuntu. Production does not use this file: Railway
+# builds from Dockerfile (see railway.json) and CI runs plain `go` commands.
 
-build:
-	go build -o bin/facturador ./cmd/app
+BIN := bin/facturador
+
+help:
+	@echo "First time on Ubuntu:  sudo apt install make && make setup"
+	@echo ""
+	@echo "  make setup    install Go + xmlsec1 via apt, download modules"
+	@echo "  make doctor   verify Go, xmlsec1 and .env are in place"
+	@echo "  make run      run from source (the app loads .env itself)"
+	@echo "  make start    build $(BIN) and run the binary"
+	@echo "  make check    build + vet + test (what CI enforces)"
+	@echo "  make build | vet | test | lint | fmt | clean"
+
+# xmlsec1 is a runtime dependency, not a build one: signing shells out to the
+# xmlsec1 binary (internal/signature), so the service starts without it but
+# every issue call fails.
+#
+# apt's Go may be a patch release behind go.mod; Go then fetches the exact
+# version go.mod pins on first use (GOTOOLCHAIN=auto is Ubuntu's default).
+setup:
+	sudo apt-get update
+	sudo apt-get install -y golang-go xmlsec1 ca-certificates
+	go mod download
+	@$(MAKE) --no-print-directory doctor
+
+doctor:
+	@status=0; \
+	if command -v go >/dev/null; then echo "ok    $$(go version)"; \
+	else echo "FAIL  go not found (run: make setup)"; status=1; fi; \
+	if command -v xmlsec1 >/dev/null; then echo "ok    $$(xmlsec1 --version)"; \
+	else echo "FAIL  xmlsec1 not found (run: make setup)"; status=1; fi; \
+	if [ -f .env ]; then echo "ok    .env present"; \
+	else echo "FAIL  .env missing (DATABASE_URL and R2_* are required)"; status=1; fi; \
+	exit $$status
 
 run:
 	go run ./cmd/app
 
+build:
+	go build -o $(BIN) ./cmd/app
+
+start: build
+	./$(BIN)
+
+vet:
+	go vet ./...
+
 test:
 	go test -shuffle on ./...
 
-# Runs the signing tests against the exact xmlsec version prod ships (see
-# Dockerfile.test). Use this before shipping signature changes — your host
-# xmlsec differs from prod and won't catch strict-key-search regressions.
-#
-# NOTE: Dockerfile.test does not exist yet, so this target currently fails.
-# Kept as the declared intent; see the repo TODO rather than deleting it.
-test-prod:
-	docker build -f Dockerfile.test -t perunio-facturador-test .
+check: build vet test
 
 lint:
 	golangci-lint run
@@ -29,51 +60,5 @@ lint:
 fmt:
 	gofmt -w .
 
-# ---------------------------------------------------------------------------
-# Docker targets — the same gates, with no Go installed on the host.
-#
-# Every developer here already needs Docker (the xmlsec pin in Dockerfile is
-# why), while Go on the host is optional — so these exist to make "can I still
-# ship this?" answerable from a clean Windows machine. They run the SAME image
-# tag the Dockerfile builds from, so the compiler and stdlib match production
-# rather than whatever happens to be on PATH.
-#
-# Both caches are named volumes: without them every run re-downloads the whole
-# module graph (~30 modules) and recompiles the stdlib, turning a 3-second test
-# run into a 2-minute one.
-# ---------------------------------------------------------------------------
-
-GO_IMAGE   := golang:1.26-alpine
-GO_DOCKER   = docker run --rm \
-	-v "$(CURDIR)":/src \
-	-v perunio-go-mod-cache:/go/pkg/mod \
-	-v perunio-go-build-cache:/root/.cache/go-build \
-	-w /src $(GO_IMAGE)
-
-docker-build:
-	$(GO_DOCKER) go build ./...
-
-docker-vet:
-	$(GO_DOCKER) go vet ./...
-
-docker-test:
-	$(GO_DOCKER) go test -shuffle on ./...
-
-# gofmt -l on a Windows checkout flags nearly every file, because the working
-# tree has CRLF line endings and gofmt wants LF. That makes a plain `gofmt -l .`
-# useless as a gate here, so this strips CR before checking and reports only
-# files whose formatting is genuinely wrong. Read-only — it never rewrites.
-docker-fmt:
-	$(GO_DOCKER) sh -c 'bad=""; for f in $$(find . -name "*.go" -not -path "./vendor/*"); do \
-		tr -d "\r" < "$$f" > /tmp/f.go; \
-		if [ -n "$$(gofmt -l /tmp/f.go)" ]; then bad="$$bad $$f"; fi; \
-	done; \
-	if [ -n "$$bad" ]; then echo "needs gofmt:$$bad"; exit 1; fi; \
-	echo "gofmt: all files formatted"'
-
-# What CI enforces (build + vet + test), runnable before you push.
-docker-check: docker-build docker-vet docker-test
-
-# A shell in the same image, for poking at things by hand.
-docker-shell:
-	$(GO_DOCKER) sh
+clean:
+	rm -rf bin

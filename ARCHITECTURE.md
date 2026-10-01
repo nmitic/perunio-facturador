@@ -155,28 +155,7 @@ restore the pre-1.3 behavior.
 Consequences for the architecture:
 
 - The prod image (`Dockerfile`) **pins** `xmlsec=1.3.7-r0` on `alpine:3.21`. Bumping it requires re-verifying a real SUNAT signing.
-- A developer's host `xmlsec1` usually differs (Ubuntu apt ships 1.2.x), so plain `make test` does **not** exercise the same key-search path prod runs.
-
-## Testing the signing pipeline
-
-Two layers, because the signer's behavior is version-dependent:
-
-| Command | Runs on | Exercises |
-|---|---|---|
-| `make test` | your host `xmlsec1` (Ubuntu apt → 1.2.x) | fast inner loop; **not** prod's key-search path |
-| `make test-prod` | prod runtime in Docker (`alpine:3.21` + `xmlsec=1.3.7-r0`) | the **exact** prod signer |
-
-`make test-prod` builds `Dockerfile.test`, which compiles the signature test
-binary with Go 1.26 and then runs it inside the pinned prod runtime. Compile and
-run are deliberately separate stages: the Go toolchain only matters at build
-time, the signer only at run time — so no single image needs both. The binary is
-run **during the image build**, so a failing test aborts the build with a
-non-zero exit; there are no volume mounts and your host `xmlsec1` is untouched.
-
-Run `make test-prod` before shipping any change to `internal/signature`,
-`internal/xmlbuilder` (the signature template), or the `xmlsec` pin in
-`Dockerfile`. Keep the alpine tag and xmlsec pin in `Dockerfile.test` in sync
-with `Dockerfile`.
+- A developer's host `xmlsec1` differs in exact version (Ubuntu 26.04 apt ships 1.3.9), so `make test` exercises the same 1.3.x key-search path as prod but not the pinned build. Re-verify a real SUNAT beta signing before shipping any change to `internal/signature`, `internal/xmlbuilder` (the signature template), or the `xmlsec` pin in `Dockerfile`.
 
 ## External dependencies by service
 
