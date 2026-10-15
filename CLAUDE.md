@@ -265,11 +265,11 @@ Read `spec/README.md` before touching a builder.
 
 - Changing builder output → run `-update` and review the `expected.xml` diff.
 - A new SUNAT rule or fault → add a case (or an invariant) citing the code from
-  `resources/AjustesValidacionesCPEv20260212.xlsx`.
+  `resources/reglas/` (see `resources/README.md` for versions and how to update).
 - Known gaps are `pending:` cases (reported as SKIP); `spec/README.md` › Known
   deviations lists them (F1-F11). Fixing one makes its case fail until `pending`
   is removed — that is intended.
-- `TestSpecXSD` validates goldens against `resources/XSD Schemas 2.1` when
+- `TestSpecXSD` validates goldens against `resources/xsd/` (UBL 2.1 + SUNAT 2.0) when
   `xmllint` is installed (`apt install libxml2-utils`); it skips otherwise.
 
 ## Reference

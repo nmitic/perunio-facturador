@@ -6,7 +6,7 @@ why: >-
   descuento is baked into a NET cac:Price (50 = 50 / 1).
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
-  - "Guía de elaboración XML Nota de Crédito 2.1 (resources/guia+xml+nota de crédito*.pdf), punto 29"
+  - "Guía de elaboración XML Nota de Crédito 2.1 (resources/guias/guia-xml-nota-credito-2.1-2017-05.pdf), punto 29"
 assert:
   - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:AllowanceCharge"
     absent: true

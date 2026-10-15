@@ -46,7 +46,7 @@ document: cpe                    # which builder runs
 why: >-                          # the business rule, in one paragraph
   Exonerado lines (Cat.07 20) are declared under tributo 9997 …
 sources:                         # where the rule comes from
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 pending: >-                      # optional: we KNOW the builder is wrong here (see Known deviations)
   Finding F1: …
 assert:
@@ -150,11 +150,11 @@ xmllint --shell invoice/11-gratuito-gravado-retiro/expected.xml
 
 ### Asking someone else to review a case
 
-> You are reviewing an electronic invoice for SUNAT (Peru), UBL 2.1. Attached are `input.json` (what the seller entered), `spec.yaml` (the rules we believe apply, each with a SUNAT error code) and `expected.xml` (what we send). Using SUNAT's "Guía de elaboración" and its validation workbook (AjustesValidacionesCPE), tell us (1) whether each assertion in `spec.yaml` is a correct statement of SUNAT's rules, (2) whether `expected.xml` would be accepted, and if not, which SUNAT code it would get and why, and (3) any rule we are missing.
+> You are reviewing an electronic invoice for SUNAT (Peru), UBL 2.1. Attached are `input.json` (what the seller entered), `spec.yaml` (the rules we believe apply, each with a SUNAT error code) and `expected.xml` (what we send). Using SUNAT's "Guía de elaboración" and its current validation-rules workbook (Reglas de validación), tell us (1) whether each assertion in `spec.yaml` is a correct statement of SUNAT's rules, (2) whether `expected.xml` would be accepted, and if not, which SUNAT code it would get and why, and (3) any rule we are missing.
 
 ## Known deviations
 
-Each row is a `pending` reason. The SUNAT codes come from `resources/AjustesValidacionesCPEv20260212.xlsx` unless noted.
+Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` (GRE: `reglas-validacion-gre-2026-09-25.xlsx`) unless noted.
 
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
@@ -166,7 +166,7 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/AjustesVali
 | F6 | RC lines use the Resumen **1.0** range shape (`sac:DocumentSerialID` + `Start/EndDocumentNumberID`) under CustomizationID **1.1**, which identifies each comprobante with one `cbc:ID` per line (RC 1.1 guide, sample XML p. 27). | ERROR 2512 | `summary.go` | summary/01–06 |
 | F7 | RC lines omit the IGV `cac:TaxTotal` when the IGV is 0. | ERROR 2278 | `buildSummaryLine` | summary/06 |
 | F8 | GRE por eventos references the superseded guía by Perunio's database UUID (`OriginalGreID`), with the Cat.59 event code in `cbc:DocumentTypeCode`. | — | `despatch_evento.go` | despatch/05 |
-| F9 | **Unverified.** GRE puts the punto de partida in `cac:Shipment/cac:OriginAddress` and the plate in `ShipmentStage/TransportMeans/RoadTransport`. The 2022 GRE layout uses `Delivery/Despatch/DespatchAddress` and `TransportHandlingUnit/TransportEquipment`. The SUNAT GRE guide is not in `resources/`; add it and confirm. | — | `despatch_common.go` `buildShipment` | despatch/06 |
+| F9 | GRE puts the punto de partida in `cac:Shipment/cac:OriginAddress` and the plate in `ShipmentStage/TransportMeans/RoadTransport`, the GRE 1.0 shapes. GRE 2.0 uses `Delivery/Despatch/DespatchAddress` and `TransportHandlingUnit/TransportEquipment/cbc:ID`; SUNAT's GRE rules and its GRE validator XSL never mention `OriginAddress` or `RoadTransport`. | GRE rules › Guía-Remitente2_0 | `despatch_common.go` `buildShipment` | despatch/06 |
 | F10 | Any character outside ISO-8859-1 (curly quotes, em dash, €) makes `BuildDocumentXML` fail, so the issue ends with `XML_BUILD_ERROR`. Validation does not catch it first. | — | `encoding.go` | invoice/35 |
 | F11 | RA `cbc:ReferenceDate` is set to the RA's own issue date. It must be the issue date of the voided documents, and `model.VoidRequest` has no field for it. Voiding anything from a previous day is rejected. | ERROR 2375 | `voided.go`, `model.VoidRequest` | voided/03 |
 
@@ -178,9 +178,12 @@ Settled along the way:
 
 ## Sources
 
-- `resources/AjustesValidacionesCPEv20260212.xlsx` is SUNAT's validation workbook: every rule with its XPath and return code. One sheet per document type.
-- `resources/guia+xml+*.pdf` are SUNAT's "Guía de elaboración" for factura, boleta, NC and ND (UBL 2.1).
-- `resources/GUIA_Resumen_de_Boletas_*.pdf` is the Resumen Diario 1.1 guide.
-- `resources/XSD Schemas 2.1/` holds the OASIS UBL 2.1 schemas (no SUNAT `sac` extension, no RC/RA schemas).
+Everything lives in `resources/`. Its `README.md` lists each file's SUNAT publication date and where to get a newer one.
+
+- `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` is SUNAT's CPE validation workbook: every rule with its XPath and return code, one sheet per document type (factura, boleta, NC, ND, Resumen Diario, Comunicación de Baja, …), plus the current catálogos.
+- `resources/reglas/reglas-validacion-gre-2026-09-25.xlsx` holds the same for GRE Remitente 2.0 and Transportista 2.0.
+- `resources/xsl/cpe/` and `resources/xsl/gre/` are SUNAT's executable validators (`ValidaExprReg*.xsl`), the checks SUNAT and its Facturador run.
+- `resources/xsd/2.1/` holds the OASIS UBL 2.1 schemas (Invoice, CreditNote, DebitNote, DespatchAdvice). `resources/xsd/2.0/` holds SUNAT's UBL 2.0 schemas, including `SummaryDocuments`, `VoidedDocuments` and the `sac` extensions.
+- `resources/guias/` holds SUNAT's "Guía de elaboración" for factura, boleta, NC and ND (UBL 2.1, May 2017), the Resumen Diario 1.1 guide (Jan 2018) and the manual del programador.
 - CLAUDE.md › Critical SUNAT Gotchas lists rules learned from real SUNAT beta CDRs.
 - greenter (`github.com/thegreenter/greenter`) is a widely used open-source reference implementation.

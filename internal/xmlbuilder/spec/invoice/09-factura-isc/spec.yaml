@@ -6,7 +6,7 @@ why: >-
   the line and document tax totals add both tributos (41.60), and the ISC
   subtotal states its own rate.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 pending: >-
   Finding F3: ISC is left out of the document cbc:TaxAmount (3294) and of
   the line cbc:TaxAmount (3292), the ISC line subtotal has no cbc:Percent

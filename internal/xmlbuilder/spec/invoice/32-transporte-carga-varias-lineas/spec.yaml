@@ -4,7 +4,7 @@ why: >-
   The trip describes the whole comprobante and SUNAT requires one occurrence
   of each tag, so the cac:Delivery block rides on the first line only.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "//cac:Delivery"
     count: 1

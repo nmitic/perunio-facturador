@@ -4,7 +4,7 @@ why: >-
   A Comunicación de Baja (RA, UBL 2.0 / CustomizationID 1.0) voiding one
   factura on the same day it was issued.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Comunicación de Baja1_0"
 assert:
   - xpath: "local-name(/*)"
     equals: "VoidedDocuments"

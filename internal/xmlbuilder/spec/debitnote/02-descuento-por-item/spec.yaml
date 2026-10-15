@@ -6,7 +6,7 @@ why: >-
   LineExtensionAmount.
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
-  - "Guía de elaboración XML Nota de Débito 2.1 (resources/guia+xml+nota de débito*.pdf)"
+  - "Guía de elaboración XML Nota de Débito 2.1 (resources/guias/guia-xml-nota-debito-2.1-2017-05.pdf)"
 assert:
   - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cac:AllowanceCharge"
     absent: true

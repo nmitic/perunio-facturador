@@ -5,7 +5,7 @@ why: >-
   the monto neto pendiente, then one entry per cuota numbered Cuota001,
   Cuota002 with its amount and due date.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']"
     count: 3

@@ -5,8 +5,8 @@ why: >-
   line AND at document level, and the document carries no IGV subtotal at
   all.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
-  - "Guía de elaboración XML Factura 2.1 (resources/guia+xml+factura+version 2-1*.pdf)"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+  - "Guía de elaboración XML Factura 2.1 (resources/guias/guia-xml-factura-2.1-2017-05.pdf)"
 pending: >-
   Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
   lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a

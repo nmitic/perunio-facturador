@@ -6,7 +6,7 @@ why: >-
   (fault 3287 applies to boletas too).
 sources:
   - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
-  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
 assert:
   - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
     equals: "B001-00000007"

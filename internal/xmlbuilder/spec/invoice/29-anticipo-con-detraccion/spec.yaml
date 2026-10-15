@@ -5,7 +5,7 @@ why: >-
   never 0104), because 1001 is what SUNAT pairs with leyenda 2006 and the
   cuenta BN, and carries the full SPOT block on what it collects.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
     sunat: "4265"

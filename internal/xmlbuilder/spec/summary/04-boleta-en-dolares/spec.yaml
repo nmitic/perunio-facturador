@@ -4,7 +4,7 @@ why: >-
   Each RC line is stated in its own boleta's currency; a USD boleta is never
   hardcoded to PEN.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1"
 pending: >-
   Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
   + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies

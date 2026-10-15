@@ -5,7 +5,7 @@ why: >-
   vehicle (Cat.18 02): the driver and plate travel in the shipment stage;
   weight, packages, start date and punto de llegada are always present.
 sources:
-  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
 assert:
   - xpath: "local-name(/*)"
     equals: "DespatchAdvice"

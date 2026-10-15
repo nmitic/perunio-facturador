@@ -8,7 +8,7 @@ why: >-
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
   - "greenter reference output (github.com/thegreenter/greenter)"
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
     equals: "0.00"

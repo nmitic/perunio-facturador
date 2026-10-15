@@ -661,7 +661,7 @@ func newDocumentCurrencyCode(code string) documentCurrencyCode {
 //	everything else                       → 1001
 //
 // Source: sheets Factura2_0 / Boleta2_0 of
-// resources/AjustesValidacionesCPEv20260212.xlsx.
+// resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx.
 func detraccionOperationType(d *model.Detraccion) string {
 	if d == nil {
 		return sunat.Cat51DetraccionGeneral

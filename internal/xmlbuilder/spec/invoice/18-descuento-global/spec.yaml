@@ -5,8 +5,8 @@ why: >-
   cac:AllowanceCharge reduces the IGV base to 900 (IGV 162) and the total
   valor de venta to 900. The lines stay gross.
 sources:
-  - "Guía de elaboración XML Factura 2.1 (resources/guia+xml+factura+version 2-1*.pdf), puntos 21/35"
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "Guía de elaboración XML Factura 2.1 (resources/guias/guia-xml-factura-2.1-2017-05.pdf), puntos 21/35"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
   - "greenter reference output (github.com/thegreenter/greenter)"
 assert:
   - xpath: "/*/cac:AllowanceCharge/cbc:ChargeIndicator"

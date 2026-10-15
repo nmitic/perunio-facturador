@@ -4,7 +4,7 @@ why: >-
   One RA can void several comprobantes of the same date; lines are numbered
   1, 2, …
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Comunicación de Baja1_0"
 assert:
   - xpath: "/*/sac:VoidedDocumentsLine"
     count: 2

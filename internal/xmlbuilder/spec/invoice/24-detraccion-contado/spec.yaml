@@ -6,7 +6,7 @@ why: >-
   'Detraccion' cac:PaymentTerms in PEN — alongside, not instead of, the
   forma de pago Contado. Totals are unchanged.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
     sunat: "4265"

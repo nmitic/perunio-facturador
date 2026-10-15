@@ -4,7 +4,7 @@ why: >-
   A USD factura: every amount carries currencyID USD. The tipo de cambio is
   a PLE/SIRE datum and never changes the XML amounts.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:DocumentCurrencyCode"
     equals: "USD"

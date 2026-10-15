@@ -4,7 +4,7 @@ why: >-
   A nota de crédito on a factura sujeta a detracción mirrors the detracción
   block (leyenda 2006, cuenta BN, Detraccion PaymentTerms in PEN).
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"
 assert:
   - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
     sunat: "4265"

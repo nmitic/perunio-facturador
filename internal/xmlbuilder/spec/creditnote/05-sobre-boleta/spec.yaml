@@ -4,7 +4,7 @@ why: >-
   A nota de crédito on a boleta: series starting with B and a reference of
   type 03.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"
 assert:
   - xpath: "/*/cbc:ID"
     equals: "BC01-00000001"

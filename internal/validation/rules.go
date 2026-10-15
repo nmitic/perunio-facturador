@@ -405,7 +405,7 @@ func validateGlobalDiscount(req model.IssueRequest) []model.ValidationError {
 // not exceed the total of the comprobante.
 //
 // Boletas are in scope because SUNAT's current validation pack
-// (resources/AjustesValidacionesCPEv20260212.xlsx, sheet Boleta2_0) carries the
+// (resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx, sheet Boleta2_0) carries the
 // full anticipo rule set — cac:PrepaidPayment, the cac:AdditionalDocumentReference
 // pairing and cbc:PrepaidAmount, fault 3287 included — identical to Factura2_0.
 // Catálogo 51 in that same workbook marks the detracción operation types
@@ -474,7 +474,7 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 // monto within ±1 cent of porcentaje × TotalAmount.
 //
 // Boletas are in scope: SUNAT's current validation pack
-// (resources/AjustesValidacionesCPEv20260212.xlsx) marks catálogo 51 codes
+// (resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx) marks catálogo 51 codes
 // 1001-1004 as "Factura, Boletas" in its Catálogos sheet, and the Boleta2_0
 // sheet carries the same detracción rules as Factura2_0 — cac:PaymentTerms and
 // cac:PaymentMeans both keyed "Detraccion", leyenda 2006, faults

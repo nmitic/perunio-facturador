@@ -4,7 +4,7 @@ why: >-
   Cat.54 004 (recursos hidrobiológicos) pairs with tipo de operación 1002.
   The builder derives it from the código even when the draft says 1001.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:InvoiceTypeCode/@listID"
     equals: "1002"

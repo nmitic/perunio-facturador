@@ -8,7 +8,7 @@ why: >-
   surfaces as a document AllowanceTotalAmount.
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
     equals: "100.00"

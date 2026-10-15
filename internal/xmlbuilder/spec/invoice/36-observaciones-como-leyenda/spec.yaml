@@ -6,7 +6,7 @@ why: >-
   characters with no line breaks, and 1000 means 'monto en letras', so
   observaciones need their own channel.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 pending: >-
   Finding F4: buildIssueRequestFromDoc (internal/http/routes_pipeline.go)
   sends every free-text draft note as Cat.52 leyenda 1000; multi-line or

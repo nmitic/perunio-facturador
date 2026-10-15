@@ -4,7 +4,7 @@ why: >-
   Transporte público (Cat.18 01): a third-party carrier is identified by RUC
   and name, and no driver or vehicle of the emisor is declared.
 sources:
-  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
 assert:
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cbc:TransportModeCode"
     equals: "01"

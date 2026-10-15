@@ -5,7 +5,7 @@ why: >-
   date of the RA. Voiding on 2024-01-16 a factura issued on 2024-01-15 must
   declare 2024-01-15.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Comunicación de Baja1_0"
 pending: >-
   Finding F11: BuildVoidedXML sets ReferenceDate = IssueDate and
   model.VoidRequest has no field for the voided documents' date, so voiding

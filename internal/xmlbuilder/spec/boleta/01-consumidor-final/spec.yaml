@@ -5,7 +5,7 @@ why: >-
   number 0, name CLIENTES VARIOS. Same Invoice document as a factura, only
   the type code differs.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
 assert:
   - xpath: "local-name(/*)"
     equals: "Invoice"

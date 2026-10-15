@@ -4,7 +4,7 @@ why: >-
   NC motivo 07 (devolución por ítem): 1 of the 10 units invoiced comes back,
   so the note carries only that unit and its totals.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"
 assert:
   - xpath: "/*/cac:DiscrepancyResponse/cbc:ResponseCode"
     equals: "07"

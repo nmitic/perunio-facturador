@@ -4,7 +4,7 @@ why: >-
   Arroz pilado (Cat.07 17) pays IVAP, tributo 1016 at 4 %, instead of IGV —
   at the line and in the document subtotal.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cbc:TaxableAmount"
     equals: "500.00"

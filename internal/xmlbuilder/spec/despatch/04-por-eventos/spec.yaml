@@ -5,7 +5,7 @@ why: >-
   previous one: on the wire it carries the BASE type code (09 here, never
   'EV'), and it references the guía it replaces.
 sources:
-  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
 assert:
   - xpath: "/*/cbc:DespatchAdviceTypeCode"
     equals: "09"

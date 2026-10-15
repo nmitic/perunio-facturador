@@ -5,8 +5,8 @@ why: >-
   boleta (condition 1) of 1180 (gravado 1000, IGV 180). Each line identifies
   ONE comprobante by SERIE-NÚMERO in cbc:ID.
 sources:
-  - "Guía de elaboración del Resumen Diario 1.1 (resources/GUIA_Resumen_de_Boletas_11-01-2018*.pdf)"
-  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+  - "Guía de elaboración del Resumen Diario 1.1 (resources/guias/guia-resumen-diario-1.1-2018-01.pdf)"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1"
 pending: >-
   Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
   + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies

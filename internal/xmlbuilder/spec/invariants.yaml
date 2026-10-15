@@ -6,7 +6,7 @@
 # tolerance is written as two comparisons. Arithmetic tolerances are SUNAT's own
 # (+/- 1 in the document currency) unless stated otherwise.
 #
-# Sources: resources/AjustesValidacionesCPEv20260212.xlsx, sheets Factura2_0,
+# Sources: resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx, sheets Factura2_0,
 # Boleta2_0, NotaCredito2_0, NotaDebito2_0, Resumen Diario1_1 and Comunicación de
 # Baja1_0. `sunat` is the return code SUNAT answers with when the rule breaks.
 #

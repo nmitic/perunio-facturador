@@ -6,7 +6,7 @@ why: >-
   (ubigeo + dirección), origen with the detalle del viaje, and the three
   valores referenciales in PEN.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0 (faults 3116-3126)"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0 (faults 3116-3126)"
 assert:
   - xpath: "/*/cbc:InvoiceTypeCode/@listID"
     equals: "1004"

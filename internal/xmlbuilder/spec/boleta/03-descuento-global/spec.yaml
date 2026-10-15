@@ -3,7 +3,7 @@ document: cpe
 why: >-
   The descuento global markup on a boleta is identical to a factura's.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
 assert:
   - xpath: "/*/cac:AllowanceCharge/cbc:ChargeIndicator"
     equals: "false"

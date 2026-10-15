@@ -5,7 +5,7 @@ why: >-
   the emisor's BN account and owes only the rest on credit, so the monto
   neto pendiente is 1180 − 141.60 = 1038.40, and the cuotas settle that.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
     sunat: "4265"

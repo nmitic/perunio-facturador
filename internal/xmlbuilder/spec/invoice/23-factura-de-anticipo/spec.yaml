@@ -5,7 +5,7 @@ why: >-
   SUNAT retired from Cat.51 (fault 3206): on the wire it is a plain venta
   interna 0101 and it deducts nothing.
 sources:
-  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 assert:
   - xpath: "/*/cbc:ProfileID"
     equals: "0101"
