@@ -135,6 +135,7 @@ const issuedDocumentColumns = `
 	detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
 	sunat_response_code, sunat_response_description, sunat_ticket, sunat_observations,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key, r2_pdf_key,
+	pdf_branding_id,
 	qr_data,
 	sent_at, accepted_at, created_at, updated_at,
 	-- Provenance: which kind of schedule emitted this comprobante. Stamped once at
@@ -170,6 +171,7 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, transpor
 		&d.DetraccionCodigo, &d.DetraccionPorcentaje, &d.DetraccionMonto, &d.DetraccionCuentaBN,
 		&d.SunatResponseCode, &d.SunatResponseDescription, &d.SunatTicket, observationsRaw,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
+		&d.PdfBrandingID,
 		&d.QrData,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
 		&d.ScheduleOrigin,
@@ -417,6 +419,15 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 		if res.MarkSent {
 			set = append(set, "sent_at = COALESCE(sent_at, now())")
 		}
+		// Freeze the PDF branding the comprobante renders with: the company's
+		// current version, stamped on the first issue attempt and never again, so a
+		// later marca change can't make the detail view disagree with the PDF the
+		// client already received.
+		if err := ensureCompanyPdfBranding(ctx, tx, docID); err != nil {
+			return err
+		}
+		set = append(set, "pdf_branding_id = COALESCE(pdf_branding_id, "+
+			"(SELECT pdf_branding_id FROM companies WHERE companies.id = issued_documents.company_id))")
 		if res.MarkAccepted {
 			set = append(set, "accepted_at = now()")
 		}
@@ -453,6 +464,39 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// ensureCompanyPdfBranding gives the document's company a current PDF branding
+// version if it has none yet — a company created after versions were introduced
+// that has never saved its branding (perunio-backend records a version on every
+// branding change). The version is a copy of the companies row's pdf_* columns.
+// FOR UPDATE serialises two concurrent first issues: the second re-checks
+// pdf_branding_id after the first commits and finds nothing to do.
+func ensureCompanyPdfBranding(ctx context.Context, tx pgx.Tx, docID string) error {
+	_, err := tx.Exec(ctx, `
+		WITH c AS (
+			SELECT id, tenant_id, pdf_template, brand_color, logo_base64,
+			       pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
+			FROM companies
+			WHERE id = (SELECT company_id FROM issued_documents WHERE id = $1)
+			  AND pdf_branding_id IS NULL
+			FOR UPDATE
+		), v AS (
+			INSERT INTO company_pdf_brandings (
+				tenant_id, company_id, pdf_template, brand_color, logo_base64,
+				pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
+			)
+			SELECT tenant_id, id, pdf_template, brand_color, logo_base64,
+			       pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
+			FROM c
+			RETURNING id, company_id
+		)
+		UPDATE companies SET pdf_branding_id = v.id FROM v WHERE companies.id = v.company_id`,
+		docID)
+	if err != nil {
+		return fmt.Errorf("ensure company pdf branding: %w", err)
+	}
+	return nil
 }
 
 // SetDocumentPdfKey persists the R2 key of a client-rendered PDF on an issued

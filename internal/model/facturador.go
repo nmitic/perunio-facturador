@@ -211,6 +211,10 @@ type IssuedDocument struct {
 	R2CdrKey       *string `json:"r2CdrKey"`
 	R2PdfKey       *string `json:"r2PdfKey"`
 
+	// PdfBrandingID is the company_pdf_brandings version this comprobante renders
+	// with, stamped when it is first issued. Nil for drafts not yet issued.
+	PdfBrandingID *string `json:"pdfBrandingId"`
+
 	QrData *string `json:"qrData"`
 
 	// ScheduleOrigin says which kind of schedule emitted this comprobante; nil when
