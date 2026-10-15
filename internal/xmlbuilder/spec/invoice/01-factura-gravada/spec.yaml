@@ -1,0 +1,148 @@
+case: factura-gravada
+document: cpe
+why: >-
+  The plain factura every other case is a variation of: one gravado line
+  (Cat.07 10), IGV 18 %, PEN, contado. Pins the document skeleton, the
+  parties and the totals.
+sources:
+  - "Guía de elaboración XML Factura 2.1 (resources/guia+xml+factura+version 2-1*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "Invoice"
+  - xpath: "namespace-uri(/*)"
+    equals: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  - xpath: "/*/cbc:ID"
+    equals: "F001-00000001"
+    sunat: "1001/1035"
+    why: >-
+      SERIE-CORRELATIVO with the correlativo zero-padded to 8 digits
+  - xpath: "/*/cbc:IssueDate"
+    equals: "2024-01-15"
+  - xpath: "/*/cbc:IssueTime"
+    equals: "15:20:30"
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    equals: "01"
+    why: >-
+      Cat.01 01 = factura
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "0101"
+    sunat: "3205"
+    why: >-
+      Cat.51 tipo de operación rides on the type code
+  - xpath: "/*/cbc:ProfileID"
+    equals: "0101"
+    why: >-
+      Cat.17/51 tipo de operación, repeated in ProfileID
+  - xpath: "/*/cbc:DocumentCurrencyCode"
+    equals: "PEN"
+  - xpath: "/*/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "20100113612"
+  - xpath: "/*/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+    why: >-
+      Cat.06 6 = RUC
+  - xpath: "/*/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "EMPRESA TEST SAC"
+  - xpath: "/*/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cac:RegistrationAddress/cbc:AddressTypeCode"
+    equals: "0000"
+    sunat: "3030"
+    why: >-
+      Código de establecimiento anexo; 0000 is the domicilio fiscal
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "20601327318"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "CLIENTE TEST SRL"
+  - xpath: "/*/cbc:Note[@languageLocaleID='1000']"
+    equals: "MIL CIENTO OCHENTA CON 00/100 SOLES"
+    why: >-
+      Leyendas the caller supplies are emitted verbatim
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']/cbc:PaymentMeansID"
+    equals: "Contado"
+    sunat: "3245"
+  - xpath: "/*/cac:PaymentTerms"
+    count: 1
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "IGV"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "VAT"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal"
+    count: 1
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount"
+    absent: true
+    sunat: "3300"
+    why: >-
+      Only discounts that do NOT affect the base go here
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    absent: true
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:InvoicedQuantity"
+    equals: "10"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:InvoicedQuantity/@unitCode"
+    equals: "NIU"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
+    equals: "118.00"
+    why: >-
+      Precio de venta unitario: IGV-INCLUSIVE, Cat.16 01
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode"
+    equals: "01"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "100.00"
+    why: >-
+      Valor unitario: IGV-EXCLUSIVE
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cbc:Description"
+    equals: "PRODUCTO TEST"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent"
+    equals: "18.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "10"
+  - xpath: "/*/cac:PaymentMeans"
+    absent: true
+    why: >-
+      No detracción, so no cuenta BN
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    absent: true
+  - xpath: "/*/cac:AllowanceCharge"
+    absent: true
+  - xpath: "//cac:Delivery"
+    absent: true
+  - xpath: "//sac:AdditionalMonetaryTotal"
+    absent: true
+  - before:
+      - "/*/ext:UBLExtensions"
+      - "/*/cbc:UBLVersionID"
+    why: >-
+      UBL extensions open the document
+  - before:
+      - "/*/cac:Signature"
+      - "/*/cac:AccountingSupplierParty"
+  - before:
+      - "/*/cac:PaymentTerms"
+      - "/*/cac:TaxTotal"
+  - before:
+      - "/*/cac:TaxTotal"
+      - "/*/cac:LegalMonetaryTotal"
+  - before:
+      - "/*/cac:LegalMonetaryTotal"
+      - "/*/cac:InvoiceLine[cbc:ID='1']"

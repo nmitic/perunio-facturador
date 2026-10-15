@@ -1,0 +1,33 @@
+case: credito-en-cuotas
+document: cpe
+why: >-
+  Forma de pago a crédito in two cuotas: one leading 'Credito' entry with
+  the monto neto pendiente, then one entry per cuota numbered Cuota001,
+  Cuota002 with its amount and due date.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']"
+    count: 3
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago'][1]/cbc:PaymentMeansID"
+    equals: "Credito"
+    sunat: "3245"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    equals: "1180.00"
+    sunat: "3251"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Cuota001']/cbc:Amount"
+    equals: "590.00"
+    sunat: "3249"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Cuota001']/cbc:PaymentDueDate"
+    equals: "2024-02-15"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Cuota002']/cbc:Amount"
+    equals: "590.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Cuota002']/cbc:PaymentDueDate"
+    equals: "2024-03-15"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Contado']"
+    absent: true
+    sunat: "3247"
+  - xpath: "sum(/*/cac:PaymentTerms[starts-with(cbc:PaymentMeansID,'Cuota')]/cbc:Amount) = /*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    true: true
+    why: >-
+      The cuotas add up to the neto pendiente

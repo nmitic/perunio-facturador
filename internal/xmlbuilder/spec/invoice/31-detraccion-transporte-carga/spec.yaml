@@ -1,0 +1,65 @@
+case: detraccion-transporte-carga
+document: cpe
+why: >-
+  Cat.54 027 (servicio de transporte de carga) declares tipo de operación
+  1004, which SUNAT only accepts with the trip block on the line: destino
+  (ubigeo + dirección), origen with the detalle del viaje, and the three
+  valores referenciales in PEN.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0 (faults 3116-3126)"
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1004"
+    why: >-
+      027 declares 1004, not 1002
+  - xpath: "/*/cbc:ProfileID"
+    equals: "1004"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryLocation/cac:Address/cbc:ID"
+    equals: "040101"
+    sunat: "3118"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryLocation/cac:Address/cbc:ID/@schemeName"
+    equals: "Ubigeos"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryLocation/cac:Address/cbc:ID/@schemeAgencyName"
+    equals: "PE:INEI"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryLocation/cac:Address/cac:AddressLine/cbc:Line"
+    equals: "AV. EJERCITO 500"
+    sunat: "3119"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:Despatch/cbc:Instructions"
+    equals: "Lima - Arequipa"
+    sunat: "3120"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID"
+    equals: "150101"
+    sunat: "3116"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:Despatch/cac:DespatchAddress/cac:AddressLine/cbc:Line"
+    equals: "AV. ARGENTINA 1234"
+    sunat: "3117"
+  - before:
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryLocation"
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:Despatch"
+    why: >-
+      UBL DeliveryType sequence
+  - before:
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:Despatch"
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms[1]"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms[cbc:ID='01']/cbc:Amount"
+    equals: "1500.00"
+    sunat: "3122/3124"
+    why: >-
+      Valor referencial del servicio
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms[cbc:ID='02']/cbc:Amount"
+    equals: "1400.00"
+    sunat: "3125"
+    why: >-
+      Valor referencial sobre la carga efectiva
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms[cbc:ID='03']/cbc:Amount"
+    equals: "1600.00"
+    sunat: "3126"
+    why: >-
+      Valor referencial sobre la carga útil nominal
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms"
+    count: 3
+    why: >-
+      Exactly one of each tipo
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Delivery/cac:DeliveryTerms[cbc:Amount/@currencyID='PEN']"
+    count: 3
+    sunat: "3208"

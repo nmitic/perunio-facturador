@@ -1,0 +1,23 @@
+case: modificar-y-anular
+document: summary
+why: >-
+  Condition codes 2 (modificar) and 3 (anular) on two boletas, one per line,
+  numbered 1 and 2.
+sources:
+  - "Guía de elaboración del Resumen Diario 1.1 (resources/GUIA_Resumen_de_Boletas_11-01-2018*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+pending: >-
+  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
+  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
+  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
+assert:
+  - xpath: "/*/sac:SummaryDocumentsLine"
+    count: 2
+  - xpath: "/*/sac:SummaryDocumentsLine[cbc:LineID='1']/cac:Status/cbc:ConditionCode"
+    equals: "2"
+  - xpath: "/*/sac:SummaryDocumentsLine[cbc:LineID='1']/cbc:ID"
+    equals: "B001-8"
+  - xpath: "/*/sac:SummaryDocumentsLine[cbc:LineID='2']/cac:Status/cbc:ConditionCode"
+    equals: "3"
+  - xpath: "/*/sac:SummaryDocumentsLine[cbc:LineID='2']/cbc:ID"
+    equals: "B001-9"

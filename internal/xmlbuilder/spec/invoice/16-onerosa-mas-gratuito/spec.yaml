@@ -1,0 +1,44 @@
+case: onerosa-mas-gratuito
+document: cpe
+why: >-
+  One paid line plus one gratuito line. The paid line keeps price type 01,
+  the gratuito line gets 02; the document carries BOTH a 1000 subtotal (the
+  paid IGV) and a 9996 subtotal (the gift), and the payable totals only
+  cover the paid line. (The old string test claimed the document must NOT
+  carry 9996; CLAUDE.md and SUNAT rule 2638 say it must — this case settles
+  it.)
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "greenter reference output (github.com/thegreenter/greenter)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode"
+    equals: "01"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode"
+    equals: "02"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
+    equals: "50.00"
+    why: >-
+      (59 − 9) / 1
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "50.00"
+    sunat: "2638"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "9.00"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "180.00"
+    sunat: "3294"
+    why: >-
+      Excludes the gratuita IGV
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "1000.00"
+    sunat: "3278"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+  - xpath: "/*/cbc:Note[@languageLocaleID='1002']"
+  - xpath: "//sac:AdditionalMonetaryTotal[cbc:ID='1004']/cbc:PayableAmount"
+    equals: "50.00"

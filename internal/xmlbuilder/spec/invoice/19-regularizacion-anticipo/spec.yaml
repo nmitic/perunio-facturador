@@ -1,0 +1,80 @@
+case: regularizacion-anticipo
+document: cpe
+why: >-
+  A factura de regularización applying one anticipo of 118 (base 100). The
+  sale is declared IN FULL (valor de venta 1000, precio de venta 1180); the
+  anticipo base reduces only the IGV subtotal (900/162) through a Cat.53 04
+  allowance, and the anticipo is deducted once more, IGV included, as
+  PrepaidAmount: payable 1180 − 118 = 1062.
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    equals: "F001-00000042"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "02"
+    why: >-
+      Cat.12 02 = factura emitida por anticipos
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentStatusCode"
+    equals: "1"
+    why: >-
+      Row number pairing it with PrepaidPayment 1
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID"
+    equals: "20100113612"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+  - before:
+      - "/*/cac:AdditionalDocumentReference"
+      - "/*/cac:Signature"
+    why: >-
+      UBL Invoice sequence
+  - xpath: "/*/cac:PrepaidPayment/cbc:ID"
+    equals: "1"
+  - xpath: "/*/cac:PrepaidPayment/cbc:ID/@schemeName"
+    equals: "Anticipo"
+  - xpath: "/*/cac:PrepaidPayment/cbc:ID/@schemeAgencyName"
+    equals: "PE:SUNAT"
+  - xpath: "/*/cac:PrepaidPayment/cbc:PaidAmount"
+    equals: "118.00"
+  - before:
+      - "/*/cac:PaymentTerms"
+      - "/*/cac:PrepaidPayment"
+  - before:
+      - "/*/cac:PrepaidPayment"
+      - "/*/cac:AllowanceCharge"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:Amount"
+    equals: "100.00"
+    sunat: "3287"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:ChargeIndicator"
+    equals: "false"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:BaseAmount"
+    absent: true
+    why: >-
+      An anticipo is an absolute amount; nothing to prorate
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:MultiplierFactorNumeric"
+    absent: true
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "162.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1180.00"
+    sunat: "3279"
+    why: >-
+      The full sale — NOT LineExtension + the reduced TaxAmount
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "118.00"
+    sunat: "2509"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1062.00"
+    sunat: "3280"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount"
+    absent: true
+    sunat: "3300"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "0101"
+    why: >-
+      A regularización keeps its own operation type

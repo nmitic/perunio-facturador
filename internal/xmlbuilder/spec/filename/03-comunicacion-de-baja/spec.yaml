@@ -1,0 +1,6 @@
+case: comunicacion-de-baja
+document: filename
+why: >-
+  {RUC}-RA-{YYYYMMDD}-{NNNNN}; the part after the RUC equals cbc:ID (ERR
+  2220).
+output: "20100113612-RA-20240116-00001"

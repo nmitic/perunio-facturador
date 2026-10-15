@@ -1,0 +1,36 @@
+case: descuento-global
+document: cpe
+why: >-
+  NC motivo 04 (descuento global) for 100 on a 1000 sale. SUNAT does not
+  honour a document cac:AllowanceCharge on a CreditNote; it reconciles Σ
+  line valores de venta with the gravado total (fault 3277). So the discount
+  is baked into the line (1000 → 900) and no AllowanceCharge appears
+  anywhere.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+assert:
+  - xpath: "//cac:AllowanceCharge"
+    absent: true
+    sunat: "3277"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "900.00"
+    why: >-
+      Net unit price = 900 / 1
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "162.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+    sunat: "3277"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "162.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1062.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1062.00"

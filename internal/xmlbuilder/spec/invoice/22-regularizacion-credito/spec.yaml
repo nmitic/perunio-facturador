@@ -1,0 +1,13 @@
+case: regularizacion-credito
+document: cpe
+why: >-
+  A crédito regularización: the leading Credito entry carries the monto neto
+  pendiente, which is the payable NET of anticipos (1062), not the full
+  sale.
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    equals: "1062.00"
+    sunat: "3251"

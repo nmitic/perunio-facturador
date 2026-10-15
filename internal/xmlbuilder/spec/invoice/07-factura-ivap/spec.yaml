@@ -1,0 +1,29 @@
+case: factura-ivap
+document: cpe
+why: >-
+  Arroz pilado (Cat.07 17) pays IVAP, tributo 1016 at 4 %, instead of IGV —
+  at the line and in the document subtotal.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cbc:TaxableAmount"
+    equals: "500.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cbc:TaxAmount"
+    equals: "20.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cac:TaxCategory/cbc:Percent"
+    equals: "4.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "IVAP"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "VAT"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cac:TaxCategory/cbc:Percent"
+    equals: "4.00"
+    sunat: "3103"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1016']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "17"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "20.00"

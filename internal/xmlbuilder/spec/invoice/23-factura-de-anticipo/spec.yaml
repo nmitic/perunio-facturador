@@ -1,0 +1,20 @@
+case: factura-de-anticipo
+document: cpe
+why: >-
+  A factura de anticipo itself. Perunio marks it internally with 0104, which
+  SUNAT retired from Cat.51 (fault 3206): on the wire it is a plain venta
+  interna 0101 and it deducts nothing.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:ProfileID"
+    equals: "0101"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "0101"
+    sunat: "3206"
+  - xpath: "//*[.='0104'] | //@*[.='0104']"
+    count: 0
+    why: >-
+      The retired 0104 never reaches the wire
+  - xpath: "/*/cac:PrepaidPayment"
+    absent: true

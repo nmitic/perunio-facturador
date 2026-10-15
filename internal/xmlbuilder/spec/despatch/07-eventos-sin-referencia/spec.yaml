@@ -1,0 +1,5 @@
+case: eventos-sin-referencia
+document: despatch
+why: >-
+  A por eventos guía without the guía it supersedes is refused, never sent.
+error_contains: "requires OriginalGreID"

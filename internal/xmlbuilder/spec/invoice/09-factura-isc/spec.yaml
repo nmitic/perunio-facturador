@@ -1,0 +1,58 @@
+case: factura-isc
+document: cpe
+why: >-
+  ISC (tributo 2000, sistema al valor, Cat.08 01) at 20 % on a valor de
+  venta of 100: the IGV base INCLUDES the ISC (100 + 20 = 120 → IGV 21.60),
+  the line and document tax totals add both tributos (41.60), and the ISC
+  subtotal states its own rate.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F3: ISC is left out of the document cbc:TaxAmount (3294) and of
+  the line cbc:TaxAmount (3292), the ISC line subtotal has no cbc:Percent
+  (2992), and the document ISC base is the whole req.Subtotal instead of Σ
+  ISC line bases (3296).
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "120.00"
+    sunat: "3272"
+    why: >-
+      IGV base = valor de venta + ISC
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "21.60"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxableAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxAmount"
+    equals: "20.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cbc:Percent"
+    equals: "20.00"
+    sunat: "2992/3108"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cbc:TierRange"
+    equals: "01"
+    sunat: "2373"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    absent: true
+    sunat: "3050"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cbc:TaxAmount"
+    equals: "41.60"
+    sunat: "3292"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "120.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxableAmount"
+    equals: "100.00"
+    sunat: "3296"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxAmount"
+    equals: "20.00"
+    sunat: "3298"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "ISC"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "EXC"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "41.60"
+    sunat: "3294"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "141.60"
+    sunat: "3279"

@@ -1,0 +1,22 @@
+case: estructura-gre-2022
+document: despatch
+why: >-
+  GRE 2022 (R.S. 123-2022/SUNAT) layout as published by SUNAT and
+  implemented by greenter: the punto de partida is
+  cac:Delivery/cac:Despatch/cac:DespatchAddress and the vehicle plate is
+  cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID.
+sources:
+  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+  - "greenter DespatchAdvice 2022 template"
+pending: >-
+  Finding F9 (UNVERIFIED): the builder emits cac:Shipment/cac:OriginAddress
+  and ShipmentStage/TransportMeans/RoadTransport, the pre-2022 GRE shapes.
+  The GRE guide is not in resources/, so confirm against it before changing
+  the builder.
+assert:
+  - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID"
+    equals: "150101"
+  - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cac:AddressLine/cbc:Line"
+    equals: "AV. ORIGEN 100"
+  - xpath: "/*/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID"
+    equals: "ABC123"

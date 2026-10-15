@@ -1,0 +1,85 @@
+case: adicionar-boleta
+document: summary
+why: >-
+  A Resumen Diario (RC, UBL 2.0 / CustomizationID 1.1) informing one new
+  boleta (condition 1) of 1180 (gravado 1000, IGV 180). Each line identifies
+  ONE comprobante by SERIE-NÚMERO in cbc:ID.
+sources:
+  - "Guía de elaboración del Resumen Diario 1.1 (resources/GUIA_Resumen_de_Boletas_11-01-2018*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+pending: >-
+  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
+  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
+  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
+assert:
+  - xpath: "local-name(/*)"
+    equals: "SummaryDocuments"
+  - xpath: "/*/cbc:ID"
+    equals: "RC-20240116-00001"
+    sunat: "2220"
+  - xpath: "/*/cbc:ReferenceDate"
+    equals: "2024-01-15"
+    sunat: "2671"
+    why: >-
+      Emission date of the boletas
+  - xpath: "/*/cbc:IssueDate"
+    equals: "2024-01-16"
+    sunat: "2346"
+  - xpath: "/*/cac:AccountingSupplierParty/cbc:CustomerAssignedAccountID"
+    equals: "20100113612"
+    sunat: "1034"
+  - xpath: "/*/cac:AccountingSupplierParty/cbc:AdditionalAccountID"
+    equals: "6"
+    sunat: "2219"
+  - xpath: "/*/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "EMPRESA TEST SAC"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cbc:LineID"
+    equals: "1"
+    sunat: "2239"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cbc:DocumentTypeCode"
+    equals: "03"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cbc:ID"
+    equals: "B001-7"
+    sunat: "2512"
+    why: >-
+      SERIE-NÚMERO of the one boleta this line reports
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:StartDocumentNumberID"
+    absent: true
+    why: >-
+      Resumen 1.0 range fields
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:DocumentSerialID"
+    absent: true
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cac:AccountingCustomerParty/cbc:CustomerAssignedAccountID"
+    equals: "12345678"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cac:AccountingCustomerParty/cbc:AdditionalAccountID"
+    equals: "1"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cac:Status/cbc:ConditionCode"
+    equals: "1"
+    why: >-
+      Cat.19 1 = adicionar
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/sac:TotalAmount"
+    equals: "1180.00"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/sac:BillingPayment[cbc:InstructionID='01']/cbc:PaidAmount"
+    equals: "1000.00"
+    why: >-
+      Total valor de venta gravado (IGV-exclusive)
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cac:TaxTotal[cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/sac:SummaryDocumentsLine[1]/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "IGV"
+    sunat: "2276"
+  - before:
+      - "/*/sac:SummaryDocumentsLine[1]/cbc:DocumentTypeCode"
+      - "/*/sac:SummaryDocumentsLine[1]/cbc:ID"
+  - before:
+      - "/*/sac:SummaryDocumentsLine[1]/cac:AccountingCustomerParty"
+      - "/*/sac:SummaryDocumentsLine[1]/cac:Status"
+  - before:
+      - "/*/sac:SummaryDocumentsLine[1]/cac:Status"
+      - "/*/sac:SummaryDocumentsLine[1]/sac:TotalAmount"
+  - before:
+      - "/*/sac:SummaryDocumentsLine[1]/sac:TotalAmount"
+      - "/*/sac:SummaryDocumentsLine[1]/sac:BillingPayment"
+  - before:
+      - "/*/sac:SummaryDocumentsLine[1]/sac:BillingPayment"
+      - "/*/sac:SummaryDocumentsLine[1]/cac:TaxTotal"

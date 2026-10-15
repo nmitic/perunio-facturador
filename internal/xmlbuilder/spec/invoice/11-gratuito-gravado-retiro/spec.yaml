@@ -1,0 +1,82 @@
+case: gratuito-gravado-retiro
+document: cpe
+why: >-
+  A transferencia gratuita of a gravado good (Cat.07 11): the customer pays
+  nothing, but the line declares its IGV-EXCLUSIVE valor referencial (100)
+  under tributo 9996 with the would-be IGV (18) at 18 %, the document
+  repeats that in a 9996 subtotal, and the payable totals stay 0.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "greenter reference output (github.com/thegreenter/greenter)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "0.00"
+    sunat: "2640"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
+    equals: "100.00"
+    sunat: "3272"
+    why: >-
+      Valor referencial unitario, IGV-EXCLUSIVE (not the 118 gross)
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode"
+    equals: "02"
+    sunat: "3234"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "100.00"
+    sunat: "3271/3272"
+    why: >-
+      The line value is the referencial base, not 0
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "18.00"
+    sunat: "3111"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
+    equals: "18.00"
+    sunat: "2992/3103"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "11"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "GRA"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "FRE"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal"
+    count: 1
+  - xpath: "//cbc:FreeOfChargeIndicator"
+    absent: true
+    why: >-
+      SUNAT keys gratuito on tributo 9996; greenter never emits it
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "100.00"
+    sunat: "2638/3224"
+    why: >-
+      Missing it makes the operation look onerosa
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "18.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
+    equals: "18.00"
+    sunat: "2992"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "0.00"
+    sunat: "3294"
+    why: >-
+      Gratuita IGV is informative; nothing is payable
+  - xpath: "/*/cbc:Note[@languageLocaleID='1002']"
+    why: >-
+      Leyenda 1002 is auto-injected
+  - xpath: "/*/cbc:Note[@languageLocaleID='1002']"
+    equals: "TRANSFERENCIA GRATUITA O A TITULO GRATUITO"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "0.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "0.00"
+  - xpath: "/*/ext:UBLExtensions/ext:UBLExtension[1]/ext:ExtensionContent/sac:AdditionalInformation/sac:AdditionalMonetaryTotal[cbc:ID='1004']/cbc:PayableAmount"
+    equals: "100.00"
+    why: >-
+      Legacy UBL 2.0 total gratuito, kept inside ext:UBLExtensions (never
+      next to LegalMonetaryTotal, fault 0306). SUNAT's 2.1 validation sheet
+      no longer reads it; it is harmless there.

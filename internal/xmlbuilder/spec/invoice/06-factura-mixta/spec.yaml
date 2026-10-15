@@ -1,0 +1,37 @@
+case: factura-mixta
+document: cpe
+why: >-
+  Gravado + exonerado + inafecto on one factura: one document subtotal per
+  tributo, each with the Σ of its own lines, and a total valor de venta
+  covering all three.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
+  lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a
+  document with no gravado line falls back to an IGV 1000 subtotal. Finding
+  F2: exonerado/inafecto/exportación line subtotals omit cbc:Percent
+  (sunat.Cat07Percent returns empty), but SUNAT requires the tag on every
+  tributo except 7152.
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "1000.00"
+    sunat: "3277"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxableAmount"
+    equals: "200.00"
+    sunat: "2638/3275"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cbc:TaxableAmount"
+    equals: "300.00"
+    sunat: "2638/3274"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal"
+    count: 3
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "1500.00"
+    sunat: "3278"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1680.00"
+    sunat: "3279"

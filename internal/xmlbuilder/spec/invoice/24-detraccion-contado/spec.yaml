@@ -1,0 +1,44 @@
+case: detraccion-contado
+document: cpe
+why: >-
+  A factura sujeta a detracción (Cat.51 1001, Cat.54 019, 12 % of 1180 =
+  141.60): leyenda 2006, the cuenta BN as cac:PaymentMeans, and a
+  'Detraccion' cac:PaymentTerms in PEN — alongside, not instead of, the
+  forma de pago Contado. Totals are unchanged.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "4265"
+  - xpath: "/*/cac:PaymentMeans/cbc:ID"
+    equals: "Detraccion"
+  - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
+    equals: "999"
+  - xpath: "/*/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    why: >-
+      Cuenta de detracciones del Banco de la Nación
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "019"
+    why: >-
+      Cat.54 bien o servicio
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - before:
+      - "/*/cac:PaymentMeans"
+      - "/*/cac:PaymentTerms"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1001"
+  - xpath: "/*/cbc:ProfileID"
+    equals: "1001"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']/cbc:PaymentMeansID"
+    equals: "Contado"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+    why: >-
+      A detracción is a payment instruction, not a discount

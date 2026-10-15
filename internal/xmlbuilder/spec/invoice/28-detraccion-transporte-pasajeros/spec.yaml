@@ -1,0 +1,13 @@
+case: detraccion-transporte-pasajeros
+document: cpe
+why: >-
+  Cat.54 028 (transporte de pasajeros) pairs with tipo de operación 1003.
+  The builder derives it from the código even when the draft says 1001.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1003"
+    sunat: "3129"
+  - xpath: "/*/cbc:ProfileID"
+    equals: "1003"

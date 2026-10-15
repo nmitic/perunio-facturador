@@ -1,0 +1,27 @@
+case: totales-por-tipo-de-operacion
+document: summary
+why: >-
+  BillingPayment carries one valor de venta per tipo de operación (Cat.11 /
+  listado 017: 01 gravado, 02 exonerado, 03 inafecto, 05 gratuito), never
+  two with the same InstructionID.
+sources:
+  - "Guía de elaboración del Resumen Diario 1.1 (resources/GUIA_Resumen_de_Boletas_11-01-2018*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+pending: >-
+  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
+  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
+  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
+assert:
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='01']/cbc:PaidAmount"
+    equals: "1000.00"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='02']/cbc:PaidAmount"
+    equals: "200.00"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='03']/cbc:PaidAmount"
+    equals: "300.00"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='05']/cbc:PaidAmount"
+    equals: "50.00"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment"
+    count: 4
+    sunat: "2357"
+  - xpath: "/*/sac:SummaryDocumentsLine/cbc:ID"
+    equals: "B001-7"

@@ -1,0 +1,43 @@
+case: factura-exportacion
+document: cpe
+why: >-
+  Exportación (tipo de operación 0200, Cat.07 40) is declared under tributo
+  9995 (EXP). An export invoice may not carry a 1000, 1016, 9997 or 9998
+  document subtotal.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
+  lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a
+  document with no gravado line falls back to an IGV 1000 subtotal. Finding
+  F2: exonerado/inafecto/exportación line subtotals omit cbc:Percent
+  (sunat.Cat07Percent returns empty), but SUNAT requires the tag on every
+  tributo except 7152.
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "0200"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9995']/cbc:TaxableAmount"
+    equals: "500.00"
+    sunat: "2638/3273"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9995']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "EXP"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9995']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "FRE"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+    sunat: "3107"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']"
+    count: 0
+    sunat: "3107"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']"
+    count: 0
+    sunat: "3107"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9995']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "40"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9995']/cac:TaxCategory/cbc:Percent"
+    count: 1
+    sunat: "2992"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "0"

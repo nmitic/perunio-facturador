@@ -1,0 +1,22 @@
+case: regularizacion-con-detraccion
+document: cpe
+why: >-
+  A regularización sujeta a detracción keeps the anticipo amount model
+  untouched; the SPOT sits on the saldo: 12 % of the 1062 payable = 127.44
+  (the anticipo deposited its own 14.16, together 141.60 = 12 % of 1180).
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:Amount"
+    equals: "100.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "118.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1062.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "127.44"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1001"

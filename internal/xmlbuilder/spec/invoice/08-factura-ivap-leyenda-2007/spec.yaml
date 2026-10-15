@@ -1,0 +1,13 @@
+case: factura-ivap-leyenda-2007
+document: cpe
+why: >-
+  A factura with IVAP lines carries leyenda 2007 (operación sujeta al IVAP).
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F5: the builder injects leyenda 1002 (gratuito) and 2006
+  (detracción) but never 2007 for IVAP, so SUNAT accepts with observation
+  4264.
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2007']"
+    sunat: "4264 (OBSERV)"

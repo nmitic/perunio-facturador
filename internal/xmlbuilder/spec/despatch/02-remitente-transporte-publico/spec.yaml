@@ -1,0 +1,20 @@
+case: remitente-transporte-publico
+document: despatch
+why: >-
+  Transporte público (Cat.18 01): a third-party carrier is identified by RUC
+  and name, and no driver or vehicle of the emisor is declared.
+sources:
+  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+assert:
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cbc:TransportModeCode"
+    equals: "01"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty/cac:PartyIdentification/cbc:ID"
+    equals: "20555555555"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "TRANSPORTES SAC"
+  - xpath: "/*/cac:Shipment//cac:DriverPerson"
+    absent: true
+  - xpath: "/*/cac:Shipment//cbc:LicensePlateID"
+    absent: true

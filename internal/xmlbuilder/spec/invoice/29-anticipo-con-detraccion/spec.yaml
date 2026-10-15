@@ -1,0 +1,37 @@
+case: anticipo-con-detraccion
+document: cpe
+why: >-
+  A factura de anticipo sujeta a detracción goes out as 1001 (not 0101,
+  never 0104), because 1001 is what SUNAT pairs with leyenda 2006 and the
+  cuenta BN, and carries the full SPOT block on what it collects.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "4265"
+  - xpath: "/*/cac:PaymentMeans/cbc:ID"
+    equals: "Detraccion"
+  - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
+    equals: "999"
+  - xpath: "/*/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    why: >-
+      Cuenta de detracciones del Banco de la Nación
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "019"
+    why: >-
+      Cat.54 bien o servicio
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - before:
+      - "/*/cac:PaymentMeans"
+      - "/*/cac:PaymentTerms"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1001"
+  - xpath: "//*[.='0104'] | //@*[.='0104']"
+    count: 0

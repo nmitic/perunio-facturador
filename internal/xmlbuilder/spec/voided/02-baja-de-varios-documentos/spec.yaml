@@ -1,0 +1,16 @@
+case: baja-de-varios-documentos
+document: voided
+why: >-
+  One RA can void several comprobantes of the same date; lines are numbered
+  1, 2, …
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+assert:
+  - xpath: "/*/sac:VoidedDocumentsLine"
+    count: 2
+  - xpath: "/*/sac:VoidedDocumentsLine[cbc:LineID='2']/cbc:DocumentTypeCode"
+    equals: "07"
+  - xpath: "/*/sac:VoidedDocumentsLine[cbc:LineID='2']/sac:DocumentSerialID"
+    equals: "FC01"
+  - xpath: "/*/sac:VoidedDocumentsLine[cbc:LineID='2']/sac:DocumentNumberID"
+    equals: "12"

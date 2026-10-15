@@ -1,0 +1,21 @@
+case: consumidor-final
+document: cpe
+why: >-
+  A boleta (Cat.01 03) to an anonymous consumidor final: Cat.06 doc type 0,
+  number 0, name CLIENTES VARIOS. Same Invoice document as a factura, only
+  the type code differs.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "Invoice"
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    equals: "03"
+  - xpath: "/*/cbc:ID"
+    equals: "B001-00000001"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "0"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "0"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "CLIENTES VARIOS"

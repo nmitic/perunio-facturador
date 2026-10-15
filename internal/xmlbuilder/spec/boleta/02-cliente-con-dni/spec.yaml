@@ -1,0 +1,11 @@
+case: cliente-con-dni
+document: cpe
+why: >-
+  A boleta to an identified person: Cat.06 1 (DNI) with the 8-digit number.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+assert:
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "1"
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "12345678"

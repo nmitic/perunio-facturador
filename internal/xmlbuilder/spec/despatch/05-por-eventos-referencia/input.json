@@ -1,0 +1,44 @@
+{
+  "ruc": "20100113612",
+  "companyName": "EMPRESA TEST SAC",
+  "companyAddress": "AV. TEST 123",
+  "despatch": {
+    "docType": "EV",
+    "series": "T001",
+    "correlative": 2,
+    "issueDate": "2024-01-16T00:00:00Z",
+    "issueTime": "10:00:00",
+    "recipientDocType": "6",
+    "recipientDocNumber": "20601327318",
+    "recipientName": "CLIENTE TEST SRL",
+    "recipientAddress": "AV. CLIENTE 456",
+    "transportModality": "02",
+    "transferReason": "01",
+    "startDate": "2024-01-16T00:00:00Z",
+    "totalWeightKg": "125.50",
+    "weightUnitCode": "KGM",
+    "totalPackages": 3,
+    "startUbigeo": "150101",
+    "startAddress": "AV. ORIGEN 100",
+    "arrivalUbigeo": "040101",
+    "arrivalAddress": "AV. DESTINO 200",
+    "driverDocType": "1",
+    "driverDocNumber": "12345678",
+    "driverLicense": "Q12345678",
+    "driverName": "JUAN PEREZ",
+    "vehiclePlate": "ABC123",
+    "status": "draft",
+    "eventCode": "01",
+    "originalGreId": "6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b"
+  },
+  "lines": [
+    {
+      "lineNumber": 1,
+      "description": "CAJAS DE CARTON",
+      "quantity": "3",
+      "unitCode": "NIU",
+      "productCode": "P-001"
+    }
+  ],
+  "eventBaseDocType": "09"
+}

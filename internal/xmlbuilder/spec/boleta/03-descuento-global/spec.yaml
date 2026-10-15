@@ -1,0 +1,48 @@
+case: descuento-global
+document: cpe
+why: >-
+  The descuento global markup on a boleta is identical to a factura's.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+assert:
+  - xpath: "/*/cac:AllowanceCharge/cbc:ChargeIndicator"
+    equals: "false"
+  - xpath: "/*/cac:AllowanceCharge/cbc:AllowanceChargeReasonCode"
+    equals: "02"
+    why: >-
+      Cat.53 02: descuento global que afecta la base imponible
+  - xpath: "/*/cac:AllowanceCharge/cbc:MultiplierFactorNumeric"
+    equals: "0.10000"
+  - xpath: "/*/cac:AllowanceCharge/cbc:Amount"
+    equals: "100.00"
+  - xpath: "/*/cac:AllowanceCharge/cbc:BaseAmount"
+    equals: "1000.00"
+  - before:
+      - "/*/cac:AllowanceCharge"
+      - "/*/cac:TaxTotal"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+    sunat: "3277"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "162.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "900.00"
+    sunat: "3278"
+    why: >-
+      NET of the descuento global
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount"
+    absent: true
+    sunat: "3300"
+    why: >-
+      An afecta-base discount is NOT an AllowanceTotalAmount
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1062.00"
+    sunat: "3279"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1062.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "1000.00"
+    why: >-
+      Lines keep their gross value
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    equals: "03"

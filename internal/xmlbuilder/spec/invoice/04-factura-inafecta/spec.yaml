@@ -1,0 +1,35 @@
+case: factura-inafecta
+document: cpe
+why: >-
+  Inafecto lines (Cat.07 30) are declared under tributo 9998 (INA), at the
+  line AND at document level, with no IGV subtotal.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
+  lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a
+  document with no gravado line falls back to an IGV 1000 subtotal. Finding
+  F2: exonerado/inafecto/exportación line subtotals omit cbc:Percent
+  (sunat.Cat07Percent returns empty), but SUNAT requires the tag on every
+  tributo except 7152.
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cbc:TaxableAmount"
+    equals: "500.00"
+    sunat: "2638/3274"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cbc:TaxAmount"
+    equals: "0.00"
+    sunat: "3000"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "INA"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "FRE"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+    sunat: "3277"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "30"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cac:TaxCategory/cbc:Percent"
+    count: 1
+    sunat: "2992"

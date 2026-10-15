@@ -1,0 +1,55 @@
+{
+  "supplierRuc": "20100113612",
+  "supplierName": "EMPRESA TEST SAC",
+  "supplierAddress": "AV. TEST 123",
+  "establishmentCode": "0000",
+  "docType": "03",
+  "series": "B001",
+  "correlative": 1,
+  "issueDate": "2024-01-15",
+  "issueTime": "15:20:30",
+  "currencyCode": "PEN",
+  "operationType": "1001",
+  "customerDocType": "1",
+  "customerDocNumber": "12345678",
+  "customerName": "CLIENTE TEST SRL",
+  "customerAddress": "AV. CLIENTE 456",
+  "subtotal": "1000.00",
+  "totalIgv": "180.00",
+  "totalIsc": "0.00",
+  "totalOtherTaxes": "0.00",
+  "totalDiscount": "0.00",
+  "totalAmount": "1180.00",
+  "taxInclusiveAmount": "1180.00",
+  "globalDiscount": "0.00",
+  "formaPago": "contado",
+  "notes": [
+    {
+      "code": "1000",
+      "text": "MIL CIENTO OCHENTA CON 00/100 SOLES"
+    }
+  ],
+  "items": [
+    {
+      "lineNumber": 1,
+      "description": "PRODUCTO TEST",
+      "quantity": "10",
+      "unitCode": "NIU",
+      "unitPrice": "100.00",
+      "unitPriceWithTax": "118.00",
+      "taxExemptionReasonCode": "10",
+      "igvAmount": "180.00",
+      "iscAmount": "0.00",
+      "iscTierRange": "",
+      "discountAmount": "0.00",
+      "lineTotal": "1000.00",
+      "priceTypeCode": "01"
+    }
+  ],
+  "detraccion": {
+    "codigo": "019",
+    "porcentaje": "12.00",
+    "monto": "141.60",
+    "cuentaBN": "00-123-456789"
+  }
+}

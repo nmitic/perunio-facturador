@@ -1,0 +1,19 @@
+case: gratuito-inafecto
+document: cpe
+why: >-
+  A gratuito inafecto line (Cat.07 31, retiro por bonificación): referencial
+  75 under 9996, no IGV.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "greenter reference output (github.com/thegreenter/greenter)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "75.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "31"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "75.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+    sunat: "3224"

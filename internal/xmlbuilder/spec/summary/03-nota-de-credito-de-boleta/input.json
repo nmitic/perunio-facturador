@@ -1,0 +1,26 @@
+{
+  "supplierRuc": "20100113612",
+  "supplierName": "EMPRESA TEST SAC",
+  "issueDate": "2024-01-16",
+  "referenceDate": "2024-01-15",
+  "correlative": 1,
+  "items": [
+    {
+      "lineNumber": 1,
+      "docType": "07",
+      "series": "BC01",
+      "startCorrelative": 3,
+      "endCorrelative": 3,
+      "conditionCode": "1",
+      "currencyCode": "PEN",
+      "totalAmount": "118.00",
+      "totalGravada": "100.00",
+      "totalIgv": "18.00",
+      "customerDocType": "1",
+      "customerDocNumber": "12345678",
+      "referenceDocType": "03",
+      "referenceSeries": "B001",
+      "referenceCorrelative": 7
+    }
+  ]
+}

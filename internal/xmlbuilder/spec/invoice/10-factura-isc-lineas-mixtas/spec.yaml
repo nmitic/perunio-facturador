@@ -1,0 +1,27 @@
+case: factura-isc-lineas-mixtas
+document: cpe
+why: >-
+  With one ISC line and one plain line the document ISC subtotal's base is
+  the ISC line's base (100), not the document's whole valor de venta (200).
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F3: ISC is left out of the document cbc:TaxAmount (3294) and of
+  the line cbc:TaxAmount (3292), the ISC line subtotal has no cbc:Percent
+  (2992), and the document ISC base is the whole req.Subtotal instead of Σ
+  ISC line bases (3296).
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxableAmount"
+    equals: "100.00"
+    sunat: "3296"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "220.00"
+    why: >-
+      120 (with ISC) + 100
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "39.60"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "59.60"
+    sunat: "3294"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']"
+    absent: true

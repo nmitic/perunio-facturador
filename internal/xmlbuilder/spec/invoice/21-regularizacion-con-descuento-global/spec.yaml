@@ -1,0 +1,28 @@
+case: regularizacion-con-descuento-global
+document: cpe
+why: >-
+  Descuento global and anticipo together. The 02 discount reduces the
+  totales (valor de venta 900, precio de venta 1062); the anticipo reduces
+  only the IGV base (1000 − 100 − 100 = 800, IGV 144) and the payable (1062
+  − 118 = 944).
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='02']"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']"
+  - before:
+      - "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='02']"
+      - "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "800.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "144.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1062.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "118.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "944.00"

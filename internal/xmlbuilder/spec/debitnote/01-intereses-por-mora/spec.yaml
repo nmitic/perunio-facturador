@@ -1,0 +1,37 @@
+case: intereses-por-mora
+document: cpe
+why: >-
+  A nota de débito (Cat.01 08, motivo Cat.10 01) charging interest on
+  factura F001-00000001. A DebitNote declares its totals in
+  cac:RequestedMonetaryTotal — NOT LegalMonetaryTotal, which trips schema
+  fault 0306 — and uses DebitNoteLine / DebitedQuantity.
+sources:
+  - "Guía de elaboración XML Nota de Débito 2.1 (resources/guia+xml+nota de débito*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaDebito2_0"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "DebitNote"
+  - xpath: "namespace-uri(/*)"
+    equals: "urn:oasis:names:specification:ubl:schema:xsd:DebitNote-2"
+  - xpath: "/*/cbc:ID"
+    equals: "FD01-00000001"
+  - xpath: "/*/cac:DiscrepancyResponse/cbc:ResponseCode"
+    equals: "01"
+  - xpath: "/*/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID"
+    equals: "F001-00000001"
+  - xpath: "/*/cac:RequestedMonetaryTotal"
+  - xpath: "/*/cac:LegalMonetaryTotal"
+    absent: true
+    sunat: "0306"
+  - xpath: "/*/cac:RequestedMonetaryTotal/cbc:PayableAmount"
+    equals: "118.00"
+  - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cbc:DebitedQuantity"
+    equals: "1"
+  - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cbc:DebitedQuantity/@unitCode"
+    equals: "ZZ"
+  - before:
+      - "/*/cac:TaxTotal"
+      - "/*/cac:RequestedMonetaryTotal"
+  - before:
+      - "/*/cac:RequestedMonetaryTotal"
+      - "/*/cac:DebitNoteLine[cbc:ID='1']"

@@ -1,0 +1,28 @@
+case: regularizacion-dos-anticipos
+document: cpe
+why: >-
+  Two anticipos (118/100 and 236/200) are row-paired 1 and 2, each with its
+  own 04 allowance; the IGV base nets out both (1000 − 300 = 700, IGV 126),
+  the totales stay gross and only the payable moves: 1180 − 354 = 826.
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference[cbc:DocumentStatusCode='2']/cbc:ID"
+    equals: "B002-00000007"
+  - xpath: "/*/cac:AdditionalDocumentReference[cbc:DocumentStatusCode='2']/cbc:DocumentTypeCode"
+    equals: "03"
+  - xpath: "/*/cac:PrepaidPayment[cbc:ID='2']/cbc:PaidAmount"
+    equals: "236.00"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']"
+    count: 2
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "700.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "126.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "354.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "826.00"

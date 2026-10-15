@@ -1,0 +1,39 @@
+case: descuento-por-item
+document: cpe
+why: >-
+  A 50 % descuento por ítem on a 100 line. The invoice line keeps the GROSS
+  valor unitario in cac:Price and declares the descuento as a line
+  cac:AllowanceCharge (Cat.53 00), because SUNAT recomputes
+  LineExtensionAmount = Price × Qty − Amount. The per-line descuento never
+  surfaces as a document AllowanceTotalAmount.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "100.00"
+    sunat: "3271"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "50.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge/cbc:ChargeIndicator"
+    equals: "false"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge/cbc:AllowanceChargeReasonCode"
+    equals: "00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge/cbc:MultiplierFactorNumeric"
+    equals: "0.50000"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge/cbc:Amount"
+    equals: "50.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge/cbc:BaseAmount"
+    equals: "100.00"
+  - before:
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:AllowanceCharge"
+      - "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal"
+    why: >-
+      UBL InvoiceLine sequence
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount"
+    absent: true
+    sunat: "3300"
+  - xpath: "/*/cac:AllowanceCharge"
+    absent: true
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "59.00"

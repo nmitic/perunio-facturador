@@ -1,0 +1,32 @@
+case: detraccion
+document: cpe
+why: >-
+  A nota de crédito on a factura sujeta a detracción mirrors the detracción
+  block (leyenda 2006, cuenta BN, Detraccion PaymentTerms in PEN).
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "4265"
+  - xpath: "/*/cac:PaymentMeans/cbc:ID"
+    equals: "Detraccion"
+  - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
+    equals: "999"
+  - xpath: "/*/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    why: >-
+      Cuenta de detracciones del Banco de la Nación
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "019"
+    why: >-
+      Cat.54 bien o servicio
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - before:
+      - "/*/cac:PaymentMeans"
+      - "/*/cac:PaymentTerms"

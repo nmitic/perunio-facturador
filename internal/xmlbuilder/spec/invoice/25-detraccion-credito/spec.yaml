@@ -1,0 +1,38 @@
+case: detraccion-credito
+document: cpe
+why: >-
+  A crédito sujeto a detracción: the receptor deposits the detracción into
+  the emisor's BN account and owes only the rest on credit, so the monto
+  neto pendiente is 1180 − 141.60 = 1038.40, and the cuotas settle that.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "4265"
+  - xpath: "/*/cac:PaymentMeans/cbc:ID"
+    equals: "Detraccion"
+  - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
+    equals: "999"
+  - xpath: "/*/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    why: >-
+      Cuenta de detracciones del Banco de la Nación
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "019"
+    why: >-
+      Cat.54 bien o servicio
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - before:
+      - "/*/cac:PaymentMeans"
+      - "/*/cac:PaymentTerms"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    equals: "1038.40"
+    sunat: "3251"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Cuota001']/cbc:Amount"
+    equals: "1038.40"

@@ -1,0 +1,20 @@
+case: fecha-del-documento-dado-de-baja
+document: voided
+why: >-
+  cbc:ReferenceDate is the issue date of the documents being voided, not the
+  date of the RA. Voiding on 2024-01-16 a factura issued on 2024-01-15 must
+  declare 2024-01-15.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+pending: >-
+  Finding F11: BuildVoidedXML sets ReferenceDate = IssueDate and
+  model.VoidRequest has no field for the voided documents' date, so voiding
+  anything from a previous day is rejected with ERR 2375. (This input
+  already carries referenceDate; it fails to decode until the model has the
+  field.)
+assert:
+  - xpath: "/*/cbc:ReferenceDate"
+    equals: "2024-01-15"
+    sunat: "2375/2671"
+  - xpath: "/*/cbc:IssueDate"
+    equals: "2024-01-16"

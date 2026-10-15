@@ -1,0 +1,52 @@
+case: factura-exonerada
+document: cpe
+why: >-
+  Exonerado lines (Cat.07 20) are declared under tributo 9997 (EXO), at the
+  line AND at document level, and the document carries no IGV subtotal at
+  all.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+  - "Guía de elaboración XML Factura 2.1 (resources/guia+xml+factura+version 2-1*.pdf)"
+pending: >-
+  Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
+  lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a
+  document with no gravado line falls back to an IGV 1000 subtotal. Finding
+  F2: exonerado/inafecto/exportación line subtotals omit cbc:Percent
+  (sunat.Cat07Percent returns empty), but SUNAT requires the tag on every
+  tributo except 7152.
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxableAmount"
+    equals: "500.00"
+    sunat: "2638/3275"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxAmount"
+    equals: "0.00"
+    sunat: "3000"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
+    equals: "EXO"
+    sunat: "2054/2996/3051"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cac:TaxCategory/cac:TaxScheme/cbc:TaxTypeCode"
+    equals: "VAT"
+    sunat: "2052/2961"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+    sunat: "3277"
+    why: >-
+      A 1000 subtotal must equal the Σ of gravado lines (0 here)
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "0.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxableAmount"
+    equals: "500.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxAmount"
+    equals: "0.00"
+    sunat: "3110"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    equals: "20"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cac:TaxCategory/cbc:Percent"
+    count: 1
+    sunat: "2992"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "500.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "500.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "500.00"

@@ -1,0 +1,15 @@
+{
+  "supplierRuc": "20100113612",
+  "supplierName": "EMPRESA TEST SAC",
+  "issueDate": "2024-01-16",
+  "correlative": 1,
+  "items": [
+    {
+      "lineNumber": 1,
+      "docType": "01",
+      "series": "F001",
+      "correlative": 1,
+      "voidReason": "Error en documento"
+    }
+  ]
+}

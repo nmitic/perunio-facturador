@@ -3,6 +3,8 @@ module github.com/perunio/perunio-facturador
 go 1.26.1
 
 require (
+	github.com/antchfx/xmlquery v1.4.4
+	github.com/antchfx/xpath v1.3.3
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.14
@@ -14,7 +16,15 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/text v0.35.0
+	gopkg.in/yaml.v3 v3.0.1
 	maragu.dev/is v0.3.1
+)
+
+require (
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 )
 
 require (

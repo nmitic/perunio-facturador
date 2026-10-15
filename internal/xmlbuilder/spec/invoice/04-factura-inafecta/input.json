@@ -1,0 +1,49 @@
+{
+  "supplierRuc": "20100113612",
+  "supplierName": "EMPRESA TEST SAC",
+  "supplierAddress": "AV. TEST 123",
+  "establishmentCode": "0000",
+  "docType": "01",
+  "series": "F001",
+  "correlative": 1,
+  "issueDate": "2024-01-15",
+  "issueTime": "15:20:30",
+  "currencyCode": "PEN",
+  "operationType": "0101",
+  "customerDocType": "6",
+  "customerDocNumber": "20601327318",
+  "customerName": "CLIENTE TEST SRL",
+  "customerAddress": "AV. CLIENTE 456",
+  "subtotal": "500.00",
+  "totalIgv": "0.00",
+  "totalIsc": "0.00",
+  "totalOtherTaxes": "0.00",
+  "totalDiscount": "0.00",
+  "totalAmount": "500.00",
+  "taxInclusiveAmount": "500.00",
+  "globalDiscount": "0.00",
+  "formaPago": "contado",
+  "notes": [
+    {
+      "code": "1000",
+      "text": "QUINIENTOS CON 00/100 SOLES"
+    }
+  ],
+  "items": [
+    {
+      "lineNumber": 1,
+      "description": "SERVICIO EDUCATIVO",
+      "quantity": "5",
+      "unitCode": "NIU",
+      "unitPrice": "100.00",
+      "unitPriceWithTax": "100.00",
+      "taxExemptionReasonCode": "30",
+      "igvAmount": "0.00",
+      "iscAmount": "0.00",
+      "iscTierRange": "",
+      "discountAmount": "0.00",
+      "lineTotal": "500.00",
+      "priceTypeCode": "01"
+    }
+  ]
+}

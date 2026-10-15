@@ -1,0 +1,16 @@
+case: por-eventos
+document: despatch
+why: >-
+  A GRE por eventos is a remitente (or transportista) guía that supersedes a
+  previous one: on the wire it carries the BASE type code (09 here, never
+  'EV'), and it references the guía it replaces.
+sources:
+  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+assert:
+  - xpath: "/*/cbc:DespatchAdviceTypeCode"
+    equals: "09"
+    why: >-
+      EV is a Perunio marker and never reaches SUNAT
+  - xpath: "//*[.='EV']"
+    count: 0
+  - xpath: "/*/cac:AdditionalDocumentReference"

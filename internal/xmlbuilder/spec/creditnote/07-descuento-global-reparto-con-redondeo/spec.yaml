@@ -1,0 +1,42 @@
+case: descuento-global-reparto-con-redondeo
+document: cpe
+why: >-
+  A descuento global of 100 spread over three gravado lines of 100 each does
+  not divide evenly: the shares are rounded to the cent (33.33, 33.33) and
+  the LAST line absorbs the remainder (33.34), so the lines add up to
+  exactly 200.00. The net unit price of a 3-unit line keeps up to 10
+  decimals so that Quantity × Price reconciles.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+assert:
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "66.67"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='2']/cbc:LineExtensionAmount"
+    equals: "66.67"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='3']/cbc:LineExtensionAmount"
+    equals: "66.66"
+    why: >-
+      Absorbs the rounding remainder
+  - xpath: "sum(/*/cac:CreditNoteLine/cbc:LineExtensionAmount)"
+    equals: "200.00"
+    sunat: "3277"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "22.2233333333"
+    sunat: "2369"
+    why: >-
+      66.67 / 3, up to 10 decimals
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='3']/cac:Price/cbc:PriceAmount"
+    equals: "22.22"
+    why: >-
+      Trailing zeros trimmed, at least 2 decimals kept
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "200.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "36.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
+    equals: "200.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "236.00"
+  - xpath: "//cac:AllowanceCharge"
+    absent: true

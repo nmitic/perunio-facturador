@@ -1,0 +1,18 @@
+case: detraccion-credito-dolares
+document: cpe
+why: >-
+  A USD crédito sujeto a detracción. The detracción is declared in soles
+  (141.60 PEN); the neto pendiente converts it back with the tipo de cambio:
+  141.60 ÷ 3.540 = 40.00 USD off a 1180.00 USD payable = 1140.00 USD.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    equals: "1140.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount/@currencyID"
+    equals: "USD"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"

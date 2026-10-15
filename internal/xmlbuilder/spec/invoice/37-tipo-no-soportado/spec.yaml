@@ -1,0 +1,6 @@
+case: tipo-no-soportado
+document: cpe
+why: >-
+  BuildDocumentXML only builds 01, 03, 07 and 08; any other type is refused,
+  never guessed.
+error_contains: "unsupported document type"

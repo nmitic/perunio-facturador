@@ -1,0 +1,13 @@
+case: caracteres-especiales
+document: cpe
+why: >-
+  Latin-1 text (ñ, accented vowels, ü, °, ½) and the XML metacharacters & <
+  > " survive intact: the document is encoded in ISO-8859-1 and markup
+  characters are escaped.
+sources:
+  - "SKILL.md › encoding ISO-8859-1"
+assert:
+  - xpath: "/*/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"
+    equals: "PEÑA & HIJOS <IMPORT> S.A.C."
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cbc:Description"
+    equals: "AÑO NUEVO: CAÑA ÁÉÍÓÚ ü ° ½ \"premium\""

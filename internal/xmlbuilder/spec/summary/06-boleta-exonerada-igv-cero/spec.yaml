@@ -1,0 +1,20 @@
+case: boleta-exonerada-igv-cero
+document: summary
+why: >-
+  Every RC line declares its IGV/IVAP cac:TaxTotal, even when it is 0.00
+  (the guide's examples always carry it).
+sources:
+  - "Guía de elaboración del Resumen Diario 1.1 (resources/GUIA_Resumen_de_Boletas_11-01-2018*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+pending: >-
+  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
+  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
+  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512). Finding
+  F7: buildSummaryLine only emits the IGV cac:TaxTotal when TotalIGV is
+  non-zero, but SUNAT requires it on every line (ERR 2278).
+assert:
+  - xpath: "/*/sac:SummaryDocumentsLine/cac:TaxTotal[cac:TaxSubtotal/cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "0.00"
+    sunat: "2278"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='02']/cbc:PaidAmount"
+    equals: "500.00"

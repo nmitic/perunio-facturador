@@ -1,0 +1,19 @@
+case: factura-dolares
+document: cpe
+why: >-
+  A USD factura: every amount carries currencyID USD. The tipo de cambio is
+  a PLE/SIRE datum and never changes the XML amounts.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cbc:DocumentCurrencyCode"
+    equals: "USD"
+  - xpath: "//*[@currencyID='PEN']"
+    count: 0
+    sunat: "2071"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount/@currencyID"
+    equals: "USD"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount/@currencyID"
+    equals: "USD"

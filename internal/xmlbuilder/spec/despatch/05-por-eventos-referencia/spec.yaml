@@ -1,0 +1,18 @@
+case: por-eventos-referencia
+document: despatch
+why: >-
+  The reference to the superseded guía is its SERIE-NÚMERO, the identifier
+  SUNAT knows — never Perunio's database id.
+sources:
+  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+pending: >-
+  Finding F8: buildDespatchEventoXML puts Despatch.OriginalGreID — a
+  despatches.id UUID — in cac:AdditionalDocumentReference/cbc:ID, and the
+  Cat.59 event code in cbc:DocumentTypeCode.
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    matches: "^[A-Z0-9]{4}-[0-9]{1,8}$"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "09"
+    why: >-
+      Cat.01 type of the referenced guía

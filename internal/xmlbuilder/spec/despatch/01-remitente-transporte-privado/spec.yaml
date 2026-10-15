@@ -1,0 +1,69 @@
+case: remitente-transporte-privado
+document: despatch
+why: >-
+  A GRE remitente (09) for a venta (Cat.20 01) moved in the emisor's own
+  vehicle (Cat.18 02): the driver and plate travel in the shipment stage;
+  weight, packages, start date and punto de llegada are always present.
+sources:
+  - "SUNAT Guía de elaboración GRE Remitente/Transportista 2022 — NOT in resources/, needs to be added"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "DespatchAdvice"
+  - xpath: "/*/cbc:ID"
+    equals: "T001-00000001"
+  - xpath: "/*/cbc:IssueDate"
+    equals: "2024-01-16"
+  - xpath: "/*/cbc:IssueTime"
+    equals: "10:00:00"
+  - xpath: "/*/cbc:DespatchAdviceTypeCode"
+    equals: "09"
+  - xpath: "/*/cac:DespatchSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "20100113612"
+  - xpath: "/*/cac:DeliveryCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"
+    equals: "20601327318"
+  - xpath: "/*/cac:DeliveryCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+  - xpath: "/*/cac:Shipment/cbc:ID"
+    equals: "SUNAT_Envio"
+  - xpath: "/*/cac:Shipment/cbc:HandlingCode"
+    equals: "01"
+    why: >-
+      Cat.20 motivo de traslado
+  - xpath: "/*/cac:Shipment/cbc:GrossWeightMeasure"
+    equals: "125.50"
+  - xpath: "/*/cac:Shipment/cbc:GrossWeightMeasure/@unitCode"
+    equals: "KGM"
+  - xpath: "/*/cac:Shipment/cbc:TotalTransportHandlingUnitQuantity"
+    equals: "3"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cbc:TransportModeCode"
+    equals: "02"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:TransitPeriod/cbc:StartDate"
+    equals: "2024-01-16"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cbc:ID"
+    equals: "12345678"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cbc:JobTitle"
+    equals: "Principal"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cac:IdentityDocumentReference/cbc:ID"
+    equals: "Q12345678"
+    why: >-
+      Licencia de conducir
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty"
+    absent: true
+  - xpath: "/*/cac:Shipment/cac:Delivery/cac:DeliveryAddress/cbc:ID"
+    equals: "040101"
+    why: >-
+      Ubigeo del punto de llegada
+  - xpath: "/*/cac:Shipment/cac:Delivery/cac:DeliveryAddress/cac:AddressLine/cbc:Line"
+    equals: "AV. DESTINO 200"
+  - xpath: "/*/cac:DespatchLine"
+    count: 1
+  - xpath: "/*/cac:DespatchLine/cbc:DeliveredQuantity"
+    equals: "3"
+  - xpath: "/*/cac:DespatchLine/cbc:DeliveredQuantity/@unitCode"
+    equals: "NIU"
+  - xpath: "/*/cac:DespatchLine/cac:Item/cbc:Description"
+    equals: "CAJAS DE CARTON"
+  - xpath: "/*/cac:DespatchLine/cac:Item/cac:SellersItemIdentification/cbc:ID"
+    equals: "P-001"
+  - xpath: "/*/cac:SellerSupplierParty"
+    absent: true

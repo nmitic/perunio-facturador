@@ -1,0 +1,16 @@
+case: sobre-boleta
+document: cpe
+why: >-
+  A nota de crédito on a boleta: series starting with B and a reference of
+  type 03.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+assert:
+  - xpath: "/*/cbc:ID"
+    equals: "BC01-00000001"
+  - xpath: "/*/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID"
+    equals: "B001-00000005"
+  - xpath: "/*/cac:BillingReference/cac:InvoiceDocumentReference/cbc:DocumentTypeCode"
+    equals: "03"
+  - xpath: "/*/cac:DiscrepancyResponse/cbc:ReferenceID"
+    equals: "B001-00000005"

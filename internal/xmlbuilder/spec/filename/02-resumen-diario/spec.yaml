@@ -1,0 +1,6 @@
+case: resumen-diario
+document: filename
+why: >-
+  {RUC}-RC-{YYYYMMDD}-{NNNNN}; the part after the RUC equals cbc:ID (ERR
+  2220).
+output: "20100113612-RC-20240116-00001"

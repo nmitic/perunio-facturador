@@ -28,7 +28,8 @@ make fmt            # gofmt -w .
 
 Run a specific test:
 ```bash
-go test ./internal/xmlbuilder -run TestBuildDocumentXML_Invoice
+go test ./internal/xmlbuilder -run TestSpec/invoice/11   # one XML spec case
+go test ./internal/xmlbuilder -run TestSpec -update      # rewrite spec goldens after an intended change
 ```
 
 apt's Go can be a patch release behind `go.mod`; Go then downloads the exact
@@ -252,6 +253,24 @@ To change a catálogo, edit it in `perunio-sunat-catalogs`, tag, then
 - The document `cac:TaxTotal` **must** include a `9996` subtotal aggregating the gratuito base + would-be IGV; document `cbc:TaxAmount` excludes gratuito IGV. Falling back to a `1000` (IGV) subtotal makes the op look onerosa → **fault 3224**.
 - Both line and document `9996` subtotals must carry a `cbc:Percent` rate tag (**fault 2992**): `18.00` for gravado-gratuito (11-16, IGV at 18%), `0.00` for exonerado/inafecto gratuito (21, 31-37, no IGV).
 - Reference: greenter's `Factura-Gratuita` output is the source of truth this matches.
+
+## XML output spec (`internal/xmlbuilder/spec/`)
+
+The XML builders are specified as **data, not Go**: each case is `input.json`
+(the builder input) + `spec.yaml` (XPath 1.0 assertions, each with its SUNAT
+return code) + `expected.xml` (the golden output), and `spec/invariants.yaml`
+holds the rules every document must satisfy (totals arithmetic, currency,
+gratuito, tributo subtotals…). `spec_runner_test.go` is the only Go involved.
+Read `spec/README.md` before touching a builder.
+
+- Changing builder output → run `-update` and review the `expected.xml` diff.
+- A new SUNAT rule or fault → add a case (or an invariant) citing the code from
+  `resources/AjustesValidacionesCPEv20260212.xlsx`.
+- Known gaps are `pending:` cases (reported as SKIP); `spec/README.md` › Known
+  deviations lists them (F1-F11). Fixing one makes its case fail until `pending`
+  is removed — that is intended.
+- `TestSpecXSD` validates goldens against `resources/XSD Schemas 2.1` when
+  `xmllint` is installed (`apt install libxml2-utils`); it skips otherwise.
 
 ## Reference
 

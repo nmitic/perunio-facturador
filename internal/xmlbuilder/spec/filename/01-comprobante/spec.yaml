@@ -1,0 +1,6 @@
+case: comprobante
+document: filename
+why: >-
+  {RUC}-{TT}-{SERIE}-{CORRELATIVO 8 digits}; must match cbc:ID (ERR
+  1034/1035/1036).
+output: "20100113612-01-F001-00000001"

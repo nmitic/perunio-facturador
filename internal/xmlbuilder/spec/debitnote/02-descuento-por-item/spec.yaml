@@ -1,0 +1,16 @@
+case: descuento-por-item
+document: cpe
+why: >-
+  A debit note line with a descuento follows the same NET-price rule as a
+  credit note: no line AllowanceCharge, Quantity × Price =
+  LineExtensionAmount.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "Guía de elaboración XML Nota de Débito 2.1 (resources/guia+xml+nota de débito*.pdf)"
+assert:
+  - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cac:AllowanceCharge"
+    absent: true
+  - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "50.00"
+  - xpath: "/*/cac:DebitNoteLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "50.00"

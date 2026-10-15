@@ -1,0 +1,25 @@
+case: regularizacion-anticipo
+document: cpe
+why: >-
+  A boleta de regularización applies a boleta de anticipo (Cat.12 03) with
+  the same hybrid totals and the same Cat.53 04 allowance as a factura
+  (fault 3287 applies to boletas too).
+sources:
+  - "SUNAT beta rejections reproduced 2026-07-31 (faults 3280 and 3287), see invoice.go buildLegalMonetaryTotal"
+  - "AjustesValidacionesCPEv20260212.xlsx › Boleta2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    equals: "B001-00000007"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "03"
+  - xpath: "/*/cac:PrepaidPayment/cbc:PaidAmount"
+    equals: "118.00"
+  - xpath: "/*/cac:AllowanceCharge[cbc:AllowanceChargeReasonCode='04']/cbc:Amount"
+    equals: "100.00"
+    sunat: "3287"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "118.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1062.00"
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    equals: "03"

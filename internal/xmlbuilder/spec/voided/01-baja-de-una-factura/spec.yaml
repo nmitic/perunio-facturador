@@ -1,0 +1,38 @@
+case: baja-de-una-factura
+document: voided
+why: >-
+  A Comunicación de Baja (RA, UBL 2.0 / CustomizationID 1.0) voiding one
+  factura on the same day it was issued.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Comunicación de Baja1_0"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "VoidedDocuments"
+  - xpath: "/*/cbc:ID"
+    equals: "RA-20240116-00001"
+    sunat: "2220"
+  - xpath: "/*/cbc:IssueDate"
+    equals: "2024-01-16"
+    sunat: "2346"
+  - xpath: "/*/cac:AccountingSupplierParty/cbc:CustomerAssignedAccountID"
+    equals: "20100113612"
+    sunat: "1034"
+  - xpath: "/*/cac:AccountingSupplierParty/cbc:AdditionalAccountID"
+    equals: "6"
+    sunat: "2288"
+  - xpath: "/*/sac:VoidedDocumentsLine/cbc:LineID"
+    equals: "1"
+    sunat: "2306"
+  - xpath: "/*/sac:VoidedDocumentsLine/cbc:DocumentTypeCode"
+    equals: "01"
+  - xpath: "/*/sac:VoidedDocumentsLine/sac:DocumentSerialID"
+    equals: "F001"
+    sunat: "2310"
+  - xpath: "/*/sac:VoidedDocumentsLine/sac:DocumentNumberID"
+    equals: "1"
+    sunat: "2312"
+    why: >-
+      Numeric, up to 8 digits
+  - xpath: "/*/sac:VoidedDocumentsLine/sac:VoidReasonDescription"
+    equals: "Error en documento"
+    sunat: "2315"

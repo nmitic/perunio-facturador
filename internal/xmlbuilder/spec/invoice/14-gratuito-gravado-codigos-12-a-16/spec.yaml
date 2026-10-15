@@ -1,0 +1,30 @@
+case: gratuito-gravado-codigos-12-a-16
+document: cpe
+why: >-
+  Every gravado-gratuito código (Cat.07 12-16) behaves like 11: the
+  referencial is the IGV-exclusive base (100), never the IGV-inclusive 118.
+  Five lines, one per código.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "greenter reference output (github.com/thegreenter/greenter)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine"
+    count: 5
+  - xpath: "/*/cac:InvoiceLine[cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount='100.00']"
+    count: 5
+    sunat: "3272"
+  - xpath: "//cbc:PriceAmount[.='118.00']"
+    count: 0
+    why: >-
+      The IGV-inclusive price never leaks into the referencial
+  - xpath: "/*/cac:InvoiceLine[cbc:LineExtensionAmount='100.00']"
+    count: 5
+  - xpath: "/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996'][cbc:TaxAmount='18.00'][cac:TaxCategory/cbc:Percent='18.00']"
+    count: 5
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "500.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "90.00"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "0.00"

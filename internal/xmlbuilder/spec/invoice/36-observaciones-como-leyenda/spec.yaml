@@ -1,0 +1,17 @@
+case: observaciones-como-leyenda
+document: cpe
+why: >-
+  A free-text observación with a line break, sent the way the issue pipeline
+  sends every draft note today (as leyenda 1000). A leyenda is 1-200
+  characters with no line breaks, and 1000 means 'monto en letras', so
+  observaciones need their own channel.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+pending: >-
+  Finding F4: buildIssueRequestFromDoc (internal/http/routes_pipeline.go)
+  sends every free-text draft note as Cat.52 leyenda 1000; multi-line or
+  >200-char notes break rule 3006 and the real monto en letras is never
+  generated.
+assert:
+  - xpath: "/*/cbc:Note[contains(., 'almac')][@languageLocaleID='1000']"
+    count: 0

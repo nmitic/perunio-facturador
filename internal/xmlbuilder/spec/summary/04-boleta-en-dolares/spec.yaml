@@ -1,0 +1,19 @@
+case: boleta-en-dolares
+document: summary
+why: >-
+  Each RC line is stated in its own boleta's currency; a USD boleta is never
+  hardcoded to PEN.
+sources:
+  - "AjustesValidacionesCPEv20260212.xlsx › Resumen Diario1_1"
+pending: >-
+  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
+  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
+  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
+assert:
+  - xpath: "//*[@currencyID='PEN']"
+    count: 0
+    sunat: "2071"
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:TotalAmount/@currencyID"
+    equals: "USD"
+  - xpath: "/*/sac:SummaryDocumentsLine/cbc:ID"
+    equals: "B001-7"

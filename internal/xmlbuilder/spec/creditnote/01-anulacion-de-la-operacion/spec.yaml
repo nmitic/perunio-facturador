@@ -1,0 +1,63 @@
+case: anulacion-de-la-operacion
+document: cpe
+why: >-
+  A nota de crédito (Cat.01 07, motivo Cat.09 01) annulling factura
+  F001-00000001 in full. Pins the CreditNote skeleton: the discrepancy, the
+  billing reference, CreditNoteLine with CreditedQuantity, and
+  LegalMonetaryTotal.
+sources:
+  - "Guía de elaboración XML Nota de Crédito 2.1 (resources/guia+xml+nota de crédito*.pdf)"
+  - "AjustesValidacionesCPEv20260212.xlsx › NotaCredito2_0"
+assert:
+  - xpath: "local-name(/*)"
+    equals: "CreditNote"
+  - xpath: "namespace-uri(/*)"
+    equals: "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+  - xpath: "/*/cbc:ID"
+    equals: "FC01-00000001"
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    absent: true
+    why: >-
+      A CreditNote has no type code element; the root says it
+  - xpath: "/*/cac:DiscrepancyResponse/cbc:ReferenceID"
+    equals: "F001-00000001"
+  - xpath: "/*/cac:DiscrepancyResponse/cbc:ResponseCode"
+    equals: "01"
+    sunat: "2128"
+  - xpath: "/*/cac:DiscrepancyResponse/cbc:Description"
+    equals: "Anulación de la operación"
+    sunat: "2136"
+  - xpath: "/*/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID"
+    equals: "F001-00000001"
+  - xpath: "/*/cac:BillingReference/cac:InvoiceDocumentReference/cbc:DocumentTypeCode"
+    equals: "01"
+  - before:
+      - "/*/cbc:DocumentCurrencyCode"
+      - "/*/cac:DiscrepancyResponse"
+  - before:
+      - "/*/cac:DiscrepancyResponse"
+      - "/*/cac:BillingReference"
+  - before:
+      - "/*/cac:BillingReference"
+      - "/*/cac:Signature"
+  - xpath: "/*/cac:CreditNoteLine"
+    count: 1
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cbc:CreditedQuantity"
+    equals: "10"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cbc:CreditedQuantity/@unitCode"
+    equals: "NIU"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:Price/cbc:PriceAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:CreditNoteLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "180.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']"
+    absent: true
+    why: >-
+      Forma de pago is only for motivo 13, which this builder does not
+      produce

@@ -1,0 +1,33 @@
+case: gratuito-exonerado
+document: cpe
+why: >-
+  A gratuito exonerado line (Cat.07 21): valor referencial = 50 × 2 = 100
+  under tributo 9996, with no IGV and a 0.00 rate tag — never 18 %.
+sources:
+  - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
+  - "greenter reference output (github.com/thegreenter/greenter)"
+  - "AjustesValidacionesCPEv20260212.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
+    equals: "50.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "0.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
+    equals: "0.00"
+    sunat: "2992"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
+    equals: "100.00"
+    sunat: "3224"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
+    equals: "0.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
+    count: 0
+    sunat: "3224"
+    why: >-
+      An IGV fallback subtotal makes a gratuita look onerosa
+  - xpath: "//cbc:Percent[.='18.00']"
+    count: 0
