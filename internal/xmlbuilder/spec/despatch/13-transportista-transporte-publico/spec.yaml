@@ -1,0 +1,23 @@
+case: transportista-transporte-publico
+document: despatch
+why: >-
+  A GRE transportista always declares the vehicle and the principal driver:
+  the carrier is the issuer, so a transporte público modalidad saved on the
+  draft changes nothing. The remitente must not appear as cac:CarrierParty
+  either.
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0"
+  - "resources/xsl/gre/ValidaExprRegGreTransportista-2.0.1.xsl"
+pending: >-
+  Finding F21: buildShipment decides by modalidad, not by document type, so
+  a 31 saved with Cat.18 01 gets a cac:CarrierParty holding the remitente's
+  RUC and no vehicle or driver (ERR 2566, ERR 3357).
+assert:
+  - xpath: "/*/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID"
+    equals: "ABC123"
+    sunat: "2566"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson[cbc:JobTitle='Principal']/cbc:ID"
+    equals: "12345678"
+    sunat: "3357"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty"
+    absent: true

@@ -1,14 +1,25 @@
 ---
 name: perunio-facturador
-description: Use this skill when building, modifying, or debugging a Peruvian electronic invoicing (SEE — Sistema de Emisión Electrónica) backend in Go. Covers SUNAT UBL 2.1 / UBL 2.0 XML structure for Factura, Boleta, Notas de Crédito y Débito, Resumen Diario (RC), Comunicación de Baja (RA), digital signature (XMLDSig enveloped), file/ZIP naming, SOAP WS-Security envelopes for sendBill / sendSummary / getStatus / getStatusCdr, CDR (ApplicationResponse) parsing, SUNAT catalogs (01, 06, 07, 16, 17, 51), and the validation/contingency rules from RS 097-2012/SUNAT and modificatorias.
+description: Use this skill when building, modifying, or debugging a Peruvian electronic invoicing (SEE — Sistema de Emisión Electrónica) backend in Go. Covers SUNAT UBL 2.1 / UBL 2.0 XML structure for Factura, Boleta, Notas de Crédito y Débito, Resumen Diario (RC), Comunicación de Baja (RA), Guía de Remisión Electrónica (GRE 2.0), digital signature (XMLDSig enveloped), file/ZIP naming, SOAP WS-Security envelopes for sendBill / sendSummary / getStatus / getStatusCdr, CDR (ApplicationResponse) parsing, SUNAT catalogs (01, 06, 07, 16, 17, 51), and the validation/contingency rules from RS 097-2012/SUNAT and modificatorias.
 ---
 
 # SUNAT Electronic Invoicing — Go Backend Skill
 
 Authoritative knowledge base for building a Go facturador against SUNAT's SEE
-(Sistema de Emisión Electrónica — Sistemas del Contribuyente). Source of
-truth: `Manual del Programador` (May 2021, v2.1) and the `Guía de Elaboración
-de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
+(Sistema de Emisión Electrónica — Sistemas del Contribuyente). Sources, all in
+`resources/` (see its README for versions):
+
+* SUNAT's **validation rules workbooks** — CPE `reglas-validacion-cpe-2026-08-26.xlsx`,
+  GRE `reglas-validacion-gre-2026-09-25.xlsx` — are authoritative for every return
+  code and condition. Where a sentence is ambiguous, SUNAT's executable XSL
+  validators (`resources/xsl/`) decide.
+* `Manual del Programador` (May 2021) for the SOAP services and file naming.
+* The `Guías de Elaboración de Documentos XML` UBL 2.1 (May 2017) and the Resumen
+  Diario 1.1 guide (Jan 2018) for structure and samples.
+* R.S. 123-2022/SUNAT for the GRE 2.0 regime.
+
+`internal/xmlbuilder/spec/` turns these rules into executable cases; its README
+lists the known deviations and the rules dated 2027-01-01.
 
 ---
 
@@ -23,7 +34,8 @@ de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
 | RC   | Resumen Diario          | `/SummaryDocuments` | 2.0 | 1.1             | `RC-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
 | RA   | Comunicación de Baja    | `/VoidedDocuments`  | 2.0 | 1.0             | `RA-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
 | RR   | Resumen de Reversión (Ret/Per) | `/VoidedDocuments` | 2.0 | 1.0    | `RR-YYYYMMDD-NNNNN`     | `sendSummary` (async) |
-| 09 / 31 | Guía de Remisión (transportista / remitente) | `/DespatchAdvice` | 2.1 | 2.0 | `T[A-Z0-9]{3}-\d{1,8}` | `sendBill` (endpoint distinto) |
+| 09   | Guía de Remisión Remitente | `/DespatchAdvice` | 2.1 | 2.0           | `T[A-Z0-9]{3}-\d{1,8}`  | GRE REST API (OAuth2), see §16 |
+| 31   | Guía de Remisión Transportista | `/DespatchAdvice` | 2.1 | 2.0       | `V[A-Z0-9]{3}-\d{1,8}`  | GRE REST API (OAuth2), see §16 |
 | 20 / 40 | Retención / Percepción | (Retention/Perception) | 2.0 | — | `R[A-Z0-9]{3} / P[A-Z0-9]{3}` | `sendBill` (endpoint distinto) |
 | LT   | Lote de Facturas/Notas  | n/a (multi-XML zip) | —   | —               | `LT-YYYYMMDD-NNNNN`     | `sendPack` (async, máx 500 docs) |
 
@@ -39,7 +51,6 @@ de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
 | --- | --- |
 | Factura, Boleta, Notas, RC, RA, Lotes | `https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl` |
 | Retención / Percepción / RR | `https://e-factura.sunat.gob.pe/ol-ti-itemision-otroscpe-gem/billService?wsdl` |
-| Guía de Remisión | `https://e-guiaremision.sunat.gob.pe/ol-ti-itemision-guia-gem/billService?wsdl` |
 | Consulta validez CPE | `https://e-factura.sunat.gob.pe/ol-it-wsconsvalidcpe/billValidService?wsdl` |
 | Consulta CDR / estado | `https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService?wsdl` |
 
@@ -50,10 +61,12 @@ de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
 | Service | URL |
 | --- | --- |
 | Factura | `https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService?wsdl` |
-| Guía    | `https://e-beta.sunat.gob.pe/ol-ti-itemision-guia-gem-beta/billService?wsdl` |
 | Retenciones | `https://e-beta.sunat.gob.pe/ol-ti-itemision-otroscpe-gem-beta/billService?wsdl` |
 
 **Beta credentials:** `Username = {RUC}MODDATOS`, `Password = MODDATOS`.
+
+The Guía de Remisión no longer has a SOAP endpoint: GRE 2.0 (R.S. 123-2022) goes
+through SUNAT's REST API, see §16.
 
 ---
 
@@ -65,7 +78,7 @@ de Documentos XML — Factura Electrónica UBL 2.1` (May 2017, v1.0).
 ```
 * `RUC11` — 11-digit RUC of the issuer
 * `TT` — document type code (01, 03, 07, 08, 09, 31)
-* `SERIE4` — `F###`, `B###`, `T###` (4 chars total)
+* `SERIE4` — `F###`, `B###`, `T###` (GRE remitente), `V###` (GRE transportista) (4 chars total)
 * `CORR` — correlative, 1–8 digits, **no left padding required**
 
 Examples:
@@ -191,11 +204,13 @@ Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResp
 | 08      | Tipos de sistema de cálculo del ISC  | `cbc:TierRange` |
 | 09      | Tipo de nota de crédito              | `cbc:ResponseCode` (en CreditNote) |
 | 10      | Tipo de nota de débito               | `cbc:ResponseCode` (en DebitNote) |
-| 12      | Tipo de operación (guía)             | — |
-| 16      | Tipo de precio                       | `cbc:PriceTypeCode` (`01` = con IGV, `02` = gratuito) |
+| 11      | Tipo de valor de venta (Resumen Diario) | `sac:BillingPayment/cbc:InstructionID` (`01` gravado, `02` exonerado, `03` inafecto, `04` exportación, `05` gratuitas; from 2027-01-01 `05` is replaced by `06`–`09`) |
+| 12      | Documentos relacionados tributarios  | `cac:AdditionalDocumentReference/cbc:DocumentTypeCode` (e.g. `02`/`03` anticipos) |
+| 16      | Tipo de precio                       | `cbc:PriceTypeCode` (`01` = con IGV, `02` = gratuito, `03` = tarifas reguladas) |
 | 17      | Tipo de operación — **sólo la URI**  | `cbc:ProfileID/@schemeURI` dice `catalogo17`, pero los **valores salen del catálogo 51**. Inconsistencia de la propia SUNAT; greenter hace lo mismo. |
 | 51      | Tipo de operación                    | `cbc:ProfileID` (el valor) **y** `cbc:InvoiceTypeCode/@listID` — los dos, siempre iguales (`0101` = Venta interna, `1001`-`1004` = sujeta a detracción) |
 | 52      | Códigos de leyendas                  | `cbc:Note/@languageLocaleID` (`1000`, `2000`, etc.) |
+| 18, 20, 61 | GRE: modalidad / motivo de traslado / documentos relacionados | `ShipmentStage/cbc:TransportModeCode`, `Shipment/cbc:HandlingCode`, `cac:AdditionalDocumentReference/cbc:DocumentTypeCode` (numbering of the GRE workbook) |
 
 ### Catalog 06 — document identity (`schemeID`)
 | Code | Doc type |
@@ -206,6 +221,13 @@ Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResp
 | 6 | RUC |
 | 7 | Pasaporte |
 | A | Cédula diplomática |
+| B | Doc. identidad país de residencia (no domiciliado) |
+| C | Tax Identification Number (TIN), personas naturales |
+| D | Identification Number (IN), personas jurídicas |
+| E | Tarjeta Andina de Migración (TAM) |
+| F | Permiso Temporal de Permanencia (PTP) |
+| G | Salvoconducto |
+| H | Carné de Permiso Temporal de Permanencia (CPP) |
 
 ### Catalog 07 — IGV affectation (most common)
 | Code | Meaning |
@@ -213,15 +235,17 @@ Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResp
 | 10 | Gravado — Operación onerosa |
 | 20 | Exonerado — Operación onerosa |
 | 30 | Inafecto — Operación onerosa |
-| 11–17 | Gravado — Retiro / bonificación / premios (gratuitas) |
-| 21 | Exonerado — Transferencia gratuita |
-| 31–37 | Inafecto — gratuitos / retiros |
-| 40 | Exportación |
+| 11–16 | Gravado — retiros, premios, donaciones, bonificaciones (gratuitas, tributo 9996) |
+| 17 | Gravado — IVAP (tributo 1016; 9996 when gratuita) |
+| 21 | Exonerado — Transferencia gratuita (9996) |
+| 31–37 | Inafecto — gratuitos / retiros (9996) |
+| 40 | Exportación (tributo 9995; 9996 when gratuita) |
 
 ### TaxScheme IDs (catalog 05) — used in `cac:TaxScheme/cbc:ID`
 | Tributo | ID  | UN/ECE 5153 | Name |
 | ------- | --- | ----------- | ---- |
 | IGV     | 1000 | VAT  | IGV |
+| IVAP    | 1016 | VAT  | IVAP (arroz pilado) |
 | ISC     | 2000 | EXC  | ISC |
 | ICBPER  | 7152 | OTH  | ICBPER (bolsas plásticas) |
 | Otros   | 9999 | OTH  | Otros tributos |
@@ -234,9 +258,9 @@ Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResp
 
 ## 7. Tax Rules
 
-* **IGV nominal rate:** 18% (as of 2026-05; verify current rate before deploy).
+* **IGV rate:** 18 %. MYPE restaurantes/hoteles/alojamientos registered in padrón 01 may apply 10.5 % (OBS 4439 if the issuer is not in the padrón). SUNAT checks each total "por la tasa vigente (18.00 o 10.50) … según la tasa indicada en la línea", and every IGV line of a document must declare the same rate (ERR 3462).
 * SUNAT validates against **declared values**, not by recomputing — but it cross-checks for internal consistency. Keep your own computation precise.
-* **Tolerance:** ±0.01 (1 céntimo) on totals.
+* **Tolerance:** ±1 in the document currency (one sol, not one céntimo) on every total SUNAT recomputes ("con una tolerancia + - 1"); the RC IGV check (OBS 4019) allows ±5.
 * **Number formats:**
   * Monetary totals: `n(12,2)` — up to 12 integer digits + 2 decimals.
   * Unit values / `cbc:PriceAmount`: `n(12,10)` — up to 10 decimals allowed.
@@ -309,7 +333,7 @@ The signature must be computed using the **same encoding** as the document (`ISO
   </cac:DigitalSignatureAttachment>
 </cac:Signature>
 ```
-The `ds:Signature/@Id` (in the actual signature placed in `ExtensionContent`) must match this URI fragment (`SignSUNAT`).
+The `ds:Signature/@Id` (in the actual signature placed in `ExtensionContent`) must match this URI fragment (`SignSUNAT`). The value itself is free text; this codebase uses `SignatureSP`.
 
 ---
 
@@ -337,7 +361,7 @@ Clave SOL must be a **secondary user** with profile `"Envío de documentos elect
 #### `sendBill` — synchronous
 **In:** `fileName` (string), `contentFile` (base64 ZIP).
 **Out:** base64 ZIP containing the CDR (`R-{originalName}.xml` ApplicationResponse).
-**Used for:** Factura, Notas, Retención, Percepción, Guía.
+**Used for:** Factura, Notas, Retención, Percepción. (Guías go through the GRE REST API, §16.)
 
 #### `sendSummary` — asynchronous
 **In:** same as sendBill.
@@ -423,11 +447,11 @@ The CDR is a UBL 2.0 `ApplicationResponse`, signed by SUNAT, returned inside a Z
 3. **Series doesn't encode the doc type.** `F001` can be a Factura *or* a Nota de Crédito on a Factura. Route on the root element plus `cbc:InvoiceTypeCode` — not on the series prefix. (Notas carry no type-code element at all.)
 4. **`ProfileID` ≠ document type.** ProfileID is the *operation*, e.g. `0101` Venta interna. Its `@schemeURI` names `catalogo17`, but the codes themselves come from **catálogo 51** — SUNAT's own inconsistency, kept because that is what the wire accepts.
 5. **`InvoiceTypeCode` carries two catalogs at once, on purpose.** The element value is the tipo de documento (Cat.01, `01`); `@listID` is the tipo de operación (Cat.51, `0101`) and must equal `ProfileID`. It looks like a code copied into the wrong attribute; it isn't. Dropping `@listID` → fault **3205**; a non-Cat.51 value there → fault **3206**; a value that contradicts the detracción's Cat.54 código → fault **3129**. `newInvoiceTypeCode` and `newProfileID` both go through `sunatOperationType` so the two can never drift.
-6. **`UBLVersionID` mismatch by root.** Invoice/CreditNote/DebitNote/DespatchAdvice = `2.1`; SummaryDocuments/VoidedDocuments = `2.0`. `CustomizationID`: comprobantes = `2.0`, RC = `1.1`, RA/RR = `1.0`.
+6. **`UBLVersionID` mismatch by root.** Invoice/CreditNote/DebitNote/DespatchAdvice = `2.1`; SummaryDocuments/VoidedDocuments = `2.0`. `CustomizationID`: comprobantes = `2.0`, GRE = `2.0` (GRE answers with its own codes 2111/2110 and 2113/2112), RC = `1.1`, RA/RR = `1.0`.
 7. **Boletas don't go via `sendBill`.** Submit them in batches via Resumen Diario (RC) — unless you're using SEE-SOL portal mode.
 8. **Filename casing.** `.XML`/`.ZIP` uppercase or `.xml`/`.zip` lowercase both work, but the **base name** (RUC-TT-SERIE-CORR) must match between zip and xml exactly.
 9. **Duplicate IDs.** Once a `{RUC, TipoDoc, Serie, Correlativo}` is **accepted**, that number is consumed forever. Rechazos on Factura/Nota also burn the number — generate a new one.
-10. **Tolerance is per-line and per-total.** ±0.01 each. Don't accumulate rounding across many lines without compensating on the totals.
+10. **Tolerance is per-line and per-total.** ±1 (currency units) each. Don't accumulate rounding across many lines without compensating on the totals.
 11. **`cac:Signature` is mandatory in the body** even though the actual XMLDSig lives in `<ext:UBLExtensions>`. They are two different blocks.
 12. **WS-Security `Username` is concatenated.** `{RUC}{usuario_sol}` with **no separator**. The 11-digit RUC is glued directly to the SOL user.
 13. **Resumen Diario blocks ≤ 500 lines** since 2018-01-01. Split larger days into multiple correlatives — they accumulate, they don't replace.
@@ -503,7 +527,38 @@ For Retención/Percepción contingencia: same flow, types `40` / `41` / `20`, fi
 
 ---
 
-## 16. Quick Reference — XML elements by frequency
+## 16. Guía de Remisión Electrónica (GRE 2.0)
+
+R.S. 123-2022/SUNAT replaced the old SOAP guía with **GRE 2.0**: a UBL 2.1
+`DespatchAdvice` with `CustomizationID` 2.0, sent through SUNAT's REST API
+(`internal/greclient`, manual in `resources/guias/gre-manual-servicios-rest-2022-10-04.pdf`).
+
+| | |
+|---|---|
+| Types | `09` Remitente (serie `T###`), `31` Transportista (serie `V###`) |
+| Token | `POST https://api-seguridad.sunat.gob.pe/v1/clientessol/{client_id}/oauth2/token/`, OAuth2 password grant (`client_id`, `client_secret`, `{RUC}{usuario SOL}`, clave SOL), `scope=https://api-cpe.sunat.gob.pe` |
+| Send | `POST https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/{fileName}` with `{"archivo": {"nomArchivo", "arcGreZip" (base64 ZIP), "hashZip"}}` → `numTicket` |
+| Poll | `GET https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/envios/{numTicket}` → status + CDR (base64 ZIP) |
+| Rules | `resources/reglas/reglas-validacion-gre-2026-09-25.xlsx` (Guía-Remitente2_0, Guía-Transportista2_0) and the validators in `resources/xsl/gre/` |
+
+There is no GRE "guía de elaboración" PDF: the rules workbook and the XSL are the
+structure spec. GRE answers with its own codes (e.g. UBLVersionID 2111/2110,
+CustomizationID 2113/2112, missing signature 1059). Shapes that matter, each a
+rejection when wrong:
+
+* **Punto de partida**: `cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress` (ubigeo in `cbc:ID`, `cac:AddressLine/cbc:Line`), not `cac:OriginAddress` (ERR 2775/2577). **Punto de llegada**: `cac:Shipment/cac:Delivery/cac:DeliveryAddress`.
+* **Vehicle plate**: `cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID`, not `RoadTransport/LicensePlateID` (ERR 2566).
+* **Driver**: `cac:ShipmentStage/cac:DriverPerson` with `cbc:JobTitle` `Principal`/`Secundario`, `cbc:FirstName` **and** `cbc:FamilyName` (ERR 3360/3361), licence in `cac:IdentityDocumentReference/cbc:ID`.
+* **Transporte público** (Cat.18 `01`): the carrier in `ShipmentStage/cac:CarrierParty`, no driver or plate of the remitente, and since 2026-06-01 the fecha de entrega de bienes al transportista in `ShipmentStage/cac:LoadingTransportEvent/cbc:OccurrenceDate` (ERR 3617/3618/3619).
+* **GRE Transportista**: the remitente goes in `cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty` (ERR 3383/2541/3387); the sheet has no `SellerSupplierParty`. Vehicle and principal driver are always declared.
+* **Motivo de traslado** (Cat.20) in `cac:Shipment/cbc:HandlingCode`; its description in `cbc:HandlingInstructions` (mandatory for `13` Otros, ERR 3457). `cbc:Information` is only for motivos 08/09/19 (ERR 3418).
+* **Related documents** (GRE Cat.61): `cac:AdditionalDocumentReference` with the code, SERIE-NÚMERO and issuer RUC (ERR 2692/3441/3380/3382).
+* `cbc:IssueTime` is mandatory (ERR 3437).
+* **GRE por evento** is issued only in SEE-SOL (R.S. 123-2022, numeral 5.2). The event-type tag `ShipmentStage/TransportEvent/cbc:TransportEventTypeCode` is rejected when sent (ERR 3374).
+
+---
+
+## 17. Quick Reference — XML elements by frequency
 
 | Element | Where | Notes |
 | ------- | ----- | ----- |
@@ -523,7 +578,7 @@ For Retención/Percepción contingencia: same flow, types `40` / `41` / `20`, fi
 
 ---
 
-## 17. Verification checklist before going live
+## 18. Verification checklist before going live
 
 - [ ] Cert registered with SUNAT (Menú SOL).
 - [ ] Beta endpoint exercised end-to-end (send → CDR aceptado).

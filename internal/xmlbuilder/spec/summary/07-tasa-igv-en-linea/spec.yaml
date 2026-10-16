@@ -1,0 +1,24 @@
+case: tasa-igv-en-linea
+document: summary
+why: >-
+  From 01/01/2027 every RC line states the IGV rate of its gravado subtotal
+  (the Resumen Diario's new 'Tasa del IGV' field): 18 or 10.5 for a boleta,
+  also 10 for a nota.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1 (Control de Cambios: ERR-2992, ERR-3504, ERR-3102)"
+pending: >-
+  Finding F12: RC line subtotals carry no cbc:Percent.
+effective: "2027-01-01"
+assert:
+  - xpath: "/*/sac:SummaryDocumentsLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent"
+    sunat: "2992"
+  - xpath: "number(/*/sac:SummaryDocumentsLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent) = 18 or number(/*/sac:SummaryDocumentsLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+    sunat: "3504"
+    why: >-
+      Boleta (03): 18 or 10.5 only
+  - xpath: "/*/sac:SummaryDocumentsLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent"
+    matches: "^[0-9]{1,3}(\\.[0-9]{1,5})?$"
+    sunat: "3102"
+    why: >-
+      Up to 3 integers and 5 decimals

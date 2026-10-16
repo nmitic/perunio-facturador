@@ -38,6 +38,8 @@ Amounts are decimal strings. **Totals are inputs, not outputs**: the frontend co
 
 Key `IssueRequest` fields: `docType` (Cat.01), `operationType` (Cat.51), `customerDocType` (Cat.06), `items[].taxExemptionReasonCode` (Cat.07 afectación), `items[].priceTypeCode` (Cat.16), `items[].unitPrice` (IGV-exclusive valor unitario), `items[].unitPriceWithTax` (IGV-inclusive precio unitario), `items[].lineTotal` (valor de venta of the line, net of its descuento), `globalDiscount` (Cat.53 02), `anticipos[]` (`baseAmount` without IGV, `totalAmount` with IGV), `detraccion` (Cat.54 código, monto always in PEN), `formaPago` + `cuotas[]`.
 
+A few pending cases carry an input field the model does not have yet (for example `summary/09` sends `customerName`). Inputs are decoded strictly, so such a case fails to decode until the field exists. That is deliberate: the input already says what the fix needs.
+
 `spec.yaml`:
 
 ```yaml
@@ -49,6 +51,7 @@ sources:                         # where the rule comes from
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
 pending: >-                      # optional: we KNOW the builder is wrong here (see Known deviations)
   Finding F1: …
+effective: "2027-01-01"          # optional: the date SUNAT starts enforcing the rule (see Upcoming rules)
 assert:
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9997']/cbc:TaxableAmount"
     equals: "500.00"
@@ -71,6 +74,15 @@ assert:
 
 `error_contains: "…"` means the builder must **refuse** the input. `output: "…"` (filename cases) is the exact string.
 
+### SUNAT codes
+
+`sunat:` is the return code SUNAT answers with when the assertion is false, as listed in the validation workbooks (`resources/reglas/`). Two codes joined by `/` are the related rules that apply (usually "tag missing / value wrong").
+
+- Codes **2000–3999 reject** the document (CDR rechazado). Codes **4000 and up are observaciones**: the document is accepted with a warning. A few rules are marked "OBSERV ERROR" in the workbook; they change kind on a stated date.
+- The same check can carry different codes per document type. A **boleta** answers most totals arithmetic with an observación (for example 4309), where a **factura** rejects (3278). A **nota de crédito or débito** uses the factura's code only when it modifies a factura (`01`) and the boleta's observación otherwise.
+- **GRE** cases cite `reglas-validacion-gre-2026-09-25.xlsx` (sheets Guía-Remitente2_0 and Guía-Transportista2_0), which has its own codes: UBL version 2111/2110 and CustomizationID 2113/2112, not the CPE's 2074/2072.
+- An assertion without `sunat:` pins Perunio's output where SUNAT has no rule. Its `why` says so.
+
 ### XPath conventions
 
 Plain **XPath 1.0**. The root element is always addressed as `/*`, so the document's default namespace never needs a prefix. These prefixes are fixed:
@@ -83,20 +95,20 @@ Plain **XPath 1.0**. The root element is always addressed as `/*`, so the docume
 | `sac` | `urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1` |
 | `ds`  | `http://www.w3.org/2000/09/xmldsig#` |
 
-To stay portable across engines, a parenthesized union gets at most one predicate (conditions are joined with `and`), and line numbering is checked with `preceding-sibling` counts, not `position()`.
+To stay portable across engines, a parenthesized union gets at most one predicate (conditions are joined with `and`), and line numbering is checked with `preceding-sibling` counts, not `position()`. XPath 1.0 has no regex, so `invariants.yaml` checks number formats with `translate`, `substring-before`/`substring-after` and `string-length`. (`matches:` assertions use a regex, but that is the runner's check, not XPath.)
 
 ## Invariants
 
-`invariants.yaml` holds the rules that apply to every document of a given root (`Invoice`, `CreditNote`, `DebitNote`, `SummaryDocuments`, `VoidedDocuments`, `DespatchAdvice`). Each one is a single XPath 1.0 boolean expression, with the SUNAT code and the reason. They cover:
+`invariants.yaml` holds the rules that apply to every document of a given root (`Invoice`, `CreditNote`, `DebitNote`, `SummaryDocuments`, `VoidedDocuments`, `DespatchAdvice`). Each one is a single XPath 1.0 boolean expression, with the SUNAT code per document type and the reason. Where SUNAT publishes the formula in its XSL validators, the expression follows it. They cover:
 
-- the totals arithmetic SUNAT recomputes (3278, 3279, 3280, 3294)
-- per-line values and rates (3271, 3103, 3292)
-- gratuito rules (2640, 3224, 3234, 2416)
+- the totals arithmetic SUNAT recomputes: total valor de venta, total precio de venta (at the rate the lines declare, 18 or 10.5), importe total for facturas/boletas and the separate formula for notas, document tax amount, ISC and the 9995/9997/9998 bases (3278, 3279, 3280, 3294, 3296/3298, 3273–3275 and their boleta/nota variants)
+- per-line values and rates: line value, unit price, line tax total, rate present/format/non-zero/equal across IGV lines (3271, 3270, 3292, 3103, 2992, 3102, 2993/3104, 3462)
+- gratuito rules: price, price type, leyenda, and the document 9996 totals (2640, 3224, 3234, 2416, 2641, 3276, 3302)
 - the tributo subtotals that must exist (2638)
 - currency (2071, 3208)
 - leyenda format (3006, 3014)
-- the signature slot
-- UBL versions (2074/2072)
+- the signature slot (Firma sheet; GRE 1059)
+- UBL versions (2074/2072; GRE 2111/2110, 2113/2112)
 - RC/RA identifiers (2220)
 
 They run on every case, so a new case inherits them for free. The one invariant outside XPath is the prolog: the bytes must start with `<?xml version="1.0" encoding="ISO-8859-1"`.
@@ -104,6 +116,8 @@ They run on every case, so a new case inherits them for free. The one invariant 
 ## Pending cases
 
 A case with `pending:` states what SUNAT requires and what the builder does not do yet. The runner reports it as **SKIP**, with the first failing assertion, so CI stays green while the gap stays visible. If a pending case starts passing, the runner **fails** and tells you to remove `pending` and run `-update`. That way a fix can't go unnoticed. Pending cases have no `expected.xml`, because their current output is known to be wrong.
+
+`effective:` marks a case whose rule SUNAT enforces from a given date; the SKIP line shows it (`PENDING (effective 2027-01-01) …`). Fix those before that date.
 
 ## Golden files
 
@@ -121,6 +135,8 @@ make test                                              # everything, as CI does
 go test ./internal/xmlbuilder -run TestSpec -v         # one subtest per case; pending ones show their reason
 go test ./internal/xmlbuilder -run 'TestSpec/invoice/11'
 ```
+
+The Go runner evaluates XPath with `github.com/antchfx/xpath`, which must be **v1.3.9 or later**. v1.3.3 lost the context node after a relative path with a predicate, so in `sum(a[b = 'x']/c) - d` it read `d` from the wrong node. Under it `INV-LINE-TAX-SUM` (3292) never fired, and `INV-LINE-UNIT-PRICE` would not have either.
 
 ### Without Go
 
@@ -159,20 +175,59 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
 | F1 | Exonerado / inafecto / exportación lines never get their document `cac:TaxSubtotal` (9997/9998/9995). A document with no gravado line falls back to an IGV 1000 subtotal whose base is the whole subtotal. | ERROR 2638, 3277, 3107 | `invoice.go` `buildDocumentTaxTotal` | invoice/03–06 |
-| F2 | Exonerado / inafecto / exportación line subtotals omit `cbc:Percent` (SUNAT requires it on every tributo except 7152). | ERROR 2992 | `sunat.Cat07Percent` via `newLineTaxCategory` | invoice/03–06 |
+| F2 | Exonerado / inafecto / exportación line subtotals omit `cbc:Percent` (SUNAT requires it on every tributo except 7152; `0.00` is a valid value). | ERROR 2992 | `sunat.Cat07Percent` via `newLineTaxCategory` | invoice/03–06 |
 | F3 | ISC: missing from the document `cbc:TaxAmount` and from the line `cbc:TaxAmount`; the ISC line subtotal has no `cbc:Percent`; the document ISC base is `req.Subtotal`, not Σ ISC line bases. | ERROR 3294, 3292, 2992, 3296 | `buildDocumentTaxTotal`, `buildLineTaxTotal` | invoice/09–10 |
 | F4 | The issue pipeline sends every free-text draft note as leyenda **1000** ("monto en letras"). Multi-line or >200-character notes break 3006, and the real monto en letras is never produced. | ERROR 3006 | `internal/http/routes_pipeline.go` `buildIssueRequestFromDoc` | invoice/36 |
 | F5 | IVAP documents lack leyenda 2007. | OBSERV 4264 | `buildInvoiceXML` | invoice/08 |
 | F6 | RC lines use the Resumen **1.0** range shape (`sac:DocumentSerialID` + `Start/EndDocumentNumberID`) under CustomizationID **1.1**, which identifies each comprobante with one `cbc:ID` per line (RC 1.1 guide, sample XML p. 27). | ERROR 2512 | `summary.go` | summary/01–06 |
 | F7 | RC lines omit the IGV `cac:TaxTotal` when the IGV is 0. | ERROR 2278 | `buildSummaryLine` | summary/06 |
-| F8 | GRE por eventos references the superseded guía by Perunio's database UUID (`OriginalGreID`), with the Cat.59 event code in `cbc:DocumentTypeCode`. | — | `despatch_evento.go` | despatch/05 |
-| F9 | GRE puts the punto de partida in `cac:Shipment/cac:OriginAddress` and the plate in `ShipmentStage/TransportMeans/RoadTransport`, the GRE 1.0 shapes. GRE 2.0 uses `Delivery/Despatch/DespatchAddress` and `TransportHandlingUnit/TransportEquipment/cbc:ID`; SUNAT's GRE rules and its GRE validator XSL never mention `OriginAddress` or `RoadTransport`. | GRE rules › Guía-Remitente2_0 | `despatch_common.go` `buildShipment` | despatch/06 |
+| F8 | GRE **por evento** cannot be sent from a Sistema del Contribuyente at all: R.S. 123-2022/SUNAT, numeral 5.2 — "La GRE - por evento se emite únicamente a través del SEE - SOL" — and both GRE validators reject its event-type tag. The builder still produces one (base type code, plus an `AdditionalDocumentReference` holding Perunio's `despatches.id` UUID and the Cat.59 code), which can only be rejected. It must refuse every EV draft. | ERROR 3374 (event tag); the reference itself breaks 2692 / 3441 / 3380 / 3382, OBSERV 4371 | `despatch_evento.go` | despatch/04 |
+| F9 | GRE puts the punto de partida in `cac:Shipment/cac:OriginAddress` and the plate in `ShipmentStage/TransportMeans/RoadTransport`, the GRE 1.0 shapes. GRE 2.0 uses `Delivery/Despatch/DespatchAddress` and `TransportHandlingUnit/TransportEquipment/cbc:ID`; SUNAT's GRE rules and its GRE validator XSL never mention `OriginAddress` or `RoadTransport`, so SUNAT reports the real tags as missing. The non-pending goldens despatch/01–03 still show the old shape. | ERROR 2775, 2577 (DespatchAddress), 2566 (plate) | `despatch_common.go` `buildShipment` | despatch/06 |
 | F10 | Any character outside ISO-8859-1 (curly quotes, em dash, €) makes `BuildDocumentXML` fail, so the issue ends with `XML_BUILD_ERROR`. Validation does not catch it first. | — | `encoding.go` | invoice/35 |
 | F11 | RA `cbc:ReferenceDate` is set to the RA's own issue date. It must be the issue date of the voided documents, and `model.VoidRequest` has no field for it. Voiding anything from a previous day is rejected. | ERROR 2375 | `voided.go`, `model.VoidRequest` | voided/03 |
+| F12 | RC lines carry no `cbc:Percent` on the IGV subtotal. From 2027-01-01 it is required, 18 or 10.5 on a boleta. | ERROR 2992, 3504, 3102 (from 2027-01-01) | `summary.go` `newSummaryTax` | summary/07 |
+| F13 | RC reports operaciones gratuitas under Cat.11 `05`, which is deactivated from 2027-01-01 (replaced by 06 gravada, 07 exonerada, 08 inafecta, 09 exportación, plus an "IGV gratuitas" 9996 `cac:TaxTotal`). `model.SummaryItem` has only `totalFree`. | Cat.11; ERROR 3051, 2992, 3504 (from 2027-01-01) | `buildSummaryLine`, `model.SummaryItem` | summary/08 |
+| F14 | RC lines have no customer name (new field 10.3, `cac:PartyLegalEntity/cbc:RegistrationName`); `model.SummaryItem` has no field for it. | OBSERV until 2026-12-31, then ERROR 2022 | `buildSummaryLine`, `model.SummaryItem` | summary/09 |
+| F15 | The line IGV rate is fixed per Cat.07 código (always 18.00), so a document taxed at 10.5 % declares 18.00. | ERROR 3103, 3462; OBSERV 4439 (issuer must be in padrón 01) | `sunat.Cat07Percent` via `newLineTaxCategory` | invoice/38 |
+| F16 | GRE transportista puts the remitente in `cac:SellerSupplierParty`, which the Transportista sheet and XSL do not know. It belongs in `Shipment/Delivery/Despatch/DespatchParty`. | ERROR 3383, 2541, 3387 | `despatch_transportista.go` | despatch/08 |
+| F17 | The whole driver name goes in `DriverPerson/cbc:FirstName`; `cbc:FamilyName` (apellidos) is never emitted. Every guía with a driver is rejected. | ERROR 3361 (3360) | `buildShipment`, `model.Despatch.DriverName` | despatch/09 |
+| F18 | No "fecha de entrega de bienes al transportista" (`ShipmentStage/LoadingTransportEvent/cbc:OccurrenceDate`) on transporte público guías; mandatory since 2026-06-01. `model.Despatch` has no field. | ERROR 3617, 3618, 3619 | `buildShipment`, `model.Despatch` | despatch/10 |
+| F19 | `transferReasonDesc` is emitted as `Shipment/cbc:Information`, reserved for motivos 08/09/19; the description belongs in `cbc:HandlingInstructions`, mandatory for motivo 13. | ERROR 3418, 3457 | `buildShipment` | despatch/11 |
+| F20 | `cbc:IssueTime` is mandatory, but `model.Despatch.IssueTime` is optional and the builder silently drops the tag. | ERROR 3437 | `newDespatchAdviceShell` | despatch/12 |
+| F21 | `buildShipment` decides by modalidad, not document type: a 31 saved with Cat.18 01 gets a `CarrierParty` holding the remitente's RUC and no vehicle or driver, which a GRE transportista always declares. | ERROR 2566, 3357 | `buildShipment` | despatch/13 |
+| F22 | Related documents go out as `cac:OrderReference`, which no GRE rule or XSL reads, and `relatedDocType` is dropped. GRE 2.0 expects `cac:AdditionalDocumentReference` (Cat.61 code, SERIE-NÚMERO, issuer RUC). | ERROR 2692, 3441, 3380, 3382; OBSERV 4371 | `despatch_remitente.go` | despatch/14 |
+
+## Upcoming rules
+
+SUNAT dates some changes in the workbook's *Control de Cambios*. Rules that already have a case carry `effective:`.
+
+| from | rule | case |
+|---|---|---|
+| 2026-06-01 (in force) | GRE: fecha de entrega de bienes al transportista on transporte público (ERR 3617/3618/3619, replacing OBS 4385/4386 and ERR 3407) | despatch/10 |
+| 2027-01-01 | RC: IGV rate on each line subtotal (ERR 2992/3504/3102) | summary/07 |
+| 2027-01-01 | RC: gratuitas split into Cat.11 06–09 and an "IGV gratuitas" TaxTotal (ERR 3051 …) | summary/08 |
+| 2027-01-01 | RC: customer name, field 10.3 (ERR 2022; OBSERV until 2026-12-31) | summary/09 |
+| 2027-01-01 | NC: only one `BillingReference` for every motivo except 11 (ERR 3261); NC amounts may not exceed the original's (ERR 3503, needs the original, not checkable from the XML) | — (the builder already emits one reference) |
+| 2027-01-01 | ND: new motivo 13 Penalidades (Cat.10), with no `BillingReference` required (ERR 2524) and no IGV (ERR 3507); one `BillingReference` for every motivo (ERR 3194) | — (motivo 13 is not offered yet) |
+| 2027-01-01 | Código de producto SUNAT format becomes an error (ERR 3496) | — (not emitted) |
+| 2027-01-01 | Cat.01 25 and the DAE documents 28/56 in NC/ND/RA | — (not issued) |
+
+## Not covered yet
+
+Rules SUNAT checks that no case pins today. Each is either an observación or a feature Perunio does not offer.
+
+- GRE observaciones: carrier MTC number (4391; `carrierMtc` is ignored), vehicle TUC (4399), freight-payer indicator (4388), proveedor on motivo 02 (4375).
+- GRE motivo 04 needs `AddressTypeCode` on both addresses (ERR 3365/3369); motivos 08/09/19 need customs documents (ERR 3440/3493/3483). The builder can emit neither.
+- Secondary vehicles (`vehiclePlates`) are ignored (no rejection, data loss).
+- Validation-layer gaps (not XML): destinatario = / ≠ remitente by motivo (ERR 2554/2555), carrier name (2563), driver document (2568), start date (3406), issue date in the future (2108).
 
 Settled along the way:
 
-- **Gratuito and the document 9996 subtotal.** The old string test said the document must *not* carry a 9996 subtotal. CLAUDE.md (accepted CDRs) and rule 2638 say it must. `invoice/16` pins it.
+- **Gratuito and the document 9996 subtotal.** The old string test said the document must *not* carry a 9996 subtotal. CLAUDE.md (accepted CDRs) and rules 2638/2641 say it must. `invoice/16` pins it.
+- **A fallback IGV subtotal on a gratuita** is rejected as ERROR 3277 (the 1000 base must equal Σ gravado lines). 3224 is the line-level rule: a 02 referencial without a 9996 line subtotal.
+- **`cbc:Percent` 0.00** is valid: SUNAT's XSL implements 3102 with the regex `^(?!(0)[0-9]+$)[0-9]{1,3}(\.[0-9]{1,5})?$`, which accepts it, although the workbook text says "diferente de cero".
+- **Document-level `cbc:Percent`** is not validated: every Percent check in `ValidaExprRegFactura-2.0.1.xsl` runs in the line template. The builder emits it on the 9996 document subtotal (as greenter does); it is harmless.
+- **Detracción on a nota de crédito** is not validated: the NotaCredito2_0 sheet has no detracción rule. The nota de débito sheet does validate it (`debitnote/03`).
 - **`sac:AdditionalMonetaryTotal` 1004** (total gratuito) is UBL 2.0-era markup. The 2.1 validation workbook never reads it. It sits inside `ext:UBLExtensions`, where it is harmless, so it stays until someone decides to drop it.
 - **`cac:TaxCategory/cbc:ID`** (UN/ECE 5305 S/E/O/Z/G) is not validated by SUNAT 2.1, so the cases do not assert it. The builder emits `E` for 9996, while greenter emits `Z`.
 
@@ -180,10 +235,11 @@ Settled along the way:
 
 Everything lives in `resources/`. Its `README.md` lists each file's SUNAT publication date and where to get a newer one.
 
-- `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` is SUNAT's CPE validation workbook: every rule with its XPath and return code, one sheet per document type (factura, boleta, NC, ND, Resumen Diario, Comunicación de Baja, …), plus the current catálogos.
+- `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` is SUNAT's CPE validation workbook: every rule with its XPath and return code, one sheet per document type (factura, boleta, NC, ND, Resumen Diario, Comunicación de Baja, …), the current catálogos, and the Control de Cambios with effective dates.
 - `resources/reglas/reglas-validacion-gre-2026-09-25.xlsx` holds the same for GRE Remitente 2.0 and Transportista 2.0.
-- `resources/xsl/cpe/` and `resources/xsl/gre/` are SUNAT's executable validators (`ValidaExprReg*.xsl`), the checks SUNAT and its Facturador run.
+- `resources/xsl/cpe/` and `resources/xsl/gre/` are SUNAT's executable validators (`ValidaExprReg*.xsl`), the checks SUNAT and its Facturador run. Where a workbook sentence is ambiguous, the XSL decides.
 - `resources/xsd/2.1/` holds the OASIS UBL 2.1 schemas (Invoice, CreditNote, DebitNote, DespatchAdvice). `resources/xsd/2.0/` holds SUNAT's UBL 2.0 schemas, including `SummaryDocuments`, `VoidedDocuments` and the `sac` extensions.
 - `resources/guias/` holds SUNAT's "Guía de elaboración" for factura, boleta, NC and ND (UBL 2.1, May 2017), the Resumen Diario 1.1 guide (Jan 2018) and the manual del programador.
+- `resources/normas/rs-123-2022-sunat.pdf` is the GRE 2.0 regime (R.S. 123-2022/SUNAT).
 - CLAUDE.md › Critical SUNAT Gotchas lists rules learned from real SUNAT beta CDRs.
 - greenter (`github.com/thegreenter/greenter`) is a widely used open-source reference implementation.

@@ -1,0 +1,39 @@
+case: igv-10-5
+document: cpe
+why: >-
+  A factura taxed at the reduced 10.5 % IGV rate that SUNAT's rules accept
+  next to 18 % (3279: 'por la tasa vigente del IGV (18.00 o 10.50)'; OBSERV
+  4439 checks the issuer is in padrón 01, the MYPE
+  restaurantes/hoteles/alojamientos regime). The line states the rate it was
+  taxed at (105.00 / 1000.00 = 10.5 %), every IGV line shares it (3462), and
+  the totals follow it.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+  - "resources/xsl/cpe/ValidaExprRegFactura-2.0.1.xsl"
+pending: >-
+  Finding F15: sunat.Cat07Percent is fixed per Cat.07 código (always 18.00
+  for 10), so the builder writes cbc:Percent 18.00 on a line whose IGV was
+  computed at 10.5 % and SUNAT answers ERROR 3103.
+assert:
+  - xpath: "number(/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+    sunat: "2992/3103/3462"
+    why: >-
+      The line's own rate, not the general 18 %
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "105.00"
+    sunat: "3103"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "105.00"
+    sunat: "3291"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "105.00"
+    sunat: "3294"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1105.00"
+    sunat: "3279"
+    why: >-
+      1000 + 1000 × 10.5 %
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
+    equals: "110.50"
+    sunat: "3270"

@@ -1,0 +1,22 @@
+case: motivo-otros-descripcion
+document: despatch
+why: >-
+  The description of the motivo de traslado goes in
+  cbc:HandlingInstructions, and only motivo 13 (Otros) requires it.
+  cbc:Information is reserved for motivos 08, 09 and 19 (importación,
+  exportación, mercancía extranjera) and rejected on any other.
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+pending: >-
+  Finding F19: buildShipment maps transferReasonDesc to
+  cbc:Shipment/cbc:Information (ERR 3418 for motivo 13) and never emits
+  cbc:HandlingInstructions (ERR 3457).
+assert:
+  - xpath: "/*/cac:Shipment/cbc:HandlingCode"
+    equals: "13"
+  - xpath: "/*/cac:Shipment/cbc:HandlingInstructions"
+    equals: "TRASLADO DE MUESTRAS A FERIA"
+    sunat: "3457"
+  - xpath: "/*/cac:Shipment/cbc:Information"
+    absent: true
+    sunat: "3418"

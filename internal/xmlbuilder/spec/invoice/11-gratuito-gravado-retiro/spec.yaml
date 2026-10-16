@@ -15,9 +15,11 @@ assert:
     sunat: "2640"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount"
     equals: "100.00"
-    sunat: "3272"
+    sunat: "3271/3272"
     why: >-
-      Valor referencial unitario, IGV-EXCLUSIVE (not the 118 gross)
+      Valor referencial unitario, IGV-EXCLUSIVE (not the 118 gross). SUNAT
+      recomputes the line value as referencial × cantidad (3271) and the
+      line base must equal that value (3272)
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceTypeCode"
     equals: "02"
     sunat: "3234"
@@ -30,10 +32,14 @@ assert:
     equals: "100.00"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
     equals: "18.00"
-    sunat: "3111"
+    sunat: "3103"
+    why: >-
+      Would-be IGV = base × rate, as for any Cat.07 10-17 line
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
     equals: "18.00"
-    sunat: "2992/3103"
+    sunat: "2992/2993"
+    why: >-
+      Required (2992) and non-zero for Cat.07 11-17 (2993)
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
     equals: "11"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cac:TaxScheme/cbc:Name"
@@ -50,14 +56,21 @@ assert:
       SUNAT keys gratuito on tributo 9996; greenter never emits it
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
     equals: "100.00"
-    sunat: "2638/3224"
+    sunat: "2638/2641/3276"
     why: >-
-      Missing it makes the operation look onerosa
+      Σ of the gratuito line values; missing, or 0 while a line declares a
+      02 referencial, is rejected
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
     equals: "18.00"
+    sunat: "3302"
+    why: >-
+      Σ of the gratuito lines' would-be IGV
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
     equals: "18.00"
-    sunat: "2992"
+    why: >-
+      SUNAT validates the rate on lines only (its 2992/2993 checks run in
+      the line template of the factura XSL); the document tag matches
+      greenter and accepted CDRs and is harmless
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
     count: 0
   - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"

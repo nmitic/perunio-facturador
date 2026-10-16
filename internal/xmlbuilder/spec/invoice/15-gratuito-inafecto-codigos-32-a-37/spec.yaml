@@ -16,6 +16,6 @@ assert:
     equals: "600.00"
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
     count: 0
-    sunat: "3224"
+    sunat: "3277"
   - xpath: "//cbc:Percent[.='18.00']"
     count: 0

@@ -5,9 +5,10 @@ why: >-
   cac:Delivery/cac:Despatch/cac:DespatchAddress and the vehicle plate is
   cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID. SUNAT's GRE rules
   and its GRE validator XSL know no cac:OriginAddress and no
-  cac:RoadTransport.
+  cac:RoadTransport, so SUNAT ignores them and reports the real tags as
+  missing.
 sources:
-  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
   - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
 pending: >-
   Finding F9: the builder emits cac:Shipment/cac:OriginAddress and
@@ -15,7 +16,10 @@ pending: >-
 assert:
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID"
     equals: "150101"
+    sunat: "2775"
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cac:AddressLine/cbc:Line"
     equals: "AV. ORIGEN 100"
+    sunat: "2577"
   - xpath: "/*/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID"
     equals: "ABC123"
+    sunat: "2566/2567"

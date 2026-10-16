@@ -23,7 +23,7 @@ There is no separate GRE "guía de elaboración" PDF for GRE 2.0. The GRE rules 
 SUNAT republishes the validation rules several times a year; the guides have not changed since 2017/2018.
 
 1. Drop the new downloads into `resources/incoming/`.
-2. Compare each one with what is here: publication date, and for a rules workbook a rule-by-rule diff, including its *Control de Cambios* sheet. Rules with a future effective date are noted in the spec case that depends on them.
+2. Compare each one with what is here: publication date, and for a rules workbook a rule-by-rule diff, including its *Control de Cambios* sheet. A rule with a future effective date gets a spec case marked `effective: "YYYY-MM-DD"` and a row in `internal/xmlbuilder/spec/README.md` › Upcoming rules. When a workbook sentence is ambiguous, check the matching `ValidaExprReg*.xsl`: it is what SUNAT executes.
 3. Replace the outdated file (keep the `name-YYYY-MM-DD` pattern), update this table and every `sources:` reference under `internal/xmlbuilder/spec/`, then delete `incoming/`.
 
 Old versions stay in git history. The February 2026 CPE workbook (`AjustesValidacionesCPEv20260212.xlsx`) and the SFS input-format annex (`AnexosIyII_Formato1.3.4.xlsx`, removed as unrelated to the XML) are in commit `b00a315`.

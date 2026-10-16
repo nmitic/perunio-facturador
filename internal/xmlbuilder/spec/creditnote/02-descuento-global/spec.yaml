@@ -5,7 +5,8 @@ why: >-
   honour a document cac:AllowanceCharge on a CreditNote; it reconciles Σ
   line valores de venta with the gravado total (fault 3277). So the discount
   is baked into the line (1000 → 900) and no AllowanceCharge appears
-  anywhere.
+  anywhere. (The note modifies a factura, 01, so the check is ERROR 3277; on
+  a note that modifies a boleta it is OBSERV 4299.)
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"

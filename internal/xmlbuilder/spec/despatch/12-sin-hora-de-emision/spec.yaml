@@ -1,0 +1,13 @@
+case: sin-hora-de-emision
+document: despatch
+why: >-
+  cbc:IssueTime is mandatory on every GRE. A draft without an issue time is
+  refused rather than sent without the tag.
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0"
+pending: >-
+  Finding F20: model.Despatch.IssueTime is optional and
+  newDespatchAdviceShell silently omits cbc:IssueTime when it is empty (ERR
+  3437).
+error_contains: "issueTime"

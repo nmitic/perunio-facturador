@@ -13,7 +13,7 @@ assert:
     count: 5
   - xpath: "/*/cac:InvoiceLine[cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount='100.00']"
     count: 5
-    sunat: "3272"
+    sunat: "3271/3272"
   - xpath: "//cbc:PriceAmount[.='118.00']"
     count: 0
     why: >-

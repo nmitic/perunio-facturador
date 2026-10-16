@@ -1,7 +1,9 @@
 case: descuento-global
 document: cpe
 why: >-
-  The descuento global markup on a boleta is identical to a factura's.
+  The descuento global markup on a boleta is identical to a factura's. SUNAT
+  runs the same arithmetic on a boleta but answers with observaciones
+  (4299/4307/4309/4310), not the factura's rejections (3277/3300/3278/3279).
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
 assert:
@@ -22,22 +24,22 @@ assert:
       - "/*/cac:TaxTotal"
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
     equals: "900.00"
-    sunat: "3277"
+    sunat: "4299"
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
     equals: "162.00"
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
     equals: "900.00"
-    sunat: "3278"
+    sunat: "4309"
     why: >-
       NET of the descuento global
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount"
     absent: true
-    sunat: "3300"
+    sunat: "4307"
     why: >-
       An afecta-base discount is NOT an AllowanceTotalAmount
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
     equals: "1062.00"
-    sunat: "3279"
+    sunat: "4310"
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
     equals: "1062.00"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cbc:LineExtensionAmount"

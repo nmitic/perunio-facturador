@@ -202,6 +202,8 @@ Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed
 | `POST /gre/{companyId}/{despatchId}/poll` | Poll the SUNAT ticket; base64-decode the CDR; persist outcome. | Body `{ environment? }`. |
 | `GET /gre/{companyId}/{despatchId}/files/{fileType}` | Presigned R2 URL. `fileType` ∈ `xml \| signed_xml \| zip \| cdr`. | → `{ url, fileType }`. |
 
+> **`EV` cannot reach SUNAT.** R.S. 123-2022/SUNAT (numeral 5.2) says a GRE por evento "se emite únicamente a través del SEE - SOL", and the GRE validators reject the event-type tag a por evento guía would carry (ERR 3374). Issuing an `EV` draft here can only end rejected. See `internal/xmlbuilder/spec/README.md` › Known deviations F8; the other open GRE deviations (F16–F22) are listed there too.
+
 ---
 
 ## Pipeline note — the `{ environment }` body

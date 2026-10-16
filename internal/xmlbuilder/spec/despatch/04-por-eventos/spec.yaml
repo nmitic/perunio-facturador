@@ -1,16 +1,19 @@
 case: por-eventos
 document: despatch
 why: >-
-  A GRE por eventos is a remitente (or transportista) guía that supersedes a
-  previous one: on the wire it carries the BASE type code (09 here, never
-  'EV'), and it references the guía it replaces.
+  A GRE por evento cannot be sent from a Sistema del Contribuyente. R.S.
+  123-2022/SUNAT (numeral 5.2, adding to art. 32 of R.S. 097-2012): 'La GRE
+  - por evento se emite únicamente a través del SEE - SOL'. Both GRE
+  validators also reject the event-type tag a por evento guía would carry
+  (ERR 3374: 'Este Tag es de uso exclusivo cuando se trata de una Guía por
+  eventos, y no debe ser enviado'). So the builder refuses every EV draft,
+  whatever it references, before anything is signed or sent.
 sources:
-  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
-assert:
-  - xpath: "/*/cbc:DespatchAdviceTypeCode"
-    equals: "09"
-    why: >-
-      EV is a Perunio marker and never reaches SUNAT
-  - xpath: "//*[.='EV']"
-    count: 0
-  - xpath: "/*/cac:AdditionalDocumentReference"
+  - "R.S. 123-2022/SUNAT, numeral 5.2 (resources/normas/rs-123-2022-sunat.pdf)"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 (ERR 3374)"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0 (ERR 3374)"
+pending: >-
+  Finding F8: BuildDespatchXML builds a por evento guía (base type code,
+  plus a cac:AdditionalDocumentReference holding Perunio's despatches.id
+  UUID and the Cat.59 event code) that SUNAT can only reject.
+error_contains: "SEE-SOL"

@@ -5,7 +5,9 @@ why: >-
   not divide evenly: the shares are rounded to the cent (33.33, 33.33) and
   the LAST line absorbs the remainder (33.34), so the lines add up to
   exactly 200.00. The net unit price of a 3-unit line keeps up to 10
-  decimals so that Quantity × Price reconciles.
+  decimals so that Quantity × Price reconciles. (The note modifies a
+  factura, 01, so the sum check is ERROR 3277; on a boleta it is OBSERV
+  4299.)
 sources:
   - "CLAUDE.md › Critical SUNAT Gotchas (verified against accepted SUNAT CDRs)"
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"

@@ -237,10 +237,13 @@ To change a catálogo, edit it in `perunio-sunat-catalogs`, tag, then
 - RC/RA use UBL **2.0**, NOT 2.1 — #1 cause of silent rejections
 - Encoding MUST be ISO-8859-1, not UTF-8
 - XMLDSig uses RSA-**SHA1** for SOAP interop
-- Tax tolerance: +/-1 cent on computed vs declared amounts
+- Tax tolerance: SUNAT recomputes totals and allows **±1 in the document currency** ("tolerancia + - 1", i.e. one sol, not one céntimo); the RC IGV check (OBS 4019) allows ±5
+- IGV rate: 18 %, or **10.5 %** for MYPE restaurantes/hoteles/alojamientos in padrón 01 (OBS 4439 otherwise); every IGV line of a document must declare the same rate (ERR 3462). The builder only emits 18 (spec F15)
 - Boleta > S/700 requires customer identity
-- NC on boletas: codes 04, 05, 08 are forbidden
-- RC deadline: 7 calendar days, max 500 lines per block
+- NC on boletas: motivos 04, 05, 08 get **OBSERV 4367** (accepted with a warning); our validator blocks them anyway
+- RC: a boleta can be anulada (estado 3) only within 7 days (ERR 2957); a late *adicionar* only gets OBS 4443. RA: 7 days (ERR 2957). Max 500 lines per RC block
+- GRE **por evento** is issued only in SEE-SOL (R.S. 123-2022, numeral 5.2), never through the API (spec F8)
+- Rules dated 2027-01-01 (RC rate and gratuitas split, RC customer name, ND motivo 13, NC single reference) are listed in `spec/README.md` › Upcoming rules
 
 ### Line discounts (descuento por ítem, Cat.53 "00")
 - **Invoices** (`cac:InvoiceLine`): keep `cac:Price/cbc:PriceAmount` at the **gross** valor unitario and emit a line `cac:AllowanceCharge` (`ChargeIndicator=false`, reason `00`, `MultiplierFactorNumeric`, `Amount`, `BaseAmount`). SUNAT recomputes `LineExtensionAmount = Price × Qty − Amount`; omitting the AllowanceCharge → **fault 3271**.
@@ -248,10 +251,10 @@ To change a catálogo, edit it in `perunio-sunat-catalogs`, tag, then
 - Per-line discounts are already in each line's `LineExtensionAmount`; do **not** also declare them as a document `cbc:AllowanceTotalAmount` (that's for global discounts only).
 
 ### Gratuito / free items (Cat.07 codes 11-16, 21, 31-37) — all verified against accepted SUNAT CDRs
-- Every gratuito line uses **tributo 9996 (GRA/FRE)**, `cac:Price/PriceAmount = 0`, and `PricingReference/AlternativeConditionPrice` PriceTypeCode **02** carrying the IGV-**exclusive** per-unit referencial (not the IGV-inclusive price → **fault 3272**).
+- Every gratuito line uses **tributo 9996 (GRA/FRE)**, `cac:Price/PriceAmount = 0`, and `PricingReference/AlternativeConditionPrice` PriceTypeCode **02** carrying the IGV-**exclusive** per-unit referencial (not the IGV-inclusive price → **fault 3271/3272**: SUNAT recomputes the line value as referencial × cantidad).
 - Line `cbc:LineExtensionAmount` must equal the line's base imponible (the referencial base), **not** 0 → otherwise **fault 3272**. The document `LegalMonetaryTotal` totals stay 0 (customer pays nothing).
-- The document `cac:TaxTotal` **must** include a `9996` subtotal aggregating the gratuito base + would-be IGV; document `cbc:TaxAmount` excludes gratuito IGV. Falling back to a `1000` (IGV) subtotal makes the op look onerosa → **fault 3224**.
-- Both line and document `9996` subtotals must carry a `cbc:Percent` rate tag (**fault 2992**): `18.00` for gravado-gratuito (11-16, IGV at 18%), `0.00` for exonerado/inafecto gratuito (21, 31-37, no IGV).
+- The document `cac:TaxTotal` **must** include a `9996` subtotal aggregating the gratuito base + would-be IGV (2638/2641/3276/3302); document `cbc:TaxAmount` excludes gratuito IGV. Falling back to a `1000` (IGV) subtotal makes the op look onerosa → **fault 3277** (the 1000 base must equal the Σ of gravado lines; 3224 is the line rule for a 02 referencial without a 9996 line subtotal).
+- Line `9996` subtotals must carry a `cbc:Percent` rate tag (**fault 2992**, non-zero for 11-17 → 2993): `18.00` for gravado-gratuito (11-16, IGV at 18%), `0.00` for exonerado/inafecto gratuito (21, 31-37, no IGV; SUNAT's 3102 regex accepts 0.00). SUNAT does not validate the document-level Percent; we emit it on the document 9996 subtotal too, as greenter does.
 - Reference: greenter's `Factura-Gratuita` output is the source of truth this matches.
 
 ## XML output spec (`internal/xmlbuilder/spec/`)
@@ -267,8 +270,12 @@ Read `spec/README.md` before touching a builder.
 - A new SUNAT rule or fault → add a case (or an invariant) citing the code from
   `resources/reglas/` (see `resources/README.md` for versions and how to update).
 - Known gaps are `pending:` cases (reported as SKIP); `spec/README.md` › Known
-  deviations lists them (F1-F11). Fixing one makes its case fail until `pending`
-  is removed — that is intended.
+  deviations lists them (F1-F22). Fixing one makes its case fail until `pending`
+  is removed — that is intended. `effective:` on a case is the date SUNAT starts
+  enforcing its rule.
+- The runner needs `github.com/antchfx/xpath` **>= v1.3.9**: v1.3.3 lost the
+  context node after a relative path with a predicate and silently passed broken
+  documents (see `spec/README.md` › Running).
 - `TestSpecXSD` validates goldens against `resources/xsd/` (UBL 2.1 + SUNAT 2.0) when
   `xmllint` is installed (`apt install libxml2-utils`); it skips otherwise.
 

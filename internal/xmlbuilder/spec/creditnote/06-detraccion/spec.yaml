@@ -2,12 +2,14 @@ case: detraccion
 document: cpe
 why: >-
   A nota de crédito on a factura sujeta a detracción mirrors the detracción
-  block (leyenda 2006, cuenta BN, Detraccion PaymentTerms in PEN).
+  block (leyenda 2006, cuenta BN, Detraccion PaymentTerms in PEN). SUNAT's
+  NotaCredito2_0 sheet has no detracción rule at all, so SUNAT neither
+  requires nor checks this block on a note; these assertions pin Perunio's
+  output (the customer's copy shows the detracción), not a SUNAT rule.
 sources:
-  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0"
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaCredito2_0 (no detracción rules)"
 assert:
   - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
-    sunat: "4265"
   - xpath: "/*/cac:PaymentMeans/cbc:ID"
     equals: "Detraccion"
   - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
@@ -26,7 +28,6 @@ assert:
     equals: "141.60"
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
     equals: "PEN"
-    sunat: "3208"
   - before:
       - "/*/cac:PaymentMeans"
       - "/*/cac:PaymentTerms"

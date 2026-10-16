@@ -1,0 +1,32 @@
+case: documento-relacionado
+document: despatch
+why: >-
+  A document related to the guía (here the factura F001-123 that covers the
+  goods) is a cac:AdditionalDocumentReference: GRE Cat.61 code,
+  SERIE-NÚMERO, the code's name, and the RUC of the document's issuer.
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+  - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
+pending: >-
+  Finding F22: buildDespatchRemitenteXML emits the related document as
+  cac:OrderReference, which no GRE rule or XSL reads, and drops
+  relatedDocType.
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "01"
+    sunat: "2692"
+    why: >-
+      GRE Cat.61 01 = Factura
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    matches: "^F001-0*123$"
+    sunat: "3441"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentType"
+    sunat: "4371"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID"
+    equals: "20100113612"
+    sunat: "3380"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+    sunat: "3382"
+  - xpath: "/*/cac:OrderReference"
+    absent: true

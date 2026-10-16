@@ -18,16 +18,20 @@ assert:
     equals: "0.00"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
     equals: "0.00"
-    sunat: "2992"
+    sunat: "2992/3102"
+    why: >-
+      0.00 is a valid rate: the 3102 regex in SUNAT's XSL accepts it,
+      although the workbook text says 'diferente de cero'
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxableAmount"
     equals: "100.00"
-    sunat: "3224"
+    sunat: "2641/3276"
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent"
     equals: "0.00"
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']"
     count: 0
-    sunat: "3224"
+    sunat: "3277"
     why: >-
-      An IGV fallback subtotal makes a gratuita look onerosa
+      A 1000 subtotal's base must equal the Σ of the gravado lines, 0 here,
+      so an IGV fallback subtotal carrying the gratuito base is rejected
   - xpath: "//cbc:Percent[.='18.00']"
     count: 0

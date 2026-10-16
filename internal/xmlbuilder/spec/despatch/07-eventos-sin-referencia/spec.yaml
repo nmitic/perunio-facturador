@@ -2,4 +2,8 @@ case: eventos-sin-referencia
 document: despatch
 why: >-
   A por eventos guía without the guía it supersedes is refused, never sent.
+  (SUNAT accepts no por evento guía from this channel at all, see
+  despatch/04: once F8 is fixed this case folds into that one.)
+sources:
+  - "R.S. 123-2022/SUNAT, numeral 5.2 (resources/normas/rs-123-2022-sunat.pdf)"
 error_contains: "requires OriginalGreID"

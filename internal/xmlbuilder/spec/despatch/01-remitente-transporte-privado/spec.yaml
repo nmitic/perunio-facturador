@@ -3,67 +3,101 @@ document: despatch
 why: >-
   A GRE remitente (09) for a venta (Cat.20 01) moved in the emisor's own
   vehicle (Cat.18 02): the driver and plate travel in the shipment stage;
-  weight, packages, start date and punto de llegada are always present.
+  weight, packages, start date and punto de llegada are always present. (The
+  punto de partida and the plate still use the GRE 1.0 shapes, finding F9 —
+  see despatch/06.)
 sources:
-  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 / Guía-Transportista2_0"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+  - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
 assert:
   - xpath: "local-name(/*)"
     equals: "DespatchAdvice"
+    sunat: "0306"
   - xpath: "/*/cbc:ID"
     equals: "T001-00000001"
+    sunat: "1001"
   - xpath: "/*/cbc:IssueDate"
     equals: "2024-01-16"
+    sunat: "3436"
   - xpath: "/*/cbc:IssueTime"
     equals: "10:00:00"
+    sunat: "3437/3438"
   - xpath: "/*/cbc:DespatchAdviceTypeCode"
     equals: "09"
+    sunat: "1051"
   - xpath: "/*/cac:DespatchSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID"
     equals: "20100113612"
+    sunat: "1034"
   - xpath: "/*/cac:DeliveryCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"
     equals: "20601327318"
+    sunat: "2757/2758"
   - xpath: "/*/cac:DeliveryCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID/@schemeID"
     equals: "6"
+    sunat: "2759/2760"
   - xpath: "/*/cac:Shipment/cbc:ID"
     equals: "SUNAT_Envio"
+    why: >-
+      Fixed value; the GRE sheets mark it 'sin validación'
   - xpath: "/*/cac:Shipment/cbc:HandlingCode"
     equals: "01"
+    sunat: "3404/3405"
     why: >-
       Cat.20 motivo de traslado
   - xpath: "/*/cac:Shipment/cbc:GrossWeightMeasure"
     equals: "125.50"
+    sunat: "2880/2523"
   - xpath: "/*/cac:Shipment/cbc:GrossWeightMeasure/@unitCode"
     equals: "KGM"
+    sunat: "2881/2523"
   - xpath: "/*/cac:Shipment/cbc:TotalTransportHandlingUnitQuantity"
     equals: "3"
+    sunat: "3489"
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cbc:TransportModeCode"
     equals: "02"
+    sunat: "2532/2773"
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:TransitPeriod/cbc:StartDate"
     equals: "2024-01-16"
+    sunat: "3406/3343"
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cbc:ID"
     equals: "12345678"
+    sunat: "2568/2569"
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cbc:JobTitle"
     equals: "Principal"
+    sunat: "3357"
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson/cac:IdentityDocumentReference/cbc:ID"
     equals: "Q12345678"
+    sunat: "2572/2573"
     why: >-
       Licencia de conducir
   - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty"
     absent: true
+    sunat: "3347"
+    why: >-
+      Transporte privado declares no carrier
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:DeliveryAddress/cbc:ID"
     equals: "040101"
+    sunat: "2775/2776/3368"
     why: >-
       Ubigeo del punto de llegada
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:DeliveryAddress/cac:AddressLine/cbc:Line"
     equals: "AV. DESTINO 200"
+    sunat: "2574"
   - xpath: "/*/cac:DespatchLine"
     count: 1
   - xpath: "/*/cac:DespatchLine/cbc:DeliveredQuantity"
     equals: "3"
+    sunat: "2580/2780"
   - xpath: "/*/cac:DespatchLine/cbc:DeliveredQuantity/@unitCode"
     equals: "NIU"
+    sunat: "2883/4320"
   - xpath: "/*/cac:DespatchLine/cac:Item/cbc:Description"
     equals: "CAJAS DE CARTON"
+    sunat: "2781"
   - xpath: "/*/cac:DespatchLine/cac:Item/cac:SellersItemIdentification/cbc:ID"
     equals: "P-001"
+    sunat: "4085"
   - xpath: "/*/cac:SellerSupplierParty"
     absent: true
+    sunat: "4054"
+    why: >-
+      A proveedor is only declared for motivos 02, 07 and 13

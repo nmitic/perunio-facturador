@@ -6,9 +6,17 @@
 # tolerance is written as two comparisons. Arithmetic tolerances are SUNAT's own
 # (+/- 1 in the document currency) unless stated otherwise.
 #
-# Sources: resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx, sheets Factura2_0,
-# Boleta2_0, NotaCredito2_0, NotaDebito2_0, Resumen Diario1_1 and Comunicación de
-# Baja1_0. `sunat` is the return code SUNAT answers with when the rule breaks.
+# Sources: resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx (sheets
+# Factura2_0, Boleta2_0, NotaCredito2_0, NotaDebito2_0, Resumen Diario1_1,
+# Comunicación de Baja1_0), resources/reglas/reglas-validacion-gre-2026-09-25.xlsx
+# (Guía-Remitente2_0, Guía-Transportista2_0), and the formulas in SUNAT's
+# validators under resources/xsl/.
+#
+# `sunat` is the return code SUNAT answers with when the rule breaks. Where the
+# document types differ it lists each: a boleta answers most arithmetic with an
+# observación; a nota (NC/ND) answers with the factura's ERROR only when it
+# modifies a factura (01) and with the boleta's observación otherwise. Codes
+# 4000 and up are observaciones: the document is accepted with a warning.
 #
 # Expressions stay inside the XPath 1.0 subset that every engine we know of
 # evaluates the same way: a parenthesized union carries at most ONE predicate
@@ -26,7 +34,7 @@ invariants:
 
   - id: INV-SIGNATURE-SLOT
     applies_to: ["*"]
-    sunat: "Firma sheet"
+    sunat: "CPE: Firma sheet · GRE: 1059"
     why: >-
       Exactly one ds:Signature template, with Id SignatureSP, inside the LAST
       ext:UBLExtension. The signer fills this slot; a second template or one in
@@ -37,7 +45,7 @@ invariants:
 
   - id: INV-SIGNATURE-REF
     applies_to: ["*"]
-    sunat: "Firma sheet"
+    sunat: "CPE: Firma sheet · GRE: none (no GRE rule reads cac:Signature)"
     why: cac:Signature points at the XMLDSig block by its Id.
     assert: >-
       /*/cac:Signature/cbc:ID = 'SignatureSP' and
@@ -46,9 +54,15 @@ invariants:
   # --- UBL version (the #1 cause of silent rejections) ----------------------
 
   - id: INV-UBL-2.1
-    applies_to: [Invoice, CreditNote, DebitNote, DespatchAdvice]
+    applies_to: [Invoice, CreditNote, DebitNote]
     sunat: "2074 / 2072"
-    why: Comprobantes and GRE are UBL 2.1 with CustomizationID 2.0.
+    why: Comprobantes are UBL 2.1 with CustomizationID 2.0.
+    assert: /*/cbc:UBLVersionID = '2.1' and /*/cbc:CustomizationID = '2.0'
+
+  - id: INV-UBL-GRE
+    applies_to: [DespatchAdvice]
+    sunat: "2111 / 2110 (UBLVersionID) · 2113 / 2112 (CustomizationID)"
+    why: The GRE 2.0 is UBL 2.1 with CustomizationID 2.0; GRE uses its own codes for it.
     assert: /*/cbc:UBLVersionID = '2.1' and /*/cbc:CustomizationID = '2.0'
 
   - id: INV-UBL-RC
@@ -93,7 +107,7 @@ invariants:
 
   - id: INV-DETRACCION-PEN
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3208"
+    sunat: "factura, boleta, ND 3208 · NC: no detracción rules"
     why: The detracción monto is always declared in soles.
     assert: count(/*/cac:PaymentTerms[cbc:ID = 'Detraccion']//*[@currencyID != 'PEN']) = 0
 
@@ -101,7 +115,7 @@ invariants:
 
   - id: INV-LINE-ID
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "2023 / 2752"
+    sunat: "factura, boleta 2023 / 2752 · NC, ND 2752"
     why: Line numbers are 1, 2, 3 … in document order, never repeated.
     assert: >-
       count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)
@@ -109,11 +123,35 @@ invariants:
 
   - id: INV-LINE-PRICING-REFERENCE
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "2028"
+    sunat: "factura, boleta 2028 · NC, ND: mandatory field without its own code"
     why: Every line carries cac:PricingReference/cac:AlternativeConditionPrice, gratuito lines included.
     assert: >-
       count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)
         [not(cac:PricingReference/cac:AlternativeConditionPrice/cbc:PriceAmount)]) = 0
+
+  - id: INV-LINE-UNIT-PRICE
+    applies_to: [Invoice, DebitNote]
+    sunat: "factura 3270 · boleta 4287 · ND 3270, or 4287 when it does not modify a 01 · NC: no rule"
+    why: >-
+      On an onerosa line the precio de venta unitario (PricingReference, Cat.16
+      01) is (LineExtensionAmount + the line's tax total − line descuentos that
+      do not affect the base (Cat.53 01) + line cargos that do not affect it
+      (48)) ÷ quantity, within ±1. This is the formula of
+      ValidaExprRegFactura-2.0.1.xsl, PrecioUnitarioCalculado.
+    assert: >-
+      count((/*/cac:InvoiceLine | /*/cac:DebitNoteLine)
+        [not(cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996'][cbc:TaxableAmount > 0]) and
+         (sum(cac:PricingReference/cac:AlternativeConditionPrice[cbc:PriceTypeCode = '01']/cbc:PriceAmount)
+            - (cbc:LineExtensionAmount + cac:TaxTotal/cbc:TaxAmount
+               - sum(cac:AllowanceCharge[cbc:AllowanceChargeReasonCode = '01']/cbc:Amount)
+               + sum(cac:AllowanceCharge[cbc:AllowanceChargeReasonCode = '48']/cbc:Amount))
+              div (cbc:InvoicedQuantity | cbc:DebitedQuantity) > 1
+          or
+          (cbc:LineExtensionAmount + cac:TaxTotal/cbc:TaxAmount
+               - sum(cac:AllowanceCharge[cbc:AllowanceChargeReasonCode = '01']/cbc:Amount)
+               + sum(cac:AllowanceCharge[cbc:AllowanceChargeReasonCode = '48']/cbc:Amount))
+              div (cbc:InvoicedQuantity | cbc:DebitedQuantity)
+            - sum(cac:PricingReference/cac:AlternativeConditionPrice[cbc:PriceTypeCode = '01']/cbc:PriceAmount) > 1)]) = 0
 
   - id: INV-LINE-TAX-TOTAL
     applies_to: [Invoice, CreditNote, DebitNote]
@@ -124,12 +162,61 @@ invariants:
 
   - id: INV-LINE-PERCENT
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "2992"
-    why: Every line tax subtotal except ICBPER (7152) declares its rate in cbc:Percent — ISC and gratuito included.
+    sunat: "2992 / 3102"
+    why: >-
+      Every line tax subtotal except ICBPER (7152) declares its rate in
+      cbc:Percent — ISC and gratuito included (2992) — as a decimal of up to 3
+      integers and 5 decimals (3102). 0.00 is a valid rate: SUNAT's XSL regex
+      ^(?!(0)[0-9]+$)[0-9]{1,3}(\.[0-9]{1,5})?$ accepts it, although the
+      workbook text says "diferente de cero". XPath 1.0 has no regex, so the
+      format is checked with string functions.
     assert: >-
       count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal
         [cac:TaxCategory/cac:TaxScheme/cbc:ID != '7152']
-        [not(cac:TaxCategory/cbc:Percent)]) = 0
+        [not(cac:TaxCategory/cbc:Percent)]) = 0 and
+      count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:Percent
+        [translate(., '0123456789.', '') != '' or
+         string-length(substring-before(concat(., '.'), '.')) < 1 or
+         string-length(substring-before(concat(., '.'), '.')) > 3 or
+         string-length(.) - string-length(translate(., '.', '')) > 1 or
+         (contains(., '.') and (string-length(substring-after(., '.')) < 1 or string-length(substring-after(., '.')) > 5))]) = 0
+
+  - id: INV-LINE-PERCENT-NONZERO
+    applies_to: [Invoice, CreditNote, DebitNote]
+    sunat: "2993 / 3104"
+    why: >-
+      A rate cannot be zero on a line whose tributo is charged: IGV or IVAP
+      (1000, 1016) and gratuito-gravado (9996 with Cat.07 11-17) lines (2993),
+      and ISC lines (3104), whenever the base is above zero.
+    assert: >-
+      count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal
+        [cbc:TaxableAmount > 0][cac:TaxCategory/cbc:Percent = 0]
+        [cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
+         cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or
+         (cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996' and
+          cac:TaxCategory/cbc:TaxExemptionReasonCode >= 11 and cac:TaxCategory/cbc:TaxExemptionReasonCode <= 17)]) = 0
+
+  - id: INV-LINE-SAME-IGV-RATE
+    applies_to: [Invoice, CreditNote, DebitNote]
+    sunat: "3462"
+    why: >-
+      Every line taxed with IGV (1000, and 9996 with Cat.07 11-16) declares the
+      same rate: "Todas las líneas afectas al IGV deben tener la misma tasa
+      vigente." Comparing a number with a node-set is true when ANY node
+      differs, so the count is 0 only when all rates are equal.
+    assert: >-
+      count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal
+        [cbc:TaxableAmount > 0]
+        [cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or
+         (cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996' and
+          cac:TaxCategory/cbc:TaxExemptionReasonCode >= 11 and cac:TaxCategory/cbc:TaxExemptionReasonCode <= 16)]
+        [number(cac:TaxCategory/cbc:Percent) !=
+         (/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal
+           [cbc:TaxableAmount > 0]
+           [cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or
+            (cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996' and
+             cac:TaxCategory/cbc:TaxExemptionReasonCode >= 11 and cac:TaxCategory/cbc:TaxExemptionReasonCode <= 16)]
+           /cac:TaxCategory/cbc:Percent]) = 0
 
   - id: INV-LINE-IGV-RATE
     applies_to: [Invoice, CreditNote, DebitNote]
@@ -161,7 +248,7 @@ invariants:
 
   - id: INV-LINE-TAX-SUM
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3292"
+    sunat: "factura 3292 · boleta 4293 · NC, ND 3292, or 4293 when not modifying a 01"
     why: >-
       A line's cac:TaxTotal/cbc:TaxAmount is the sum of its IGV, IVAP, ISC,
       ICBPER and otros tributos subtotals, within ±1. Gratuito lines (a 9996
@@ -182,7 +269,7 @@ invariants:
 
   - id: INV-INVOICE-LINE-VALUE
     applies_to: [Invoice]
-    sunat: "3271"
+    sunat: "factura 3271 · boleta 4288"
     why: >-
       Onerosa invoice line: LineExtensionAmount = Price × Quantity − line
       descuentos (Cat.53 '00') within ±1. This is why a discounted line keeps
@@ -200,7 +287,7 @@ invariants:
 
   - id: INV-NOTE-LINE-VALUE
     applies_to: [CreditNote, DebitNote]
-    sunat: "3271 (observed on notes; Guía XML Nota de Crédito 2.1, punto 29)"
+    sunat: "3271 when the note modifies a 01, else 4288 (Guía XML Nota de Crédito 2.1, punto 29)"
     why: >-
       Note lines have no line AllowanceCharge in SUNAT's model:
       LineExtensionAmount = Quantity × Price, so a descuento is baked into a NET
@@ -225,11 +312,11 @@ invariants:
 
   - id: INV-GRATUITO-PRICE-TYPE
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3234 / 3224"
+    sunat: "factura, boleta 3234 / 3224 · NC, ND 3224"
     why: >-
       Price type 02 (valor referencial) is used by gratuito lines and only by
-      them: a 9996 line must declare 02, and a line declaring 02 with a value
-      must be 9996.
+      them: a 9996 line must declare 02 (3234), and a line declaring 02 with a
+      value must be 9996 (3224).
     assert: >-
       count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)
         [cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996'][cbc:TaxableAmount > 0] and
@@ -240,11 +327,35 @@ invariants:
 
   - id: INV-GRATUITO-LEYENDA
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "2416"
+    sunat: "factura, boleta 2416 · NC, ND: no rule"
     why: Leyenda 1002 (transferencia gratuita) requires a non-zero document 9996 total.
     assert: >-
       not(/*/cbc:Note[@languageLocaleID = '1002']) or
       /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount > 0
+
+  - id: INV-DOC-GRATUITO-TOTALS
+    applies_to: [Invoice, CreditNote, DebitNote]
+    sunat: "2641 · factura 3276 / 3302 · boleta 4298 / 4311 · NC, ND 3276 / 3302 when modifying a 01, else 4298 / 4311 (NC has no amount rule)"
+    why: >-
+      When a line declares a 02 valor referencial above zero, the document 9996
+      subtotal's base is above zero (2641). That base is the sum of the
+      gratuito lines' LineExtensionAmount (3276) and its amount the sum of
+      their would-be IGV (3302), each within ±1. These are the formulas of
+      ValidaExprRegFactura-2.0.1.xsl, totalBaseGratuitasxLinea and
+      totalGratuitasxLinea.
+    assert: >-
+      (count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:PricingReference/cac:AlternativeConditionPrice[cbc:PriceTypeCode = '02'][cbc:PriceAmount > 0]) = 0 or
+       /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount > 0)
+      and
+      (not(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']) or (
+        /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount
+          - sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount > 0]/cbc:LineExtensionAmount) <= 1 and
+        sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount > 0]/cbc:LineExtensionAmount)
+          - /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxableAmount <= 1 and
+        /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxAmount
+          - sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996'][cbc:TaxableAmount > 0]/cbc:TaxAmount) <= 1 and
+        sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996'][cbc:TaxableAmount > 0]/cbc:TaxAmount)
+          - /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9996']/cbc:TaxAmount <= 1))
 
   # --- Document totals ------------------------------------------------------
 
@@ -273,7 +384,7 @@ invariants:
 
   - id: INV-DOC-TAX-SUM
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3294"
+    sunat: "factura 3294 · boleta 4301 · NC, ND 3294, or 4301 when not modifying a 01"
     why: >-
       The document cbc:TaxAmount is the sum of the IGV, IVAP, ISC, ICBPER and
       otros tributos subtotals (gratuita 9996 is informative and excluded),
@@ -291,7 +402,7 @@ invariants:
 
   - id: INV-DOC-ISC-BASE
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3296 / 3298"
+    sunat: "factura 3296 / 3298 · boleta 4303 / 4305 · NC, ND 3296 / 3298, or 4303 / 4305 when not modifying a 01"
     why: >-
       The document ISC (2000) subtotal's base and amount are the sums of the
       ISC line subtotals (non-gratuito lines), within ±1.
@@ -310,7 +421,7 @@ invariants:
 
   - id: INV-DOC-NONTAXED-BASES
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3273 / 3275 / 3274"
+    sunat: "factura 3273 / 3275 / 3274 · boleta 4295 / 4297 / 4296 · NC, ND the factura codes when modifying a 01, else the boleta's"
     why: >-
       A document 9995 / 9997 / 9998 subtotal's base is the sum of the
       LineExtensionAmount of the lines under that tributo, within ±1.
@@ -319,92 +430,149 @@ invariants:
       (not(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997']) or (/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997']/cbc:TaxableAmount - sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]/cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997']/cbc:LineExtensionAmount) <= 1 and sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]/cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997']/cbc:LineExtensionAmount) - /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997']/cbc:TaxableAmount <= 1)) and
       (not(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']) or (/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:TaxableAmount - sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]/cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:LineExtensionAmount) <= 1 and sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)[cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]/cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:LineExtensionAmount) - /*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:TaxableAmount <= 1))
 
+  # Factura and boleta totals. SUNAT checks these two only on an Invoice: the
+  # NotaCredito2_0 and NotaDebito2_0 sheets have no LineExtensionAmount or
+  # TaxInclusiveAmount rule, and a note's PayableAmount follows another formula
+  # (INV-NOTE-PAYABLE).
+
   - id: INV-DOC-LINE-EXTENSION
-    applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3278"
+    applies_to: [Invoice]
+    sunat: "factura 3278 · boleta 4309"
     why: >-
       The total valor de venta is the sum of the onerosa line values (lines
       under 1000, 1016, 9995, 9997, 9998 with a base > 0) minus the descuentos
-      globales that affect the base (Cat.53 '02'), within ±1.
+      globales that affect the base (Cat.53 '02') plus the cargos globales that
+      affect it ('49'), within ±1.
     assert: >-
-      (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount
-        - (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)
+      /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+        - (sum(/*/cac:InvoiceLine
              [cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]
                [cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
                 cac:TaxCategory/cac:TaxScheme/cbc:ID = '9995' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997' or
                 cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']]/cbc:LineExtensionAmount)
-           - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)) <= 1
+           - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+           + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount)) <= 1
       and
-      (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)
+      (sum(/*/cac:InvoiceLine
              [cac:TaxTotal/cac:TaxSubtotal[cbc:TaxableAmount > 0]
                [cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
                 cac:TaxCategory/cac:TaxScheme/cbc:ID = '9995' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997' or
                 cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']]/cbc:LineExtensionAmount)
-        - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount))
-        - (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount <= 1
+        - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+        + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount))
+        - /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount <= 1
 
   - id: INV-DOC-TAX-INCLUSIVE
-    applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3279"
+    applies_to: [Invoice]
+    sunat: "factura 3279 · boleta 4310"
     why: >-
-      Total precio de venta = total valor de venta + ISC + otros tributos +
-      (Σ line IGV bases − descuentos globales '02') × 18 %, within ±1. A
-      document with IVAP lines uses Σ IVAP bases × 4 % instead (and no ISC). Note
-      that the anticipo deduction does NOT enter here — it is taken off once, as
-      PrepaidAmount (see INV-DOC-PAYABLE).
+      Total precio de venta = total valor de venta + ISC + anticipos de ISC
+      (Cat.53 '20') + otros tributos + ICBPER + (Σ line IGV bases − descuentos
+      globales '02' + cargos globales '49') × the IGV rate, within ±1. The rate
+      is the one the lines declare ("según la tasa indicada en la línea": 18 or
+      10.5; INV-LINE-SAME-IGV-RATE makes the first gravado line's rate stand for
+      all of them). A document with IVAP lines uses Σ IVAP bases × the IVAP rate
+      instead, and no ISC. The anticipo deduction does NOT enter here — it is
+      taken off once, as PrepaidAmount (see INV-DOC-PAYABLE).
     assert: >-
       (
-        count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'][cbc:TaxableAmount > 0]) = 0 and
-        (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount - (
-          (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount
-          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999']/cbc:TaxAmount)
-          + (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000']/cbc:TaxableAmount)
-             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)) * 0.18
+        count(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'][cbc:TaxableAmount > 0]) = 0 and
+        /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount - (
+          /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
+          + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '20']/cbc:Amount)
+          + (sum(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000']/cbc:TaxableAmount)
+             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+             + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount))
+            * sum((/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000'])[1]/cac:TaxCategory/cbc:Percent) div 100
         ) <= 1 and
         (
-          (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount
-          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999']/cbc:TaxAmount)
-          + (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000']/cbc:TaxableAmount)
-             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)) * 0.18
-        ) - (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount <= 1
+          /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
+          + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '20']/cbc:Amount)
+          + (sum(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000']/cbc:TaxableAmount)
+             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+             + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount))
+            * sum((/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000'])[1]/cac:TaxCategory/cbc:Percent) div 100
+        ) - /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount <= 1
       )
       or
       (
-        count((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'][cbc:TaxableAmount > 0]) > 0 and
-        (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount - (
-          (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount
-          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999']/cbc:TaxAmount)
-          + (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016']/cbc:TaxableAmount)
-             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)) * 0.04
+        count(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'][cbc:TaxableAmount > 0]) > 0 and
+        /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount - (
+          /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
+          + (sum(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016']/cbc:TaxableAmount)
+             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+             + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount))
+            * sum((/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'])[1]/cac:TaxCategory/cbc:Percent) div 100
         ) <= 1 and
         (
-          (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:LineExtensionAmount
-          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999']/cbc:TaxAmount)
-          + (sum((/*/cac:InvoiceLine | /*/cac:CreditNoteLine | /*/cac:DebitNoteLine)/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016']/cbc:TaxableAmount)
-             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)) * 0.04
-        ) - (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount <= 1
+          /*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount
+          + sum(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
+          + (sum(/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016']/cbc:TaxableAmount)
+             - sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'false'][cbc:AllowanceChargeReasonCode = '02']/cbc:Amount)
+             + sum(/*/cac:AllowanceCharge[cbc:ChargeIndicator = 'true'][cbc:AllowanceChargeReasonCode = '49']/cbc:Amount))
+            * sum((/*/cac:InvoiceLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016'])[1]/cac:TaxCategory/cbc:Percent) div 100
+        ) - /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount <= 1
       )
 
   - id: INV-DOC-PAYABLE
-    applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3280"
+    applies_to: [Invoice]
+    sunat: "factura 3280 · boleta 4312"
     why: >-
       Importe total = total precio de venta + otros cargos − otros descuentos −
       total anticipos + redondeo, within ±1.
     assert: >-
+      /*/cac:LegalMonetaryTotal/cbc:PayableAmount - (
+        /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount
+        + sum(/*/cac:LegalMonetaryTotal/cbc:ChargeTotalAmount)
+        - sum(/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount)
+        - sum(/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount)
+        + sum(/*/cac:LegalMonetaryTotal/cbc:PayableRoundingAmount)
+      ) <= 1
+      and
+      (
+        /*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount
+        + sum(/*/cac:LegalMonetaryTotal/cbc:ChargeTotalAmount)
+        - sum(/*/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount)
+        - sum(/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount)
+        + sum(/*/cac:LegalMonetaryTotal/cbc:PayableRoundingAmount)
+      ) - /*/cac:LegalMonetaryTotal/cbc:PayableAmount <= 1
+
+  - id: INV-NOTE-PAYABLE
+    applies_to: [CreditNote, DebitNote]
+    sunat: "3280 when the note modifies a 01, else 4312"
+    why: >-
+      A note's importe total is built from its tax subtotals: Σ document bases
+      (gravado 1000, IVAP 1016, exportación 9995, exonerado 9997, inafecto
+      9998) + Σ tributos (IGV, IVAP, ISC, otros, ICBPER) + otros cargos +
+      redondeo, within ±1. A note has no anticipos and no global descuentos in
+      this formula. It is ValidaExprRegNC-2.0.1.xsl, totalImporteCalculado.
+    assert: >-
       (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PayableAmount - (
-        (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount
+        sum(/*/cac:TaxTotal/cac:TaxSubtotal[
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '9995' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:TaxableAmount)
+        + sum(/*/cac:TaxTotal/cac:TaxSubtotal[
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
         + sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:ChargeTotalAmount)
-        - sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:AllowanceTotalAmount)
-        - sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PrepaidAmount)
         + sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PayableRoundingAmount)
       ) <= 1
       and
       (
-        (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:TaxInclusiveAmount
+        sum(/*/cac:TaxTotal/cac:TaxSubtotal[
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '9995' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9997' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '9998']/cbc:TaxableAmount)
+        + sum(/*/cac:TaxTotal/cac:TaxSubtotal[
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '1000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '1016' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '2000' or cac:TaxCategory/cac:TaxScheme/cbc:ID = '9999' or
+            cac:TaxCategory/cac:TaxScheme/cbc:ID = '7152']/cbc:TaxAmount)
         + sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:ChargeTotalAmount)
-        - sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:AllowanceTotalAmount)
-        - sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PrepaidAmount)
         + sum((/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PayableRoundingAmount)
       ) - (/*/cac:LegalMonetaryTotal | /*/cac:RequestedMonetaryTotal)/cbc:PayableAmount <= 1
 
@@ -422,7 +590,7 @@ invariants:
 
   - id: INV-LEYENDA-FORMAT
     applies_to: [Invoice, CreditNote, DebitNote]
-    sunat: "3006 / 3014"
+    sunat: "3006 · factura, boleta 3014 (repeated code)"
     why: >-
       A leyenda is 1-200 characters with no line breaks or tabs, and no
       leyenda code appears twice. (XPath 1.0 cannot spell a newline literal, so

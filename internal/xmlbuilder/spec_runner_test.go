@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/antchfx/xmlquery"
 	"github.com/antchfx/xpath"
@@ -58,6 +59,10 @@ type specCase struct {
 	Why      string   `yaml:"why"`
 	Sources  []string `yaml:"sources"`
 	Pending  string   `yaml:"pending"`
+	// Effective is the YYYY-MM-DD from which SUNAT enforces the rule a case
+	// pins, when that date is not yet in the past (or only recently passed).
+	// Informational: it is shown with the pending reason.
+	Effective string `yaml:"effective"`
 
 	// Exactly one of these outcome kinds applies.
 	Assert        []assertion `yaml:"assert"`
@@ -124,6 +129,11 @@ func runCase(t *testing.T, dir string, invariants []invariant) {
 	if want := filepath.Base(dir); !strings.HasSuffix(want, sc.Case) {
 		t.Fatalf("spec.yaml case %q does not match its directory %q", sc.Case, want)
 	}
+	if sc.Effective != "" {
+		if _, err := time.Parse(time.DateOnly, sc.Effective); err != nil {
+			t.Fatalf("spec.yaml effective %q is not a YYYY-MM-DD date", sc.Effective)
+		}
+	}
 	input, err := os.ReadFile(filepath.Join(dir, "input.json"))
 	if err != nil {
 		t.Fatalf("read input.json: %v", err)
@@ -135,7 +145,11 @@ func runCase(t *testing.T, dir string, invariants []invariant) {
 		if len(failures) == 0 {
 			t.Fatalf("case is marked pending (%q) but now passes: remove `pending` from spec.yaml and run -update", sc.Pending)
 		}
-		t.Skipf("PENDING %s\n  first failure: %s", sc.Pending, failures[0])
+		label := "PENDING"
+		if sc.Effective != "" {
+			label += " (effective " + sc.Effective + ")"
+		}
+		t.Skipf("%s %s\n  first failure: %s", label, sc.Pending, failures[0])
 	}
 	for _, f := range failures {
 		t.Error(f)

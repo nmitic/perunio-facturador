@@ -1,0 +1,26 @@
+case: gratuito-desagregado
+document: summary
+why: >-
+  From 01/01/2027 Cat.11 code 05 'Gratuitas' is deactivated: the valor de
+  venta of the operaciones gratuitas is reported as 06 gravada, 07
+  exonerada, 08 inafecta or 09 exportación, and gravada gratuitas add an
+  'IGV gratuitas' cac:TaxTotal (tributo 9996, Name GRA, with its rate; ERR
+  3051/2992/3504). model.SummaryItem has a single totalFree, so this case
+  only pins the retirement of 05; the per-type split and the 9996 TaxTotal
+  need new model fields first.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1 (Control de Cambios: Operaciones Gratuitas)"
+  - "Cat.11 (Catálogos sheet)"
+pending: >-
+  Finding F13: buildSummaryLine reports operaciones gratuitas under Cat.11
+  05.
+effective: "2027-01-01"
+assert:
+  - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='05']"
+    absent: true
+    why: >-
+      Deactivated code
+  - xpath: "sum(/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='06' or cbc:InstructionID='07' or cbc:InstructionID='08' or cbc:InstructionID='09']/cbc:PaidAmount) = 50"
+    true: true
+    why: >-
+      The gratuito total moves to one of the four new codes

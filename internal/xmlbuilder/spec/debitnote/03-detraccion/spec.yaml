@@ -1,0 +1,49 @@
+case: detraccion
+document: cpe
+why: >-
+  A nota de débito on a factura sujeta a detracción carries the detracción
+  block, and unlike a credit note the NotaDebito2_0 sheet validates it: the
+  'Detraccion' PaymentMeans (cuenta BN) and PaymentTerms (Cat.54 código,
+  monto in PEN) must come together.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › NotaDebito2_0"
+assert:
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "3027"
+    why: >-
+      Leyenda 2006; the ND sheet only checks the code is in Cat.52
+  - xpath: "/*/cac:PaymentMeans/cbc:ID"
+    equals: "Detraccion"
+    sunat: "3314"
+  - xpath: "/*/cac:PaymentMeans/cbc:PaymentMeansCode"
+    equals: "999"
+    sunat: "3174"
+  - xpath: "/*/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    sunat: "3034"
+    why: >-
+      Cuenta de detracciones del Banco de la Nación
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']"
+    sunat: "3313"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "019"
+    sunat: "3127/3033"
+    why: >-
+      Cat.54 bien o servicio
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+    why: >-
+      Not validated on notes; kept as on the factura
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "141.60"
+    sunat: "3035/3037"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - before:
+      - "/*/cac:PaymentMeans"
+      - "/*/cac:PaymentTerms"
+  - xpath: "/*/cac:RequestedMonetaryTotal/cbc:PayableAmount"
+    equals: "1180.00"
+    why: >-
+      A detracción is a payment instruction, not a discount

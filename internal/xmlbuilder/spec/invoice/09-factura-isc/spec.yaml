@@ -26,7 +26,7 @@ assert:
     equals: "20.00"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cbc:Percent"
     equals: "20.00"
-    sunat: "2992/3108"
+    sunat: "2992/3104/3108"
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cac:TaxCategory/cbc:TierRange"
     equals: "01"
     sunat: "2373"
