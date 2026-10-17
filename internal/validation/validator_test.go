@@ -484,6 +484,42 @@ func TestValidateDetraccionCatalogo(t *testing.T) {
 		is.True(t, hasErrorField(errs, "detraccion"), "001 applies above S/2,750 in 2026")
 	})
 
+	t.Run("Anexo 1 under the umbral is subject when one transport unit carries more than half a UIT", func(t *testing.T) {
+		req := newValidInvoice() // 1180.00 < 2750
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "118.00", CuentaBN: "00-123-456789"}
+		req.Anexo1UnidadTransporte = true
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "R.S. 183-2004 art. 2.1 measures the transport unit, not the operación")
+	})
+
+	t.Run("the transport-unit answer does not lift the umbral of another anexo", func(t *testing.T) {
+		req := newServicio780()
+		req.TaxInclusiveAmount = "700.00"
+		req.TotalAmount = "700.00"
+		req.Detraccion.Monto = "84.00"
+		req.Anexo1UnidadTransporte = true
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "art. 2.1 is an Anexo 1 rule")
+	})
+
+	t.Run("the transport-unit answer is refused above the Anexo 1 umbral", func(t *testing.T) {
+		req := newValidInvoice()
+		req.Subtotal = "2542.37"
+		req.TotalIGV = "457.63"
+		req.TotalAmount = "3000.00"
+		req.TaxInclusiveAmount = "3000.00"
+		req.Items[0].Quantity = "1"
+		req.Items[0].UnitPrice = "2542.37"
+		req.Items[0].UnitPriceWithTax = "3000.00"
+		req.Items[0].IGVAmount = "457.63"
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "300.00", CuentaBN: "00-123-456789"}
+		req.Anexo1UnidadTransporte = true
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anexo1UnidadTransporte"), "above ½ UIT the buyer deposits; the answer would wrongly move the deposit to the proveedor")
+	})
+
 	t.Run("residuos (010) apply at any amount", func(t *testing.T) {
 		req := newBoletaUnder700()
 		req.DocType = "01"
@@ -504,6 +540,17 @@ func TestValidateDetraccionCatalogo(t *testing.T) {
 		req.CustomerDocNumber = "12345678"
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion.codigo"), "a boleta grants no crédito fiscal (R.S. 183-2004 art. 13)")
+	})
+
+	t.Run("an Anexo 3 servicio on a boleta to a Sector Público entity is allowed", func(t *testing.T) {
+		req := newServicio780()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "6"
+		req.CustomerDocNumber = "20131312955"
+		req.AdquirenteSectorPublico = true
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion.codigo"), "the exclusion no opera for an art. 18 a) LIR entity (R.S. 183-2004 art. 13)")
 	})
 
 	t.Run("an Anexo 1 bien on a boleta is allowed", func(t *testing.T) {
@@ -895,6 +942,17 @@ func TestValidatePaymentTerms(t *testing.T) {
 		req.OperationType = "1001"
 		req.Detraccion = newInmuebleDetraccion(1180)
 		is.Equal(t, 1132.8, req.NetoPendientePago())
+	})
+
+	// An Anexo 1 bien under ½ UIT that applies only by the transport-unit rule
+	// (R.S. 183-2004 art. 2.1): the proveedor carries and delivers it and
+	// deposits (art. 5.1 b.1), so nothing comes off the neto.
+	t.Run("an Anexo 1 bien subject by the transport unit settles the whole total", func(t *testing.T) {
+		req := newCreditoInvoice()
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "118.00", CuentaBN: "00-123-456789"}
+		req.Anexo1UnidadTransporte = true
+		is.Equal(t, 1180.0, req.NetoPendientePago())
 	})
 
 	t.Run("a foreign-currency detracción without tipo de cambio is rejected", func(t *testing.T) {

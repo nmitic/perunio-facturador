@@ -71,6 +71,10 @@ type CreateDocumentInput struct {
 	// DetraccionNoSujeta: the user confirmed the operación is not sujeta a
 	// detracción. On update, true also clears the four detracción columns.
 	DetraccionNoSujeta *bool
+	// The pre-emit answers that lift a detracción exclusion
+	// (model.IssueRequest.AdquirenteSectorPublico / Anexo1UnidadTransporte).
+	AdquirenteSectorPublico *bool
+	Anexo1UnidadTransporte  *bool
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -143,6 +147,10 @@ type UpdateDocumentInput struct {
 	// DetraccionNoSujeta: the user confirmed the operación is not sujeta a
 	// detracción. On update, true also clears the four detracción columns.
 	DetraccionNoSujeta *bool
+	// The pre-emit answers that lift a detracción exclusion
+	// (model.IssueRequest.AdquirenteSectorPublico / Anexo1UnidadTransporte).
+	AdquirenteSectorPublico *bool
+	Anexo1UnidadTransporte  *bool
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -255,7 +263,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				anticipos,
 				transporte_carga,
 				venta_anticipo_id,
-				detraccion_no_sujeta
+				detraccion_no_sujeta,
+				adquirente_sector_publico, anexo1_unidad_transporte
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -275,7 +284,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$40,
 				$41,
 				$42,
-				COALESCE($43, false)
+				COALESCE($43, false),
+				COALESCE($44, false), COALESCE($45, false)
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -297,6 +307,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			transporteCargaJSON,
 			in.VentaAnticipoID,
 			in.DetraccionNoSujeta,
+			in.AdquirenteSectorPublico, in.Anexo1UnidadTransporte,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -506,6 +517,12 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 			add("detraccion_monto", nil)
 			add("detraccion_cuenta_bn", nil)
 		}
+	}
+	if in.AdquirenteSectorPublico != nil {
+		add("adquirente_sector_publico", *in.AdquirenteSectorPublico)
+	}
+	if in.Anexo1UnidadTransporte != nil {
+		add("anexo1_unidad_transporte", *in.Anexo1UnidadTransporte)
 	}
 	if in.ReferenceDocType != nil {
 		add("reference_doc_type", *in.ReferenceDocType)

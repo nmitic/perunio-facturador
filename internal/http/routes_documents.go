@@ -290,6 +290,8 @@ type createDocumentBody struct {
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
 	DetraccionNoSujeta      *bool                    `json:"detraccionNoSujeta,omitempty"`
+	AdquirenteSectorPublico *bool                    `json:"adquirenteSectorPublico,omitempty"`
+	Anexo1UnidadTransporte  *bool                    `json:"anexo1UnidadTransporte,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items"`
 }
@@ -471,6 +473,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		in.DetraccionCuentaBN = d.CuentaBN
 	}
 	in.DetraccionNoSujeta = b.DetraccionNoSujeta
+	in.AdquirenteSectorPublico = b.AdquirenteSectorPublico
+	in.Anexo1UnidadTransporte = b.Anexo1UnidadTransporte
 	return in
 }
 
@@ -547,6 +551,8 @@ type updateDocumentBody struct {
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
 	DetraccionNoSujeta      *bool                    `json:"detraccionNoSujeta,omitempty"`
+	AdquirenteSectorPublico *bool                    `json:"adquirenteSectorPublico,omitempty"`
+	Anexo1UnidadTransporte  *bool                    `json:"anexo1UnidadTransporte,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items,omitempty"`
 }
@@ -599,6 +605,8 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		in.DetraccionCuentaBN = d.CuentaBN
 	}
 	in.DetraccionNoSujeta = b.DetraccionNoSujeta
+	in.AdquirenteSectorPublico = b.AdquirenteSectorPublico
+	in.Anexo1UnidadTransporte = b.Anexo1UnidadTransporte
 	if b.Items != nil {
 		items := make([]db.CreateDocumentItemInput, 0, len(b.Items))
 		for i, it := range b.Items {

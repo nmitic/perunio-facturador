@@ -111,18 +111,6 @@ produce a 10.5 % document yet.
 - Spec cases: compra with the proveedor as issuer, two related documents, a
   Cat.61-only code.
 
-## FU-5 — Detracción Anexo 1: the per-transport-unit rule
-
-**Status:** not modelled. The rule is settled law (R.S. 183-2004 art. 2.1);
-listed under `DETRACCIONES.md` › Known gaps.
-
-**Today** `resolveDetraccion` (perunio-frontend) and `validateDetraccionCatalogo`
-measure an Anexo 1 código (001, 003, 034, 045) only against ½ UIT of the operación.
-
-**What SUNAT requires** R.S. 183-2004 art. 2.1: an operación of ½ UIT or less is
-still subject when the Anexo 1 bienes carried on **one transport unit** add up
-to more than ½ UIT. Needs the guía / transport unit to be known at emission.
-
 ## FU-7 — Detracción 004 (recursos hidrobiológicos)
 
 **Status:** refused by `validateDetraccion`. Since perunio-sunat-catalogs
@@ -161,7 +149,3 @@ the catalog.
   for leases. Find the amending resolution to settle which list is current.
 - Which tipo de cambio the S/ 700 test uses on a USD comprobante. Perunio uses
   the comprobante's own; art. 20 governs only the deposit.
-- **Confirmed, not modelled:** a Sector Público buyer receiving a boleta with
-  an Anexo 2/3 or 027 código. Arts. 8 and 13 (and R.S. 073-2006 art. 3) say the
-  boleta exclusion "no opera" for an entity of art. 18 a) LIR; today it always
-  applies.

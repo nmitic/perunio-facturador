@@ -179,6 +179,8 @@ func buildIssueRequestFromDoc(
 			CuentaBN:   derefString(doc.DetraccionCuentaBN, defaultCuentaDetraccion),
 		}
 	}
+	req.AdquirenteSectorPublico = doc.AdquirenteSectorPublico
+	req.Anexo1UnidadTransporte = doc.Anexo1UnidadTransporte
 
 	req.Items = lineItemsFromDB(items)
 	return req

@@ -53,7 +53,7 @@ obligated parties, arts. 5.2–5.3; they never go through Perunio's issuance.)
 
 | Regime | The seller deposits instead when | Source |
 |---|---|---|
-| Anexo 1 | (a) it carries and delivers goods whose importe per buyer is ½ UIT or less and the SPOT still applies (the per-transport-unit rule, [FU-5](#known-gaps)); (b) it receives the whole importe without the deposit having been made; (c) the sale goes through the Bolsa de Productos | RS 183-2004 art. 5 |
+| Anexo 1 | (a) it carries and delivers goods whose importe per buyer is ½ UIT or less and the SPOT still applies (the per-transport-unit rule, art. 5.1 b.1: Perunio's `depositaEmisor` / `DetraccionDepositaEmisor`); (b) it receives the whole importe without the deposit having been made; (c) the sale goes through the Bolsa de Productos | RS 183-2004 art. 5 |
 | Anexo 2 | (b) or (c) | art. 10 |
 | Anexo 3 | (b) | art. 15 |
 | 027 transporte de carga | (b) | RS 073-2006 art. 5 |
@@ -117,8 +117,10 @@ brought them back at 10 %. RS 000086-2025 moved 034 and 045 here for operations
 whose IGV obligation arose from 01-04-2025.
 
 An Anexo 1 operación of ½ UIT or less is still subject when the Anexo 1 goods on
-one transport unit add up to more than ½ UIT (art. 2.1). **Not modelled**; see
-[FU-5](#known-gaps). *Traslados* of 034 and 045 that do not originate in a sale
+one transport unit add up to more than ½ UIT (art. 2.1), and the proveedor, who
+carries and delivers them, makes the deposit (art. 5.1 b.1). Perunio cannot see
+the transport unit, so it asks ([The pre-emit questions](#the-pre-emit-question)).
+*Traslados* of 034 and 045 that do not originate in a sale
 (art. 2.1 c) are excluded from the SPOT. That is the 2ª DCF of RS 000086-2025,
 added by RS 000121-2025 and reworded by RS 000175-2025.
 
@@ -252,9 +254,10 @@ does **027** (RS 073-2006 art. 3).
 All three provisions carry the same exception: "Esta excepción no opera cuando el
 adquirente [usuario] sea una entidad del Sector Público Nacional a que se
 refiere el inciso a) del artículo 18° de la Ley del Impuesto a la Renta".
-Perunio does not model the exception, because such buyers normally receive
-facturas ([FU-8](#known-gaps)). It applies all three exclusions, in the form
-and in the facturador.
+Perunio cannot tell such a buyer from its RUC, so on a boleta to a RUC whose
+código the exclusion rules out it asks ([The pre-emit questions](#the-pre-emit-question)).
+A "sí" is stored as `adquirente_sector_publico` and lifts all three exclusions,
+in the form and in the facturador.
 
 **Anexo 1 is different.** It excludes only the póliza de adjudicación and the
 liquidación de compra (art. 3), so it **does** apply on a boleta. So does the
@@ -402,6 +405,22 @@ asked. Below S/ 700, only 027 (above S/ 400) and the any-amount códigos (010,
 031, 036, 040) could apply; those are expected to come from a producto or the
 company default.
 
+Two more questions are asked when a código is present but a rule ruled it out
+that a fact only the user knows would lift (`detraccionPregunta`). Each is asked
+once per comprobante and its answer stays editable in the detracción section;
+"Sí" applies the detracción and returns the user to review it before emitting.
+
+> **Boleta con detracción excluida.** ¿El adquirente es una entidad del Sector Público Nacional?
+
+Asked on a boleta (or a nota on one) to a buyer with RUC whose Anexo 2/3 or 027
+código the exclusion rules out. Sent as `adquirenteSectorPublico`.
+
+> **Bien del Anexo 1 bajo el umbral.** ¿Una misma unidad de transporte lleva más de ½ UIT en bienes del Anexo 1?
+
+Asked when an Anexo 1 código falls at or under ½ UIT. Sent as
+`anexo1UnidadTransporte`, only when it is what made the detracción apply; the
+proveedor deposits then, so the neto pendiente is the whole total.
+
 ### What the facturador enforces
 
 `validateDetraccion`, `validateDetraccionCatalogo`, `validateTransporteCarga` and
@@ -414,7 +433,7 @@ reaches SUNAT:
 - a porcentaje other than the catálogo's (`porcentajeAlternativo` also passes, which today means only 004's 10 %, and 004 is refused anyway);
 - an Anexo 2/3 or 027 código on a boleta or on a nota referencing one;
 - an Anexo 3 or 027 código on a factura whose receptor is identified as no domiciliado (Cat.06 0 or B);
-- an operación at or under the código's umbral. It is measured on `TaxInclusiveAmount`, or on the venta's `monto_acordado` (`IssueRequest.MontoOperacion`, filled by the pipeline, never by the client) when that is larger. Notas and 0104 anticipos are not measured;
+- an operación at or under the código's umbral, unless an Anexo 1 código carries `anexo1UnidadTransporte` (refused above the umbral). It is measured on `TaxInclusiveAmount`, or on the venta's `monto_acordado` (`IssueRequest.MontoOperacion`, filled by the pipeline, never by the client) when that is larger. Notas and 0104 anticipos are not measured;
 - a monto that is not porcentaje × the SPOT base in soles (±0.01), for any currency (027: the greater of the importe and the valor referencial), or one larger than the payable;
 - a missing cuenta BN, or a missing tipo de cambio on a foreign-currency document;
 - an incomplete 027 trip block, including ubigeos that are not INEI districts;
@@ -470,9 +489,7 @@ Rules that are settled law but that Perunio does not model yet.
 
 | Gap | FU |
 |---|---|
-| Anexo 1: an operación ≤ ½ UIT is still subject when one transport unit carries > ½ UIT of Anexo 1 goods (art. 2.1). | FU-5 |
 | 004: the six per-line properties are not built, and 4 % vs 10 % needs the listado. | FU-7 |
-| A Sector Público buyer on a boleta with an Anexo 2/3 or 027 código (arts. 8, 13; RS 073-2006 art. 3): Perunio always applies the exclusion. | FU-8 |
 
 ---
 

@@ -636,7 +636,9 @@ func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError 
 
 	// R.S. 183-2004 arts. 8 and 13 and R.S. 073-2006 art. 3: Anexos 2 and 3
 	// and transporte de carga exclude comprobantes that grant no crédito
-	// fiscal. Anexo 1 (art. 3) and the inmueble regime carry no such exclusion.
+	// fiscal. Anexo 1 (art. 3) and the inmueble regime carry no such exclusion,
+	// and it "no opera" when the adquirente is a Sector Público Nacional entity
+	// (art. 18 a) LIR), which the user declares at emission.
 	//
 	// The same Anexo 3 and carga exclude a no-domiciliado usuario (R.S. 183-2004
 	// art. 13; R.S. 073-2006 art. 3). Operation type 0401 (venta a no
@@ -647,7 +649,7 @@ func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError 
 	noDomiciliado := req.CustomerDocType == sunat.Cat06DocTribNoDomSinRUC ||
 		req.CustomerDocType == sunat.Cat06DocPaisResidencia
 	switch {
-	case isSinCreditoFiscal(req) && (anexo == "2" || anexo == "3" || anexo == "carga"):
+	case isSinCreditoFiscal(req) && !req.AdquirenteSectorPublico && (anexo == "2" || anexo == "3" || anexo == "carga"):
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s no aplica en boletas: la detracción de los Anexos 2 y 3 y del transporte de carga excluye los comprobantes que no otorgan crédito fiscal", codigo), Field: "detraccion.codigo"})
 	case !isSinCreditoFiscal(req) && noDomiciliado && (anexo == "3" || anexo == "carga"):
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s no aplica a un usuario no domiciliado: la detracción del Anexo 3 y del transporte de carga lo excluye", codigo), Field: "detraccion.codigo"})
@@ -655,10 +657,13 @@ func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError 
 
 	// Umbral: strictly greater than, over the operación in soles. A nota mirrors
 	// the operation it corrects and an anticipo (0104) is one payment of a larger
-	// operación, so neither is measured on its own.
+	// operación, so neither is measured on its own. An Anexo 1 bien is subject at
+	// any importe when one transport unit carries more than ½ UIT of them (R.S.
+	// 183-2004 art. 2.1), which the user declares at emission.
 	if isNota(req.DocType) || req.OperationType == sunat.Cat51Anticipos {
 		return errs
 	}
+	unidadTransporte := anexo == "1" && req.Anexo1UnidadTransporte
 	rate, ok := penRate(req)
 	if !ok {
 		return errs
@@ -668,7 +673,17 @@ func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError 
 		importe = acordado
 	}
 	base := spotBase(req, importe*rate)
-	if umbral := sunat.Cat54Umbral(codigo); base <= umbral {
+	umbral := sunat.Cat54Umbral(codigo)
+	if unidadTransporte {
+		// The answer is what makes the proveedor the depositor
+		// (DetraccionDepositaEmisor); above the umbral the buyer deposits as
+		// usual, so the answer does not belong there.
+		if base > umbral {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("la operación (S/ %.2f) ya supera el umbral de S/ %s del código %s: no corresponde declarar la unidad de transporte", base, strconv.FormatFloat(umbral, 'f', 2, 64), codigo), Field: "anexo1UnidadTransporte"})
+		}
+		return errs
+	}
+	if base <= umbral {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("la operación (S/ %.2f) no supera el umbral de S/ %s del código %s: no está sujeta a detracción", base, strconv.FormatFloat(umbral, 'f', 2, 64), codigo), Field: "detraccion"})
 	}
 	return errs

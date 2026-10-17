@@ -80,11 +80,23 @@ type IssueRequest struct {
 	// MontoOperacion is the monto acordado of the venta con anticipos this
 	// comprobante belongs to, in the document's currency; empty otherwise.
 	// Perunio measures the SPOT umbral of a venta con anticipos against the whole
-	// operación — its own conservative reading; no SUNAT source settles it
-	// (DETRACCIONES.md › Open questions) — so validateDetraccion takes the
+	// operación — its own conservative reading, decided without a SUNAT source
+	// (DETRACCIONES.md › Cuándo aplica, ◇) — so validateDetraccion takes the
 	// greater of this and TaxInclusiveAmount. The pipeline fills it from the
 	// venta row — never from the client.
 	MontoOperacion string `json:"-"`
+
+	// AdquirenteSectorPublico: the buyer is a Sector Público Nacional entity
+	// (art. 18 a) LIR). The exclusion of a comprobante without crédito fiscal
+	// (Anexos 2 and 3, R.S. 183-2004 arts. 8 and 13; transporte de carga, R.S.
+	// 073-2006 art. 3) "no opera" for one, so a boleta to it still carries the
+	// detracción. The user answers it at emission; the XML does not carry it.
+	AdquirenteSectorPublico bool `json:"adquirenteSectorPublico,omitempty"`
+
+	// Anexo1UnidadTransporte: the Anexo 1 bienes on one transport unit add up to
+	// more than ½ UIT, so the operación is subject even at or under the umbral
+	// (R.S. 183-2004 art. 2.1). The user answers it at emission.
+	Anexo1UnidadTransporte bool `json:"anexo1UnidadTransporte,omitempty"`
 
 	// TransporteCarga carries the extra data SUNAT demands when the detracción
 	// código is 027 (servicio de transporte de carga), which declares tipo de
@@ -148,7 +160,18 @@ func (r IssueRequest) DetraccionEnMoneda() (float64, bool) {
 // seller's other cases (paid in full without the deposit; Anexo 1 transport)
 // depend on what happens after emission, so the comprobante cannot know them.
 func (r IssueRequest) DetraccionDepositaEmisor() bool {
-	if r.Detraccion == nil || sunat.Cat54Anexo(r.Detraccion.Codigo) != "inmueble" {
+	if r.Detraccion == nil {
+		return false
+	}
+	// An Anexo 1 operación under its umbral that applies only because one
+	// transport unit carries more than ½ UIT (art. 2.1): the proveedor carries
+	// and delivers the bienes, so it deposits (R.S. 183-2004 art. 5.1 b.1).
+	// validateDetraccionCatalogo refuses the answer on an operación above the
+	// umbral, where the buyer deposits as usual.
+	if r.Anexo1UnidadTransporte && sunat.Cat54Anexo(r.Detraccion.Codigo) == "1" {
+		return true
+	}
+	if sunat.Cat54Anexo(r.Detraccion.Codigo) != "inmueble" {
 		return false
 	}
 	isNota := r.DocType == sunat.Cat01NotaCredito || r.DocType == sunat.Cat01NotaDebito

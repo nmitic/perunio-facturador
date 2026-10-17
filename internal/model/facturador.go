@@ -197,6 +197,11 @@ type IssuedDocument struct {
 	// factura over S/700 without detracción was sujeta, answered no. Audit
 	// only: it never reaches the XML. See DETRACCIONES.md.
 	DetraccionNoSujeta bool `json:"detraccionNoSujeta"`
+	// AdquirenteSectorPublico and Anexo1UnidadTransporte are the user's answers
+	// to the pre-emit questions that lift a detracción exclusion; see
+	// model.IssueRequest.
+	AdquirenteSectorPublico bool `json:"adquirenteSectorPublico"`
+	Anexo1UnidadTransporte  bool `json:"anexo1UnidadTransporte"`
 
 	ReferenceDocType        *string `json:"referenceDocType"`
 	ReferenceDocSeries      *string `json:"referenceDocSeries"`
