@@ -163,6 +163,9 @@ type IssuedDocument struct {
 	// TransporteCarga is the trip block a detracción código 027 requires. Nil
 	// for every other document. See model.TransporteCarga.
 	TransporteCarga *TransporteCarga `json:"transporteCarga,omitempty"`
+	// Hidrobiologicos is the embarcación and descarga block a detracción código
+	// 004 requires. Nil for every other document. See model.Hidrobiologicos.
+	Hidrobiologicos *Hidrobiologicos `json:"hidrobiologicos,omitempty"`
 
 	// VentaAnticipoID is the venta con anticipos (deal) this comprobante belongs
 	// to — set on the anticipo facturas and on the factura final that closes it.
@@ -240,23 +243,26 @@ type IssuedDocument struct {
 
 // IssuedDocumentItem is one line of an issued document.
 type IssuedDocumentItem struct {
-	ID                     string    `json:"id"`
-	DocumentID             string    `json:"documentId"`
-	LineNumber             int       `json:"lineNumber"`
-	ProductoID             *string   `json:"productoId"`
-	Description            string    `json:"description"`
-	Quantity               string    `json:"quantity"`
-	UnitCode               string    `json:"unitCode"`
-	UnitPrice              string    `json:"unitPrice"`
-	UnitPriceWithTax       *string   `json:"unitPriceWithTax"`
-	TaxExemptionReasonCode *string   `json:"taxExemptionReasonCode"`
-	IgvAmount              string    `json:"igvAmount"`
-	IscAmount              *string   `json:"iscAmount"`
-	IscTierRange           *string   `json:"iscTierRange"`
-	DiscountAmount         *string   `json:"discountAmount"`
-	LineTotal              string    `json:"lineTotal"`
-	PriceTypeCode          *string   `json:"priceTypeCode"`
-	CreatedAt              time.Time `json:"createdAt"`
+	ID                     string  `json:"id"`
+	DocumentID             string  `json:"documentId"`
+	LineNumber             int     `json:"lineNumber"`
+	ProductoID             *string `json:"productoId"`
+	Description            string  `json:"description"`
+	Quantity               string  `json:"quantity"`
+	UnitCode               string  `json:"unitCode"`
+	UnitPrice              string  `json:"unitPrice"`
+	UnitPriceWithTax       *string `json:"unitPriceWithTax"`
+	TaxExemptionReasonCode *string `json:"taxExemptionReasonCode"`
+	IgvAmount              string  `json:"igvAmount"`
+	IscAmount              *string `json:"iscAmount"`
+	IscTierRange           *string `json:"iscTierRange"`
+	DiscountAmount         *string `json:"discountAmount"`
+	LineTotal              string  `json:"lineTotal"`
+	PriceTypeCode          *string `json:"priceTypeCode"`
+	// Detracción de recursos hidrobiológicos (004) only; see model.LineItem.
+	EspecieVendida  *string   `json:"especieVendida"`
+	CantidadEspecie *string   `json:"cantidadEspecie"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 // ComprobanteAttachment is a supporting file attached to an issued comprobante

@@ -60,6 +60,7 @@ type CreateDocumentInput struct {
 	Cuotas          []model.CuotaCredito
 	Anticipos       []model.Anticipo
 	TransporteCarga *model.TransporteCarga
+	Hidrobiologicos *model.Hidrobiologicos
 	// VentaAnticipoID links this comprobante to a venta con anticipos, whether it
 	// is one of the advances or the factura final. Nil for ordinary comprobantes.
 	VentaAnticipoID *string
@@ -101,6 +102,9 @@ type CreateDocumentItemInput struct {
 	DiscountAmount         *string
 	LineTotal              string
 	PriceTypeCode          *string
+	// Detracción de recursos hidrobiológicos (004) only: Cat.55 3003 and 3006.
+	EspecieVendida  *string
+	CantidadEspecie *string
 }
 
 // UpdateDocumentInput holds the fields the PUT /documents handler allows.
@@ -139,6 +143,8 @@ type UpdateDocumentInput struct {
 
 	TransporteCarga      *model.TransporteCarga
 	TransporteCargaIsSet bool // same overwrite semantics as CuotasIsSet
+	Hidrobiologicos      *model.Hidrobiologicos
+	HidrobiologicosIsSet bool // same overwrite semantics as CuotasIsSet
 
 	DetraccionCodigo     *string
 	DetraccionPorcentaje *string
@@ -243,6 +249,14 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			}
 			transporteCargaJSON = b
 		}
+		var hidrobiologicosJSON any
+		if in.Hidrobiologicos != nil {
+			b, err := json.Marshal(in.Hidrobiologicos)
+			if err != nil {
+				return fmt.Errorf("marshal hidrobiologicos: %w", err)
+			}
+			hidrobiologicosJSON = b
+		}
 		row := tx.QueryRow(ctx, `
 			INSERT INTO issued_documents (
 				tenant_id, company_id, series_id, doc_type, series, correlative, status,
@@ -264,7 +278,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				transporte_carga,
 				venta_anticipo_id,
 				detraccion_no_sujeta,
-				adquirente_sector_publico, anexo1_unidad_transporte
+				adquirente_sector_publico, anexo1_unidad_transporte,
+				hidrobiologicos
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -285,7 +300,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$41,
 				$42,
 				COALESCE($43, false),
-				COALESCE($44, false), COALESCE($45, false)
+				COALESCE($44, false), COALESCE($45, false),
+				$46
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -308,6 +324,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.VentaAnticipoID,
 			in.DetraccionNoSujeta,
 			in.AdquirenteSectorPublico, in.Anexo1UnidadTransporte,
+			hidrobiologicosJSON,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -495,6 +512,14 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 			add("transporte_carga", b)
 		}
 	}
+	if in.HidrobiologicosIsSet {
+		if in.Hidrobiologicos == nil {
+			add("hidrobiologicos", nil)
+		} else {
+			b, _ := json.Marshal(in.Hidrobiologicos)
+			add("hidrobiologicos", b)
+		}
+	}
 	if in.DetraccionCodigo != nil {
 		add("detraccion_codigo", *in.DetraccionCodigo)
 	}
@@ -550,8 +575,9 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 		INSERT INTO issued_document_items (
 			document_id, line_number, producto_id, description, quantity, unit_code,
 			unit_price, unit_price_with_tax, tax_exemption_reason_code,
-			igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
+			igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
+			especie_vendida, cantidad_especie
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
 
 	batch := &pgx.Batch{}
 	for i, it := range items {
@@ -563,6 +589,7 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 			docID, line, it.ProductoID, it.Description, it.Quantity, it.UnitCode,
 			it.UnitPrice, it.UnitPriceWithTax, it.TaxExemptionReasonCode,
 			it.IgvAmount, it.IscAmount, it.IscTierRange, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
+			it.EspecieVendida, it.CantidadEspecie,
 		)
 	}
 	return tx.SendBatch(ctx, batch).Close()

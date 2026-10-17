@@ -103,6 +103,11 @@ type IssueRequest struct {
 	// operación 1004. Nil for every other comprobante. See buildLineDelivery.
 	TransporteCarga *TransporteCarga `json:"transporteCarga,omitempty"`
 
+	// Hidrobiologicos carries the embarcación and descarga data a detracción de
+	// recursos hidrobiológicos (Cat.54 004 / tipo de operación 1002) declares on
+	// every line, next to each line's EspecieVendida and CantidadEspecie.
+	Hidrobiologicos *Hidrobiologicos `json:"hidrobiologicos,omitempty"`
+
 	// Notes
 	Notes []Note `json:"notes"`
 
@@ -288,6 +293,19 @@ type TransporteCarga struct {
 	ValorReferencialCargaUtil     string `json:"valorReferencialCargaUtil"`
 }
 
+// Hidrobiologicos is the per-operation half of the six Cat.55 concepts a
+// detracción de recursos hidrobiológicos (Cat.54 004 / tipo de operación 1002)
+// must declare. SUNAT checks all six on EVERY line (ERRORs 3063 and 3130-3135
+// run in the line template of ValidaExprRegFactura / ValidaExprRegBoleta), so
+// these four repeat on each line; the especie and its cantidad are the line's
+// own (LineItem.EspecieVendida / CantidadEspecie).
+type Hidrobiologicos struct {
+	MatriculaEmbarcacion string `json:"matriculaEmbarcacion"` // 3001, an..15
+	NombreEmbarcacion    string `json:"nombreEmbarcacion"`    // 3002, an..100
+	LugarDescarga        string `json:"lugarDescarga"`        // 3004, an..100
+	FechaDescarga        string `json:"fechaDescarga"`        // 3005, YYYY-MM-DD
+}
+
 // Note is a legend/note attached to the document.
 type Note struct {
 	Code string `json:"code"` // Cat.52 legend code
@@ -309,6 +327,12 @@ type LineItem struct {
 	DiscountAmount         string `json:"discountAmount"`
 	LineTotal              string `json:"lineTotal"`
 	PriceTypeCode          string `json:"priceTypeCode"` // "01" or "02"
+
+	// Detracción de recursos hidrobiológicos (004 / 1002) only: the especie sold
+	// on this line (Cat.55 3003, an..150) and its cantidad in toneladas métricas
+	// (3006, decimal 12,2). Empty on every other line.
+	EspecieVendida  string `json:"especieVendida,omitempty"`
+	CantidadEspecie string `json:"cantidadEspecie,omitempty"`
 }
 
 // IssueResponse is returned to the backend after processing.

@@ -495,6 +495,31 @@ type priceTypeCode struct {
 
 type item struct {
 	Description string `xml:"cbc:Description"`
+	// Only a detracción de recursos hidrobiológicos (1002) populates it. UBL puts
+	// it after cbc:Description (and the identifications Perunio never emits).
+	AdditionalItemProperty []itemProperty `xml:"cac:AdditionalItemProperty,omitempty"`
+}
+
+// itemProperty is one cac:AdditionalItemProperty, a Cat.55 concept. Field order
+// is UBL's ItemPropertyType sequence: Name, NameCode, Value, ValueQuantity,
+// then UsabilityPeriod.
+type itemProperty struct {
+	Name            string           `xml:"cbc:Name"`
+	NameCode        itemPropertyCode `xml:"cbc:NameCode"`
+	Value           string           `xml:"cbc:Value,omitempty"`
+	ValueQuantity   *quantity        `xml:"cbc:ValueQuantity,omitempty"`
+	UsabilityPeriod *usabilityPeriod `xml:"cac:UsabilityPeriod,omitempty"`
+}
+
+type itemPropertyCode struct {
+	Value          string `xml:",chardata"`
+	ListName       string `xml:"listName,attr"`
+	ListAgencyName string `xml:"listAgencyName,attr"`
+	ListURI        string `xml:"listURI,attr"`
+}
+
+type usabilityPeriod struct {
+	StartDate string `xml:"cbc:StartDate"`
 }
 
 type price struct {

@@ -179,7 +179,9 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 
 	// Lines. The transporte de carga (1004) trip block describes the operation
 	// the whole comprobante documents, and SUNAT's rules only require one
-	// occurrence of each tag, so it rides on the first line alone.
+	// occurrence of each tag, so it rides on the first line alone. The recursos
+	// hidrobiológicos (1002) concepts, in contrast, are checked on every line.
+	hidrobiologicos := sunatOperationType(req.OperationType, req.Detraccion) == sunat.Cat51DetraccionHidrobiologicos
 	for i, li := range req.Items {
 		line, err := buildInvoiceLine(li, req.CurrencyCode)
 		if err != nil {
@@ -187,6 +189,13 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		}
 		if i == 0 {
 			line.Delivery = buildLineDelivery(req)
+		}
+		if hidrobiologicos {
+			props, err := buildHidrobiologicosProperties(req.Hidrobiologicos, li)
+			if err != nil {
+				return nil, err
+			}
+			line.Item.AdditionalItemProperty = props
 		}
 		inv.InvoiceLines = append(inv.InvoiceLines, line)
 	}
@@ -741,6 +750,53 @@ func buildLineDelivery(req model.IssueRequest) *lineDelivery {
 			newValorReferencial("03", t.ValorReferencialCargaUtil),
 		},
 	}
+}
+
+// buildHidrobiologicosProperties returns the six Cat.55 concepts a line of a
+// detracción de recursos hidrobiológicos (Cat.54 004 → tipo de operación 1002)
+// must declare, each an ERROR when missing: 3001 matrícula (3063), 3002 nombre
+// de la embarcación (3130), 3003 especie (3131), 3004 lugar de descarga (3132),
+// 3005 fecha de descarga (3134, in cac:UsabilityPeriod: 3065) and 3006 cantidad
+// (3133, as cbc:ValueQuantity in TNE: 3135/3115). SUNAT runs them in the line
+// template, so every line carries all six. Missing data is refused here, since
+// SUNAT would reject the comprobante anyway; validation reports it field by
+// field first.
+func buildHidrobiologicosProperties(h *model.Hidrobiologicos, li model.LineItem) ([]itemProperty, error) {
+	if h == nil {
+		return nil, fmt.Errorf("detracción 004 (1002): faltan los datos de la embarcación y la descarga (hidrobiologicos)")
+	}
+	if strings.TrimSpace(li.EspecieVendida) == "" || strings.TrimSpace(li.CantidadEspecie) == "" {
+		return nil, fmt.Errorf("detracción 004 (1002): la línea %d no declara la especie vendida y su cantidad (hidrobiologicos)", li.LineNumber)
+	}
+	prop := func(code string) itemProperty {
+		e, _ := sunat.Cat55(code)
+		return itemProperty{
+			Name: e.Label,
+			NameCode: itemPropertyCode{
+				Value:          code,
+				ListName:       "Propiedad del item",
+				ListAgencyName: "PE:SUNAT",
+				ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55",
+			},
+		}
+	}
+	withValue := func(code, value string) itemProperty {
+		p := prop(code)
+		p.Value = value
+		return p
+	}
+	fecha := prop(sunat.Cat55FechaDescarga)
+	fecha.UsabilityPeriod = &usabilityPeriod{StartDate: h.FechaDescarga}
+	cantidad := prop(sunat.Cat55CantidadEspecie)
+	cantidad.ValueQuantity = &quantity{Value: formatDecimal(parseDecimal(li.CantidadEspecie)), UnitCode: sunat.Cat03TNE}
+	return []itemProperty{
+		withValue(sunat.Cat55MatriculaEmbarcacion, h.MatriculaEmbarcacion),
+		withValue(sunat.Cat55NombreEmbarcacion, h.NombreEmbarcacion),
+		withValue(sunat.Cat55TipoEspecie, li.EspecieVendida),
+		withValue(sunat.Cat55LugarDescarga, h.LugarDescarga),
+		fecha,
+		cantidad,
+	}, nil
 }
 
 func newUbigeoAddress(ubigeo, direccion string) ubigeoAddress {

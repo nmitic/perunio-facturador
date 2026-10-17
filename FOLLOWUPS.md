@@ -111,27 +111,6 @@ produce a 10.5 % document yet.
 - Spec cases: compra with the proveedor as issuer, two related documents, a
   Cat.61-only code.
 
-## FU-7 — Detracción 004 (recursos hidrobiológicos)
-
-**Status:** refused by `validateDetraccion`. Since perunio-sunat-catalogs
-v1.3.1 Cat.54 grants 004 only `emit`, so the pickers no longer offer it; a
-producto saved with it still resolves (`detraccionItem`) and is refused by name
-at emission. Building 004 means restoring its `select` too.
-
-**Missing**
-- The per-line `cac:AdditionalItemProperty` entries. Operation type 1002
-  requires all six Cat.55 concepts (Factura2_0 and Boleta2_0; none struck
-  through): 3001 matrícula de la embarcación (ERR 3063), 3002 nombre de la
-  embarcación (3130), 3003 tipo de especie vendida (3131), 3004 lugar de
-  descarga (3132), 3005 fecha de descarga (3134), 3006 cantidad de especie
-  vendida (3133; 3135 without its quantity).
-- The rate: 4 % only when the proveedor holds the vessel's permiso de pesca and
-  is on SUNAT's "Listado de proveedores sujetos al SPOT con el porcentaje de
-  4 %". The listado is published by the last business day of each month and
-  applies from the next; the one in force on the deposit date decides.
-  Otherwise 10 % (`Cat54PorcentajeAlternativo`). Needs a company setting or a
-  consulta of the listado. Validation already accepts either rate.
-
 ## FU-8 — Detracción rules to re-verify or model
 
 Items from `DETRACCIONES.md` › Open questions and Known gaps. Re-check each

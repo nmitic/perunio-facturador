@@ -1,0 +1,8 @@
+case: detraccion-hidrobiologicos-sin-embarcacion
+document: cpe
+why: >-
+  A 1002 without the embarcación and descarga data cannot declare 3001, 3002,
+  3004 or 3005 on its lines, which SUNAT rejects (ERRORs 3063, 3130, 3132,
+  3134). The builder refuses it instead of sending a comprobante that is bound
+  to fail.
+error_contains: "hidrobiologicos"

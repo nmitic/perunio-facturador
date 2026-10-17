@@ -151,6 +151,11 @@ type createDocumentItemBody struct {
 	DiscountAmount         *string `json:"discountAmount,omitempty"`
 	LineTotal              string  `json:"lineTotal"`
 	PriceTypeCode          *string `json:"priceTypeCode,omitempty"`
+	// Detracción de recursos hidrobiológicos (004) only: the especie sold and
+	// its cantidad in toneladas (Cat.55 3003 / 3006). Checked at issue time by
+	// validation.validateHidrobiologicos.
+	EspecieVendida  *string `json:"especieVendida,omitempty"`
+	CantidadEspecie *string `json:"cantidadEspecie,omitempty"`
 }
 
 // detraccionBody is the detracción (SPOT) object on the create/update wire
@@ -293,6 +298,7 @@ type createDocumentBody struct {
 	AdquirenteSectorPublico *bool                    `json:"adquirenteSectorPublico,omitempty"`
 	Anexo1UnidadTransporte  *bool                    `json:"anexo1UnidadTransporte,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
+	Hidrobiologicos         *model.Hidrobiologicos   `json:"hidrobiologicos,omitempty"`
 	Items                   []createDocumentItemBody `json:"items"`
 }
 
@@ -430,6 +436,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 			DiscountAmount:         it.DiscountAmount,
 			LineTotal:              it.LineTotal,
 			PriceTypeCode:          it.PriceTypeCode,
+			EspecieVendida:         it.EspecieVendida,
+			CantidadEspecie:        it.CantidadEspecie,
 		})
 	}
 	in := db.CreateDocumentInput{
@@ -458,6 +466,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		Cuotas:                  b.Cuotas,
 		Anticipos:               toModelAnticipos(b.Anticipos),
 		TransporteCarga:         b.TransporteCarga.toModel(),
+		Hidrobiologicos:         b.Hidrobiologicos,
 		VentaAnticipoID:         nilIfEmpty(b.VentaAnticipoID),
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
@@ -554,6 +563,7 @@ type updateDocumentBody struct {
 	AdquirenteSectorPublico *bool                    `json:"adquirenteSectorPublico,omitempty"`
 	Anexo1UnidadTransporte  *bool                    `json:"anexo1UnidadTransporte,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
+	Hidrobiologicos         *model.Hidrobiologicos   `json:"hidrobiologicos,omitempty"`
 	Items                   []createDocumentItemBody `json:"items,omitempty"`
 }
 
@@ -594,6 +604,10 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		in.AnticiposIsSet = true
 		in.Anticipos = toModelAnticipos(*b.Anticipos)
 	}
+	if b.Hidrobiologicos != nil {
+		in.HidrobiologicosIsSet = true
+		in.Hidrobiologicos = b.Hidrobiologicos
+	}
 	if b.TransporteCarga != nil {
 		in.TransporteCargaIsSet = true
 		in.TransporteCarga = b.TransporteCarga.toModel()
@@ -628,6 +642,8 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 				DiscountAmount:         it.DiscountAmount,
 				LineTotal:              it.LineTotal,
 				PriceTypeCode:          it.PriceTypeCode,
+				EspecieVendida:         it.EspecieVendida,
+				CantidadEspecie:        it.CantidadEspecie,
 			})
 		}
 		in.Items = items

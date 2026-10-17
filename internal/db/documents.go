@@ -134,6 +134,7 @@ const issuedDocumentColumns = `
 	credit_debit_reason_code, credit_debit_reason_desc,
 	detraccion_codigo, detraccion_porcentaje, detraccion_monto, detraccion_cuenta_bn,
 	detraccion_no_sujeta, adquirente_sector_publico, anexo1_unidad_transporte,
+	hidrobiologicos,
 	sunat_response_code, sunat_response_description, sunat_ticket, sunat_observations,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key, r2_pdf_key,
 	pdf_branding_id,
@@ -171,6 +172,7 @@ func documentScanDest(d *model.IssuedDocument, cuotasRaw, anticiposRaw, transpor
 		&d.CreditDebitReasonCode, &d.CreditDebitReasonDesc,
 		&d.DetraccionCodigo, &d.DetraccionPorcentaje, &d.DetraccionMonto, &d.DetraccionCuentaBN,
 		&d.DetraccionNoSujeta, &d.AdquirenteSectorPublico, &d.Anexo1UnidadTransporte,
+		&d.Hidrobiologicos, // jsonb; pgx decodes it, NULL → nil
 		&d.SunatResponseCode, &d.SunatResponseDescription, &d.SunatTicket, observationsRaw,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
 		&d.PdfBrandingID,
@@ -554,6 +556,7 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
+			       especie_vendida, cantidad_especie,
 			       created_at
 			FROM issued_document_items
 			WHERE document_id = ANY($1)
@@ -569,7 +572,8 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
-				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode, &it.CreatedAt); err != nil {
+				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
+				&it.EspecieVendida, &it.CantidadEspecie, &it.CreatedAt); err != nil {
 				return err
 			}
 			out[it.DocumentID] = append(out[it.DocumentID], it)
@@ -588,6 +592,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
+			       especie_vendida, cantidad_especie,
 			       created_at
 			FROM issued_document_items
 			WHERE document_id = $1
@@ -603,7 +608,8 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
-				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode, &it.CreatedAt); err != nil {
+				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
+				&it.EspecieVendida, &it.CantidadEspecie, &it.CreatedAt); err != nil {
 				return err
 			}
 			out = append(out, it)

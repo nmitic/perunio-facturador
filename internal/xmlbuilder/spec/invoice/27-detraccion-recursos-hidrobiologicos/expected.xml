@@ -102,8 +102,8 @@
   <cac:PaymentTerms>
     <cbc:ID>Detraccion</cbc:ID>
     <cbc:PaymentMeansID>004</cbc:PaymentMeansID>
-    <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
-    <cbc:Amount currencyID="PEN">141.60</cbc:Amount>
+    <cbc:PaymentPercent>4.00</cbc:PaymentPercent>
+    <cbc:Amount currencyID="PEN">47.20</cbc:Amount>
   </cac:PaymentTerms>
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="PEN">180.00</cbc:TaxAmount>
@@ -155,6 +155,38 @@
     </cac:TaxTotal>
     <cac:Item>
       <cbc:Description>PRODUCTO TEST</cbc:Description>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Matrícula de la embarcación</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3001</cbc:NameCode>
+        <cbc:Value>PL-12345-CM</cbc:Value>
+      </cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Nombre de la embarcación</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3002</cbc:NameCode>
+        <cbc:Value>DON LUCHO II</cbc:Value>
+      </cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Tipo de especie vendida</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3003</cbc:NameCode>
+        <cbc:Value>Anchoveta (Engraulis ringens)</cbc:Value>
+      </cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Lugar de descarga</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3004</cbc:NameCode>
+        <cbc:Value>Muelle artesanal de Chimbote</cbc:Value>
+      </cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Fecha de descarga</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3005</cbc:NameCode>
+        <cac:UsabilityPeriod>
+          <cbc:StartDate>2024-01-14</cbc:StartDate>
+        </cac:UsabilityPeriod>
+      </cac:AdditionalItemProperty>
+      <cac:AdditionalItemProperty>
+        <cbc:Name>Cantidad de especie vendida</cbc:Name>
+        <cbc:NameCode listName="Propiedad del item" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55">3006</cbc:NameCode>
+        <cbc:ValueQuantity unitCode="TNE">10.00</cbc:ValueQuantity>
+      </cac:AdditionalItemProperty>
     </cac:Item>
     <cac:Price>
       <cbc:PriceAmount currencyID="PEN">100.00</cbc:PriceAmount>

@@ -1,0 +1,18 @@
+case: detraccion-hidrobiologicos-10
+document: cpe
+why: >-
+  The same sale by a proveedor that is not on SUNAT's 4 % listado: 004 then
+  deposits 10 % (Cat.54 porcentajeAlternativo). Only the rate and the monto
+  change; the six concepts are the same.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+  - "R.S. 183-2004/SUNAT Anexo 2 numeral 1"
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1002"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "10.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "129.80"
+  - xpath: "/*/cac:InvoiceLine/cac:Item/cac:AdditionalItemProperty"
+    count: 12

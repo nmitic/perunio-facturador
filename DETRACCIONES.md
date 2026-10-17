@@ -128,7 +128,7 @@ added by RS 000121-2025 and reworded by RS 000175-2025.
 
 | Num. | Cód | Description | Rate | Umbral | Perunio |
 |---|---|---|---|---|---|
-| 1 | 004 | Recursos hidrobiológicos | 4 % if the proveedor holds the vessel's permiso de pesca **and** is on SUNAT's listado (below); otherwise **10 %** (`porcentajeAlternativo`) | > S/ 700 | refused |
+| 1 | 004 | Recursos hidrobiológicos | 4 % if the proveedor holds the vessel's permiso de pesca **and** is on SUNAT's listado (below); otherwise **10 %** (`porcentajeAlternativo`) | > S/ 700 | ✓ (Cat.51 1002) |
 | 2 | 005 | Maíz amarillo duro | 4 % | > S/ 700 | ✓ |
 | 4 | 007 | Caña de azúcar | 10 % (since 16-10-2017, RS 246-2017) | > S/ 700 | ✓ |
 | 5 | 009 | Arena y piedra | 10 % | > S/ 700 | ✓ |
@@ -155,7 +155,23 @@ numeral 16, sending gold ores (2616.90.10.00) to Anexo 1 as 045.
 **004's listado** is the "Listado de proveedores sujetos al SPOT con el
 porcentaje de 4 %". SUNAT publishes it by the last business day of each month,
 and it applies from the first day of the next. The listado in force on the date
-the deposit is due decides the rate.
+the deposit is due decides the rate. Perunio cannot read it, so the company
+setting "listado de 4 %" (`companies.listado_spot_4`) only sets the rate the
+form starts from, and the user can switch it per comprobante.
+
+**004 on the wire.** Operation type 1002 demands six Cat.55 concepts as
+`cac:AdditionalItemProperty` on **every** line (SUNAT runs them in the line
+template). Perunio asks the embarcación and the descarga once and repeats them,
+and asks the especie and its cantidad per line:
+
+| Concept | Where it comes from | Fault if missing |
+|---|---|---|
+| 3001 matrícula de la embarcación (an..15) | `hidrobiologicos.matriculaEmbarcacion` | ERR 3063 |
+| 3002 nombre de la embarcación (an..100) | `hidrobiologicos.nombreEmbarcacion` | 3130 |
+| 3003 tipo de especie vendida (an..150) | the line's `especieVendida` | 3131 |
+| 3004 lugar de descarga (an..100) | `hidrobiologicos.lugarDescarga` | 3132 |
+| 3005 fecha de descarga (`cac:UsabilityPeriod/cbc:StartDate`) | `hidrobiologicos.fechaDescarga` | 3134 (3065) |
+| 3006 cantidad de especie vendida (`cbc:ValueQuantity`, TNE) | the line's `cantidadEspecie` | 3133 (3135; 3115 for a unit other than TNE) |
 
 ### Anexo 3 — servicios and contratos de construcción (all > S/ 700)
 
@@ -194,18 +210,6 @@ the IGV obligation arose on or after 01-04-2018.
 
 ### Códigos the facturador refuses
 
-- **004.** Since catalog v1.3.1 it has `emit` but not `select`: the picker no longer offers it, and a producto saved with it still resolves (`detraccionItem`), so `validateDetraccion` refuses it by name at emission instead of the comprobante going out without it. Operation type 1002 demands six per-line `cac:AdditionalItemProperty` concepts (Cat.55), and the builder emits none:
-
-  | Concept | Fault if missing |
-  |---|---|
-  | 3001 matrícula de la embarcación | ERR 3063 |
-  | 3002 nombre de la embarcación | 3130 |
-  | 3003 tipo de especie vendida | 3131 |
-  | 3004 lugar de descarga | 3132 |
-  | 3005 fecha de descarga | 3134 |
-  | 3006 cantidad de especie vendida | 3133 (3135 without its quantity) |
-
-  The 4 % / 10 % choice also needs the listado. See [FU-7](#known-gaps).
 - **028.** A fixed amount per axle collected at the toll booth, which `porcentaje × importe` cannot express. The picker does not offer it.
 
 ---
@@ -423,20 +427,21 @@ proveedor deposits then, so the neto pendiente is the whole total.
 
 ### What the facturador enforces
 
-`validateDetraccion`, `validateDetraccionCatalogo`, `validateTransporteCarga` and
-`validateCustomer` in `internal/validation/rules.go` reject, before anything
+`validateDetraccion`, `validateDetraccionCatalogo`, `validateTransporteCarga`,
+`validateHidrobiologicos` and `validateCustomer` in `internal/validation/rules.go` reject, before anything
 reaches SUNAT:
 
 - a detracción on anything but a factura, a boleta, or a nota referencing one;
 - an operation type other than 1001–1004, or 0104 on an anticipo (which goes out as 1001–1004);
-- a código that is not `emit` in Cat.54 (pre-empts ERR 3033), or 004 / 028;
-- a porcentaje other than the catálogo's (`porcentajeAlternativo` also passes, which today means only 004's 10 %, and 004 is refused anyway);
+- a código that is not `emit` in Cat.54 (pre-empts ERR 3033), or 028;
+- a porcentaje other than the catálogo's (`porcentajeAlternativo` also passes, which today means only 004's 10 %);
 - an Anexo 2/3 or 027 código on a boleta or on a nota referencing one;
 - an Anexo 3 or 027 código on a factura whose receptor is identified as no domiciliado (Cat.06 0 or B);
 - an operación at or under the código's umbral, unless an Anexo 1 código carries `anexo1UnidadTransporte` (refused above the umbral). It is measured on `TaxInclusiveAmount`, or on the venta's `monto_acordado` (`IssueRequest.MontoOperacion`, filled by the pipeline, never by the client) when that is larger. Notas and 0104 anticipos are not measured;
 - a monto that is not porcentaje × the SPOT base in soles (±0.01), for any currency (027: the greater of the importe and the valor referencial), or one larger than the payable;
 - a missing cuenta BN, or a missing tipo de cambio on a foreign-currency document;
 - an incomplete 027 trip block, including ubigeos that are not INEI districts;
+- an incomplete 004 block: the embarcación and descarga, and every line's especie and cantidad, in SUNAT's formats;
 - a boleta with a detracción whose buyer is not identified by DNI or RUC.
 
 It does **not** detect a factura that should have carried a detracción but has
@@ -485,11 +490,9 @@ Rules marked ★ above. Each one is also an entry in `FOLLOWUPS.md`.
 
 ## Known gaps
 
-Rules that are settled law but that Perunio does not model yet.
-
-| Gap | FU |
-|---|---|
-| 004: the six per-line properties are not built, and 4 % vs 10 % needs the listado. | FU-7 |
+Rules that are settled law but that Perunio does not model yet. None at the
+moment: the last ones (FU-5, FU-7 and the Sector Público buyer of FU-8) were
+built in October 2026.
 
 ---
 

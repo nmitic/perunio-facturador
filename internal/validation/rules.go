@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
@@ -533,27 +534,20 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "código de detracción requerido (Cat.54)", Field: "detraccion.codigo"})
 	}
 
-	// Two Cat.54 códigos declare an operación this pipeline cannot fully build,
-	// so refuse them here with something the user can act on instead of letting
-	// SUNAT reject the emission with a cryptic fault.
+	// 028 → 1003 declares an operación this pipeline cannot build, so it is
+	// refused here with something the user can act on instead of letting SUNAT
+	// reject the emission with a cryptic fault: transporte público de pasajeros
+	// is not a percentage of the importe but a fixed amount per vehicle, which
+	// the monto arithmetic below (porcentaje × total) cannot express. The
+	// código → operación mapping is nonetheless correct in
+	// xmlbuilder.detraccionOperationType.
 	//
-	//   004 → 1002: SUNAT demands six per-line cac:AdditionalItemProperty
-	//        entries (Cat.55 3001 matrícula de la embarcación, 3002 nombre de
-	//        la embarcación, 3003 tipo de especie, 3004 lugar de descarga,
-	//        3005 fecha de descarga, 3006 cantidad de especie — faults 3063,
-	//        3130–3135), and the builder has no AdditionalItemProperty support
-	//        at all. Cat.54 no longer grants 004 `select`, so the picker does
-	//        not offer it; this catches a producto that still carries it.
-	//   028 → 1003: transporte público de pasajeros is not a percentage of the
-	//        importe; it is a fixed amount per vehicle, which the monto
-	//        arithmetic below (porcentaje × total) cannot express.
-	//
-	// The código → operación mapping for both is nonetheless correct in
-	// xmlbuilder.detraccionOperationType, so lifting either block is only a
-	// matter of building the missing markup.
+	// 004 → 1002 and 027 → 1004 each carry a block of their own data, checked
+	// field by field.
 	switch d.Codigo {
 	case sunat.Cat54RecursosHidrobiologicos:
-		errs = append(errs, model.ValidationError{Code: 2800, Message: "la detracción de recursos hidrobiológicos (004) aún no está soportada: requiere matrícula de embarcación, especies y fecha de descarga por ítem", Field: "detraccion.codigo"})
+		errs = append(errs, validateHidrobiologicos(req)...)
+		errs = append(errs, validateDetraccionCatalogo(req)...)
 	case sunat.Cat54TransporteDePasajeros:
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la detracción de transporte de pasajeros (028) aún no está soportada: se liquida por monto fijo por vehículo, no como porcentaje del importe", Field: "detraccion.codigo"})
 	case sunat.Cat54ServicioDeTransporteDeCarga:
@@ -714,6 +708,57 @@ func penRate(req model.IssueRequest) (float64, bool) {
 		return 0, false
 	}
 	return rate, true
+}
+
+// validateHidrobiologicos guards the six Cat.55 concepts a detracción de
+// recursos hidrobiológicos (Cat.54 004 → 1002) declares on every line. Each is
+// an ERROR when missing (3063, 3130-3135); the lengths are SUNAT's formats
+// (OBSERV 4280) and the cantidad is decimal 12,2 greater than zero (4281).
+func validateHidrobiologicos(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	h := req.Hidrobiologicos
+	if h == nil {
+		return append(errs, model.ValidationError{Code: 3063, Message: "la detracción de recursos hidrobiológicos (004) requiere la matrícula y el nombre de la embarcación, y el lugar y la fecha de descarga", Field: "hidrobiologicos"})
+	}
+	for _, f := range []struct {
+		code   int
+		value  string
+		max    int
+		field  string
+		nombre string
+	}{
+		{3063, h.MatriculaEmbarcacion, 15, "hidrobiologicos.matriculaEmbarcacion", "la matrícula de la embarcación"},
+		{3130, h.NombreEmbarcacion, 100, "hidrobiologicos.nombreEmbarcacion", "el nombre de la embarcación"},
+		{3132, h.LugarDescarga, 100, "hidrobiologicos.lugarDescarga", "el lugar de descarga"},
+	} {
+		v := strings.TrimSpace(f.value)
+		switch {
+		case v == "":
+			errs = append(errs, model.ValidationError{Code: f.code, Message: "indique " + f.nombre, Field: f.field})
+		case utf8.RuneCountInString(v) > f.max || strings.ContainsAny(v, "\n\r\t"):
+			errs = append(errs, model.ValidationError{Code: 4280, Message: fmt.Sprintf("%s admite hasta %d caracteres en una sola línea", f.nombre, f.max), Field: f.field})
+		}
+	}
+	if _, err := time.Parse("2006-01-02", strings.TrimSpace(h.FechaDescarga)); err != nil {
+		errs = append(errs, model.ValidationError{Code: 3134, Message: "indique la fecha de descarga (AAAA-MM-DD)", Field: "hidrobiologicos.fechaDescarga"})
+	}
+	for i, li := range req.Items {
+		especie := strings.TrimSpace(li.EspecieVendida)
+		switch {
+		case especie == "":
+			errs = append(errs, model.ValidationError{Code: 3131, Message: fmt.Sprintf("línea %d: indique la especie vendida", li.LineNumber), Field: fmt.Sprintf("items[%d].especieVendida", i)})
+		case utf8.RuneCountInString(especie) > 150 || strings.ContainsAny(especie, "\n\r\t"):
+			errs = append(errs, model.ValidationError{Code: 4280, Message: fmt.Sprintf("línea %d: la especie vendida admite hasta 150 caracteres en una sola línea", li.LineNumber), Field: fmt.Sprintf("items[%d].especieVendida", i)})
+		}
+		cantidad, err := strconv.ParseFloat(strings.TrimSpace(li.CantidadEspecie), 64)
+		switch {
+		case strings.TrimSpace(li.CantidadEspecie) == "":
+			errs = append(errs, model.ValidationError{Code: 3133, Message: fmt.Sprintf("línea %d: indique la cantidad de especie vendida, en toneladas", li.LineNumber), Field: fmt.Sprintf("items[%d].cantidadEspecie", i)})
+		case err != nil || cantidad <= 0 || cantidad >= 1e12:
+			errs = append(errs, model.ValidationError{Code: 4281, Message: fmt.Sprintf("línea %d: la cantidad de especie vendida debe ser mayor a 0, con hasta 2 decimales", li.LineNumber), Field: fmt.Sprintf("items[%d].cantidadEspecie", i)})
+		}
+	}
+	return errs
 }
 
 // validateTransporteCarga guards the extra block a detracción de transporte de

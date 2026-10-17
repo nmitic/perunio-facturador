@@ -1,0 +1,62 @@
+case: detraccion-hidrobiologicos-listado-4
+document: cpe
+why: >-
+  Recursos hidrobiológicos (Cat.54 004) at 4 %, the rate of a proveedor on
+  SUNAT's listado: tipo de operación 1002, and every line declares the six
+  Cat.55 concepts 3001-3006. SUNAT checks them per line, not per document
+  (ValidaExprRegFactura-2.0.1.xsl, the 1002 block of the line template), so the
+  embarcación and the descarga repeat on each line while the especie and its
+  cantidad are the line's own.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0 (items 107-112)"
+  - "resources/xsl/cpe/ValidaExprRegFactura-2.0.1.xsl"
+  - "R.S. 183-2004/SUNAT Anexo 2 numeral 1"
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1002"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "004"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "4.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "51.92"
+  - xpath: "/*/cac:InvoiceLine/cac:Item/cac:AdditionalItemProperty"
+    count: 12
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3001']/cbc:Value"
+    equals: "PL-12345-CM"
+    sunat: "3063"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3001']/cbc:Value"
+    equals: "PL-12345-CM"
+    why: >-
+      The embarcación repeats on every line: 3063 runs per line
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3002']/cbc:Value"
+    equals: "DON LUCHO II"
+    sunat: "3130"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3003']/cbc:Value"
+    equals: "Caballa (Scomber japonicus)"
+    sunat: "3131"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3004']/cbc:Value"
+    equals: "Muelle artesanal de Chimbote"
+    sunat: "3132"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3005']/cac:UsabilityPeriod/cbc:StartDate"
+    equals: "2024-01-14"
+    sunat: "3065"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3005']/cbc:Value"
+    absent: true
+    why: >-
+      The fecha de descarga goes in UsabilityPeriod, not in cbc:Value
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3006']/cbc:ValueQuantity"
+    equals: "8.50"
+    sunat: "3135"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3006']/cbc:ValueQuantity/@unitCode"
+    equals: "TNE"
+    sunat: "3115"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3001']/cbc:Name"
+    equals: "Matrícula de la embarcación"
+    sunat: "4235"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3001']/cbc:NameCode/@listURI"
+    equals: "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo55"
+    sunat: "4253"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cac:AdditionalItemProperty[cbc:NameCode='3001']/cbc:NameCode/@listName"
+    equals: "Propiedad del item"
+    sunat: "4252"

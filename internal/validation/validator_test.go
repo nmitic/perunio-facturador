@@ -390,14 +390,34 @@ func TestValidateDetraccion(t *testing.T) {
 		is.True(t, !hasErrorField(errs, "detraccion"), "should have no detracción errors")
 	})
 
-	t.Run("recursos hidrobiológicos (004) is refused until its item data is supported", func(t *testing.T) {
-		req := newValidInvoice()
-		req.OperationType = "1002"
-		d := newDetraccion()
-		d.Codigo = sunat.Cat54RecursosHidrobiologicos
-		req.Detraccion = d
+	t.Run("recursos hidrobiológicos (004) needs the embarcación and descarga", func(t *testing.T) {
+		req := newHidrobiologicos("4.00", "47.20")
+		req.Hidrobiologicos = nil
 		errs := validation.Validate(req)
-		is.True(t, hasErrorField(errs, "detraccion.codigo"), "004 needs AdditionalItemProperty we do not emit")
+		is.True(t, hasErrorField(errs, "hidrobiologicos"), "3063: SUNAT rejects a 1002 line without 3001")
+	})
+
+	t.Run("recursos hidrobiológicos (004) at 4% and at 10% pass", func(t *testing.T) {
+		for _, c := range [][2]string{{"4.00", "47.20"}, {"10.00", "118.00"}} {
+			errs := validation.Validate(newHidrobiologicos(c[0], c[1]))
+			is.Equal(t, 0, len(errs))
+		}
+	})
+
+	t.Run("recursos hidrobiológicos (004) refuses a line without especie or cantidad", func(t *testing.T) {
+		req := newHidrobiologicos("4.00", "47.20")
+		req.Items[0].EspecieVendida = ""
+		req.Items[0].CantidadEspecie = "0"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "items[0].especieVendida"), "3131 runs per line")
+		is.True(t, hasErrorField(errs, "items[0].cantidadEspecie"), "the cantidad must be greater than 0 (4281)")
+	})
+
+	t.Run("recursos hidrobiológicos (004) refuses an over-long matrícula", func(t *testing.T) {
+		req := newHidrobiologicos("4.00", "47.20")
+		req.Hidrobiologicos.MatriculaEmbarcacion = "PL-1234567890-CM"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "hidrobiologicos.matriculaEmbarcacion"), "3001 is an..15")
 	})
 
 	t.Run("transporte de pasajeros (028) is refused: it is not a percentage", func(t *testing.T) {
@@ -614,6 +634,25 @@ func TestValidateDetraccionCatalogo(t *testing.T) {
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion"), "the umbral is in soles")
 	})
+}
+
+// newHidrobiologicos is the 1180.00 factura sold as recursos hidrobiológicos
+// (004 → 1002), with every Cat.55 concept filled in.
+func newHidrobiologicos(porcentaje, monto string) model.IssueRequest {
+	req := newValidInvoice()
+	req.OperationType = "1002"
+	req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54RecursosHidrobiologicos, Porcentaje: porcentaje, Monto: monto, CuentaBN: "00-123-456789"}
+	req.Hidrobiologicos = &model.Hidrobiologicos{
+		MatriculaEmbarcacion: "PL-12345-CM",
+		NombreEmbarcacion:    "DON LUCHO II",
+		LugarDescarga:        "Muelle artesanal de Chimbote",
+		FechaDescarga:        "2024-01-14",
+	}
+	for i := range req.Items {
+		req.Items[i].EspecieVendida = "Anchoveta"
+		req.Items[i].CantidadEspecie = "10.00"
+	}
+	return req
 }
 
 func newTransporteCarga() *model.TransporteCarga {

@@ -37,13 +37,21 @@
       "iscTierRange": "",
       "discountAmount": "0.00",
       "lineTotal": "1000.00",
-      "priceTypeCode": "01"
+      "priceTypeCode": "01",
+      "especieVendida": "Anchoveta (Engraulis ringens)",
+      "cantidadEspecie": "10.00"
     }
   ],
   "detraccion": {
     "codigo": "004",
-    "porcentaje": "12.00",
-    "monto": "141.60",
+    "porcentaje": "4.00",
+    "monto": "47.20",
     "cuentaBN": "00-123-456789"
+  },
+  "hidrobiologicos": {
+    "matriculaEmbarcacion": "PL-12345-CM",
+    "nombreEmbarcacion": "DON LUCHO II",
+    "lugarDescarga": "Muelle artesanal de Chimbote",
+    "fechaDescarga": "2024-01-14"
   }
 }

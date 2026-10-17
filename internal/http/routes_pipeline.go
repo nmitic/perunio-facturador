@@ -146,6 +146,7 @@ func buildIssueRequestFromDoc(
 		Anticipos: doc.Anticipos,
 		// Trip block for a detracción de transporte de carga (027 → 1004).
 		TransporteCarga: doc.TransporteCarga,
+		Hidrobiologicos: doc.Hidrobiologicos,
 	}
 
 	// doc.Notes are the draft's free-text observaciones. They stay in the DB
@@ -202,6 +203,8 @@ func lineItemsFromDB(items []model.IssuedDocumentItem) []model.LineItem {
 			IGVAmount:              it.IgvAmount,
 			ISCAmount:              derefString(it.IscAmount, "0.00"),
 			ISCTierRange:           derefString(it.IscTierRange, ""),
+			EspecieVendida:         derefString(it.EspecieVendida, ""),
+			CantidadEspecie:        derefString(it.CantidadEspecie, ""),
 			DiscountAmount:         derefString(it.DiscountAmount, "0.00"),
 			LineTotal:              it.LineTotal,
 			PriceTypeCode:          derefString(it.PriceTypeCode, "01"),
