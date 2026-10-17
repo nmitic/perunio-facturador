@@ -13,6 +13,7 @@ help:
 	@echo "  make run      run from source (the app loads .env itself)"
 	@echo "  make start    build $(BIN) and run the binary"
 	@echo "  make check    build + vet + test (what CI enforces)"
+	@echo "  make test <pkg...>  test only internal/<pkg>, e.g. make test xmlbuilder"
 	@echo "  make build | vet | test | lint | fmt | clean"
 
 # xmlsec1 is a runtime dependency, not a build one: signing shells out to the
@@ -49,8 +50,21 @@ start: build
 vet:
 	go vet ./...
 
+# `make test xmlbuilder signature` runs only those internal/ packages, verbose
+# and uncached. The extra words are make goals, so they are swallowed below;
+# the guard keeps `make check` (which depends on test) running everything.
+ifeq ($(firstword $(MAKECMDGOALS)),test)
+TEST_PKGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+$(TEST_PKGS):
+	@:
+endif
+
 test:
+ifeq ($(TEST_PKGS),)
 	go test -shuffle on ./...
+else
+	go test -shuffle on -count=1 -v $(addprefix ./internal/,$(TEST_PKGS))
+endif
 
 check: build vet test
 

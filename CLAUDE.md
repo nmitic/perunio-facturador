@@ -22,6 +22,7 @@ make check          # build + vet + test — exactly what CI enforces
 make doctor         # Verify Go, xmlsec1 and .env are in place
 make build          # Build binary to bin/facturador
 make test           # go test -shuffle on ./...
+make test xmlbuilder  # one or more internal/ packages, verbose + uncached
 make lint           # golangci-lint run
 make fmt            # gofmt -w .
 ```
