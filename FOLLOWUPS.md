@@ -102,3 +102,11 @@ produce a 10.5 % document yet.
   `perunio-frontend` consume the same tag.
 - Re-run `go test ./internal/xmlbuilder -run TestSpec -update` and review the
   leyenda text diffs.
+- While there, add what the RC builder needed and the catalog lacks:
+  - **Cat.11** (código de tipo de valor de venta, RC `sac:BillingPayment/
+    cbc:InstructionID`): 01-05, plus 06-09 from 2027-01-01. Today
+    `internal/xmlbuilder/summary.go` writes them as single literals.
+  - A **category on Cat.07** entries (gravado / exonerado / inafecto /
+    exportación). `FillSummaryTotals` (`internal/xmlbuilder/summary_totals.go`)
+    tells exonerado from inafecto gratuitos by the código's first digit
+    (2x / 3x).

@@ -180,8 +180,16 @@ func buildIssueRequestFromDoc(
 		}
 	}
 
+	req.Items = lineItemsFromDB(items)
+	return req
+}
+
+// lineItemsFromDB maps stored document items to the builder's line items,
+// filling the defaults the specs assume (afectación 10, precio tipo 01).
+func lineItemsFromDB(items []model.IssuedDocumentItem) []model.LineItem {
+	out := make([]model.LineItem, 0, len(items))
 	for _, it := range items {
-		req.Items = append(req.Items, model.LineItem{
+		out = append(out, model.LineItem{
 			LineNumber:             it.LineNumber,
 			Description:            it.Description,
 			Quantity:               it.Quantity,
@@ -197,7 +205,7 @@ func buildIssueRequestFromDoc(
 			PriceTypeCode:          derefString(it.PriceTypeCode, "01"),
 		})
 	}
-	return req
+	return out
 }
 
 func derefString(s *string, fallback string) string {
@@ -300,8 +308,21 @@ func (s *Server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 		Correlative:   correlative,
 		Environment:   env,
 	}
+	// The valor de venta per tipo de operación (gravada / exonerada / inafecta /
+	// exportación / gratuitas) comes from each comprobante's own lines.
+	docIDs := make([]string, len(items))
 	for i, it := range items {
-		summaryReq.Items = append(summaryReq.Items, model.SummaryItem{
+		docIDs[i] = it.DocumentID
+	}
+	docLines, err := s.pool.GetIssuedDocumentItemsForDocuments(r.Context(), docIDs)
+	if err != nil {
+		s.log.Error("get summary document items", "error", err, "summaryId", summaryID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+
+	for i, it := range items {
+		line := model.SummaryItem{
 			LineNumber:        i + 1,
 			DocType:           it.DocType,
 			Series:            it.Series,
@@ -313,11 +334,12 @@ func (s *Server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 			CustomerName:      it.CustomerName,
 			CurrencyCode:      it.CurrencyCode,
 			TotalAmount:       it.TotalAmount,
-			TotalGravada:      it.Subtotal,
 			TotalIGV:          it.TotalIgv,
 			TotalISC:          it.TotalIsc,
 			TotalOtherTaxes:   it.TotalOtherTaxes,
-		})
+		}
+		xmlbuilder.FillSummaryTotals(&line, it.Subtotal, lineItemsFromDB(docLines[it.DocumentID]))
+		summaryReq.Items = append(summaryReq.Items, line)
 	}
 
 	xmlBytes, err := xmlbuilder.BuildSummaryXML(summaryReq)

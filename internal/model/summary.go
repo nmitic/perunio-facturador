@@ -43,7 +43,18 @@ type SummaryItem struct {
 	TotalOtherTaxes   string `json:"totalOtherTaxes"`
 	TotalExonerated   string `json:"totalExonerated"`
 	TotalUnaffected   string `json:"totalUnaffected"`
-	TotalFree         string `json:"totalFree"`
+	TotalExport       string `json:"totalExport"`
+	// TotalFree is the valor de venta of the operaciones gratuitas, reported
+	// under Cat.11 05 until 2026-12-31. From 2027-01-01 05 is deactivated and
+	// the total is reported per type (06-09) from the four fields below, plus
+	// the "IGV gratuitas" of the gravadas. A legacy item that only carries
+	// TotalFree is reported as 06 (gravada) from 2027.
+	TotalFree           string `json:"totalFree"`
+	TotalFreeGravada    string `json:"totalFreeGravada,omitempty"`
+	TotalFreeExonerated string `json:"totalFreeExonerated,omitempty"`
+	TotalFreeUnaffected string `json:"totalFreeUnaffected,omitempty"`
+	TotalFreeExport     string `json:"totalFreeExport,omitempty"`
+	TotalFreeIGV        string `json:"totalFreeIgv,omitempty"`
 }
 
 // SummaryResponse is returned after sending a Resumen Diario.

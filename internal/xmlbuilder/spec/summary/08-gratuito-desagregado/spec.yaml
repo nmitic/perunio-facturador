@@ -11,9 +11,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1 (Control de Cambios: Operaciones Gratuitas)"
   - "Cat.11 (Catálogos sheet)"
-pending: >-
-  Finding F13: buildSummaryLine reports operaciones gratuitas under Cat.11
-  05.
 effective: "2027-01-01"
 assert:
   - xpath: "/*/sac:SummaryDocumentsLine/sac:BillingPayment[cbc:InstructionID='05']"

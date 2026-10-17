@@ -243,12 +243,13 @@ func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLin
 			InstructionID: "03", // Inafecto
 		})
 	}
-	if !isZeroAmount(item.TotalFree) {
+	if !isZeroAmount(item.TotalExport) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
-			PaidAmount:    newCurrencyAmount(item.TotalFree, cur),
-			InstructionID: "05", // Gratuito
+			PaidAmount:    newCurrencyAmount(item.TotalExport, cur),
+			InstructionID: "04", // Exportación
 		})
 	}
+	line.BillingPayment = append(line.BillingPayment, summaryGratuitas(item, cur, from2027)...)
 
 	// TaxTotal: the IGV cac:TaxTotal is mandatory on every line, 0.00 included
 	// (an exonerada or inafecta boleta; ERROR 2278). ISC and otros only when present.
@@ -261,6 +262,16 @@ func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLin
 		igvTax.TaxSubtotal.TaxCategory.Percent = summaryIGVRate(item)
 	}
 	line.TaxTotal = append(line.TaxTotal, igvTax)
+	// "IGV gratuitas" (9996): from 2027, the would-be IGV of the gravadas
+	// gratuitas, with its rate (ERROR 3051/2992/3504).
+	if from2027 && !isZeroAmount(item.TotalFreeGravada) && item.TotalFreeIGV != "" {
+		gra := newSummaryTax(item.TotalFreeIGV, cur, sunat.Cat05Gratuita)
+		gra.TaxSubtotal.TaxCategory.Percent = lineIGVRate(model.LineItem{
+			LineTotal: item.TotalFreeGravada,
+			IGVAmount: item.TotalFreeIGV,
+		})
+		line.TaxTotal = append(line.TaxTotal, gra)
+	}
 	if !isZeroAmount(item.TotalISC) {
 		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, sunat.Cat05ISC))
 	}
@@ -269,6 +280,54 @@ func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLin
 	}
 
 	return line
+}
+
+// summaryGratuitas reports the valor de venta of the operaciones gratuitas.
+// Until 2026-12-31 that is one total under Cat.11 05. From 2027-01-01 05 is
+// deactivated and each type has its own code: 06 gravada, 07 exonerada,
+// 08 inafecta, 09 exportación.
+func summaryGratuitas(item model.SummaryItem, cur string, from2027 bool) []summaryBillingPayment {
+	split := []struct{ amount, code string }{
+		{item.TotalFreeGravada, "06"},
+		{item.TotalFreeExonerated, "07"},
+		{item.TotalFreeUnaffected, "08"},
+		{item.TotalFreeExport, "09"},
+	}
+	var total float64
+	hasSplit := false
+	for _, p := range split {
+		if !isZeroAmount(p.amount) {
+			total += parseDecimal(p.amount)
+			hasSplit = true
+		}
+	}
+
+	if !from2027 {
+		free := item.TotalFree
+		if isZeroAmount(free) && hasSplit {
+			free = formatDecimal(total)
+		}
+		if isZeroAmount(free) {
+			return nil
+		}
+		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(free, cur), InstructionID: "05"}}
+	}
+
+	if !hasSplit {
+		// A legacy item carries only the total, which cannot be split after
+		// the fact; gravada is by far the common gratuita (retiro, bonificación).
+		if isZeroAmount(item.TotalFree) {
+			return nil
+		}
+		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(item.TotalFree, cur), InstructionID: "06"}}
+	}
+	var out []summaryBillingPayment
+	for _, p := range split {
+		if !isZeroAmount(p.amount) {
+			out = append(out, summaryBillingPayment{PaidAmount: newCurrencyAmount(p.amount, cur), InstructionID: p.code})
+		}
+	}
+	return out
 }
 
 // summaryIGVRate is the IGV rate the reported comprobante was taxed at, IGV ÷

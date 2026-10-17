@@ -543,6 +543,40 @@ func (p *Pool) ClearDocumentPayment(ctx context.Context, docID string) error {
 	})
 }
 
+// GetIssuedDocumentItemsForDocuments returns the line items of several
+// documents in one query, keyed by document id and ordered by line_number.
+func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []string) (map[string][]model.IssuedDocumentItem, error) {
+	out := make(map[string][]model.IssuedDocumentItem, len(docIDs))
+	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
+			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
+			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
+			       created_at
+			FROM issued_document_items
+			WHERE document_id = ANY($1)
+			ORDER BY document_id, line_number
+		`, docIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var it model.IssuedDocumentItem
+			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
+				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
+				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
+				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode, &it.CreatedAt); err != nil {
+				return err
+			}
+			out[it.DocumentID] = append(out[it.DocumentID], it)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // GetIssuedDocumentItems returns the line items for a document, ordered by
 // line_number.
 func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]model.IssuedDocumentItem, error) {
