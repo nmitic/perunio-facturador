@@ -359,9 +359,12 @@ func buildShipment(d *model.Despatch) shipment {
 		}
 	}
 
-	// Public transport → CarrierParty (third-party RUC + name).
-	// Private transport → TransportMeans (plate) + DriverPerson (license).
-	if d.TransportModality == model.TransportModalityPublic {
+	// Remitente (09) with transporte público → CarrierParty (the third-party
+	// carrier's RUC + name). Otherwise → the vehicle plate + DriverPerson. A
+	// GRE transportista (31) always declares its own vehicle and driver and
+	// never a CarrierParty (ERROR 2566, 3357): the carrier is the issuer, so a
+	// transporte público modalidad saved on its draft changes nothing.
+	if d.DocType != sunat.GreDocTypeTransportista && d.TransportModality == model.TransportModalityPublic {
 		if d.CarrierRUC != nil && *d.CarrierRUC != "" {
 			cp := &carrierParty{
 				PartyIdentification: partyIdentification{
