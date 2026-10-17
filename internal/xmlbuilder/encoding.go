@@ -17,20 +17,22 @@ func marshalISO8859(v any) ([]byte, error) {
 	return transcodeToISO8859(utf8Bytes)
 }
 
-// transcodeToISO8859 converts UTF-8 XML bytes to ISO-8859-1 with correct declaration.
+// transcodeToISO8859 converts UTF-8 XML bytes to ISO-8859-1 with correct
+// declaration. A rune ISO-8859-1 cannot hold (curly quotes, em dash, €, pasted
+// from a word processor) is written as an XML numeric character reference, so
+// the text round-trips instead of failing the whole issue. xml.Marshal only
+// emits such runes inside text and attribute values, where a reference is legal.
 func transcodeToISO8859(utf8Bytes []byte) ([]byte, error) {
-	// Add XML declaration with ISO-8859-1 encoding
-	declaration := []byte(`<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>` + "\n")
-
-	// Encode body to ISO-8859-1
-	encoder := charmap.ISO8859_1.NewEncoder()
-	encoded, err := encoder.Bytes(utf8Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("iso-8859-1 encode: %w", err)
-	}
-
 	var buf bytes.Buffer
-	buf.Write(declaration)
-	buf.Write(encoded)
+	buf.Grow(len(utf8Bytes) + 64)
+	buf.WriteString(`<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>` + "\n")
+
+	for _, r := range string(utf8Bytes) {
+		if b, ok := charmap.ISO8859_1.EncodeRune(r); ok {
+			buf.WriteByte(b)
+			continue
+		}
+		fmt.Fprintf(&buf, "&#x%X;", r)
+	}
 	return buf.Bytes(), nil
 }

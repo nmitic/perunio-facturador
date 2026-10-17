@@ -8,10 +8,6 @@ why: >-
   clear message before issuing.
 sources:
   - "XML 1.0 §4.1 character references"
-pending: >-
-  Finding F10: transcodeToISO8859 fails on any non-Latin-1 rune, so
-  BuildDocumentXML returns 'iso-8859-1 encode' and the whole issue fails
-  with XML_BUILD_ERROR; validation does not catch it first.
 assert:
   - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:Item/cbc:Description"
     equals: "Cable “HDMI” — 2m €"
