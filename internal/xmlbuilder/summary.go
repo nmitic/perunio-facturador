@@ -81,6 +81,9 @@ type summaryTaxSubtotal struct {
 }
 
 type summaryTaxCategory struct {
+	// Percent is the "Tasa del IGV" field, required from 2027-01-01 (see
+	// rcLineRateFrom); UBL puts it before cac:TaxScheme.
+	Percent   string           `xml:"cbc:Percent,omitempty"`
 	TaxScheme summaryTaxScheme `xml:"cac:TaxScheme"`
 }
 
@@ -155,7 +158,7 @@ func BuildSummaryXML(req model.SummaryRequest) ([]byte, error) {
 			return nil, fmt.Errorf("summary line %d: Resumen 1.1 reports one comprobante per line, got the range %s %d-%d",
 				item.LineNumber, item.Series, item.StartCorrelative, item.EndCorrelative)
 		}
-		doc.SummaryLines = append(doc.SummaryLines, buildSummaryLine(item))
+		doc.SummaryLines = append(doc.SummaryLines, buildSummaryLine(item, rules2027(req.ReferenceDate)))
 	}
 
 	return marshalISO8859(&doc)
@@ -166,7 +169,19 @@ func SummaryFilename(ruc, issueDate string, correlative int) string {
 	return fmt.Sprintf("%s-RC-%s-%05d", ruc, formatDateCompact(issueDate), correlative)
 }
 
-func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
+// rcRules2027 is the date SUNAT starts enforcing the Resumen Diario changes
+// postponed from 2026-08-01 (workbook Control de Cambios): the IGV rate on each
+// line (ERROR 2992/3504/3102) and the gratuitas split into Cat.11 06-09. Sending
+// either earlier is sending a field or código SUNAT does not accept yet.
+const rcRules2027 = "2027-01-01"
+
+// rules2027 reports whether an RC for boletas issued on referenceDate
+// (YYYY-MM-DD) follows the 2027 rules.
+func rules2027(referenceDate string) bool {
+	return referenceDate >= rcRules2027
+}
+
+func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLine {
 	// Each RC line carries the currency of its underlying boleta. SUNAT's RC
 	// schema allows per-line currency, so a USD/EUR boleta summarizes in its own
 	// moneda. Fall back to PEN for legacy rows with an empty currency.
@@ -241,7 +256,11 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	if igv == "" {
 		igv = "0.00"
 	}
-	line.TaxTotal = append(line.TaxTotal, newSummaryTax(igv, cur, sunat.Cat05IGV))
+	igvTax := newSummaryTax(igv, cur, sunat.Cat05IGV)
+	if from2027 {
+		igvTax.TaxSubtotal.TaxCategory.Percent = summaryIGVRate(item)
+	}
+	line.TaxTotal = append(line.TaxTotal, igvTax)
 	if !isZeroAmount(item.TotalISC) {
 		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, sunat.Cat05ISC))
 	}
@@ -250,6 +269,17 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	}
 
 	return line
+}
+
+// summaryIGVRate is the IGV rate the reported comprobante was taxed at, IGV ÷
+// (gravada + ISC), snapped to 18 or 10.5 — the rates SUNAT accepts on a boleta
+// (3504). A line with no gravada base declares the general rate.
+func summaryIGVRate(item model.SummaryItem) string {
+	return lineIGVRate(model.LineItem{
+		LineTotal: item.TotalGravada,
+		ISCAmount: item.TotalISC,
+		IGVAmount: item.TotalIGV,
+	})
 }
 
 // summaryCustomerName fits a customer name to RC field 10.3: 3-250 characters,

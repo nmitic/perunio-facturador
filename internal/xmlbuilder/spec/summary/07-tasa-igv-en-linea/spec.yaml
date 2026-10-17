@@ -6,8 +6,6 @@ why: >-
   also 10 for a nota.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1 (Control de Cambios: ERR-2992, ERR-3504, ERR-3102)"
-pending: >-
-  Finding F12: RC line subtotals carry no cbc:Percent.
 effective: "2027-01-01"
 assert:
   - xpath: "/*/sac:SummaryDocumentsLine/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent"
