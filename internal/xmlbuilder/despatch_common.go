@@ -371,9 +371,7 @@ func buildShipment(d *model.Despatch) shipment {
 				},
 				JobTitle: "Principal",
 			}
-			if d.DriverName != nil {
-				dp.FirstName = *d.DriverName
-			}
+			dp.FirstName, dp.FamilyName = driverNames(d)
 			if d.DriverLicense != nil {
 				dp.IdentificationCard = *d.DriverLicense
 			}
@@ -446,6 +444,22 @@ func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, 
 // -----------------------------------------------------------------------------
 // Small internal helpers
 // -----------------------------------------------------------------------------
+
+// driverNames returns the principal driver's nombres (cbc:FirstName, ERROR
+// 3360) and apellidos (cbc:FamilyName, ERROR 3361). Drafts saved before
+// driverFamilyName existed hold the whole name in driverName; those are split
+// at the first space, the Peruvian "nombres apellidos" order for a single
+// given name ("JUAN PEREZ QUISPE" → "JUAN" / "PEREZ QUISPE").
+func driverNames(d *model.Despatch) (first, family string) {
+	first = strings.Join(strings.Fields(stringOrDefault(d.DriverName, "")), " ")
+	family = strings.Join(strings.Fields(stringOrDefault(d.DriverFamilyName, "")), " ")
+	if family == "" {
+		if i := strings.Index(first, " "); i > 0 {
+			first, family = first[:i], first[i+1:]
+		}
+	}
+	return first, family
+}
 
 func weightUnitOrDefault(u string) string {
 	if u == "" {

@@ -96,7 +96,8 @@
       </cac:TransitPeriod>
       <cac:DriverPerson>
         <cbc:ID schemeID="1" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">12345678</cbc:ID>
-        <cbc:FirstName>JUAN PEREZ</cbc:FirstName>
+        <cbc:FirstName>JUAN</cbc:FirstName>
+        <cbc:FamilyName>PEREZ</cbc:FamilyName>
         <cbc:JobTitle>Principal</cbc:JobTitle>
         <cac:IdentityDocumentReference>
           <cbc:ID>Q12345678</cbc:ID>

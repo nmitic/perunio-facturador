@@ -8,9 +8,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0"
-pending: >-
-  Finding F17: buildShipment puts the whole driverName in cbc:FirstName and
-  emits no cbc:FamilyName (ERR 3361 on every guía with a driver).
 assert:
   - xpath: "string-length(normalize-space(/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson[cbc:JobTitle='Principal']/cbc:FirstName)) > 0"
     true: true

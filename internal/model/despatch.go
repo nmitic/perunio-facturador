@@ -67,12 +67,14 @@ type Despatch struct {
 	// Private transport only — required when TransportModality = "02"
 	// (and always for Transportista). Driver license + at least one
 	// vehicle plate are hard-required by SUNAT.
-	DriverDocType   *string  `json:"driverDocType"` // Cat.06
-	DriverDocNumber *string  `json:"driverDocNumber"`
-	DriverLicense   *string  `json:"driverLicense"`
-	DriverName      *string  `json:"driverName"`
-	VehiclePlate    *string  `json:"vehiclePlate"`
-	VehiclePlates   []string `json:"vehiclePlates"` // additional (secundarios)
+	DriverDocType   *string `json:"driverDocType"` // Cat.06
+	DriverDocNumber *string `json:"driverDocNumber"`
+	DriverLicense   *string `json:"driverLicense"`
+	DriverName      *string `json:"driverName"` // nombres (all of the name on drafts older than driverFamilyName)
+	// DriverFamilyName is the driver's apellidos (cbc:FamilyName, ERROR 3361).
+	DriverFamilyName *string  `json:"driverFamilyName"`
+	VehiclePlate     *string  `json:"vehiclePlate"`
+	VehiclePlates    []string `json:"vehiclePlates"` // additional (secundarios)
 
 	// Public transport only — required when TransportModality = "01".
 	// The third-party carrier.

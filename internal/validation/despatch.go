@@ -104,6 +104,19 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 			Message: "el documento relacionado requiere su tipo (catálogo 61)",
 		})
 	}
+	// A declared driver carries nombres and apellidos (ERROR 3360 / 3361).
+	// driverName alone, from drafts older than driverFamilyName, must hold
+	// both so the builder can split it.
+	if d.DriverDocNumber != nil && *d.DriverDocNumber != "" {
+		first := strings.Fields(derefString(d.DriverName))
+		family := strings.TrimSpace(derefString(d.DriverFamilyName))
+		switch {
+		case len(first) == 0:
+			errs = append(errs, model.ValidationError{Code: 3360, Field: "driverName", Message: "los nombres del conductor son obligatorios"})
+		case family == "" && len(first) < 2:
+			errs = append(errs, model.ValidationError{Code: 3361, Field: "driverFamilyName", Message: "los apellidos del conductor son obligatorios"})
+		}
+	}
 	// Motivo 13 (Otros) must describe the traslado (ERROR 3457).
 	if d.TransferReason == sunat.Cat20Otros &&
 		(d.TransferReasonDesc == nil || strings.TrimSpace(*d.TransferReasonDesc) == "") {
@@ -219,4 +232,11 @@ func validateDespatchLines(lines []model.DespatchLine) []model.ValidationError {
 		}
 	}
 	return errs
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

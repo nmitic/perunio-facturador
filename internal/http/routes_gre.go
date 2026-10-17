@@ -200,7 +200,9 @@ type createDespatchBody struct {
 	DriverDocNumber *string `json:"driverDocNumber,omitempty"`
 	DriverLicense   *string `json:"driverLicense,omitempty"`
 	DriverName      *string `json:"driverName,omitempty"`
-	VehiclePlate    *string `json:"vehiclePlate,omitempty"`
+	// DriverFamilyName is the driver's apellidos; DriverName the nombres.
+	DriverFamilyName *string `json:"driverFamilyName,omitempty"`
+	VehiclePlate     *string `json:"vehiclePlate,omitempty"`
 
 	CarrierRUC  *string `json:"carrierRuc,omitempty"`
 	CarrierName *string `json:"carrierName,omitempty"`
@@ -302,6 +304,7 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 		DriverDocNumber:    b.DriverDocNumber,
 		DriverLicense:      b.DriverLicense,
 		DriverName:         b.DriverName,
+		DriverFamilyName:   b.DriverFamilyName,
 		VehiclePlate:       b.VehiclePlate,
 		CarrierRUC:         b.CarrierRUC,
 		CarrierName:        b.CarrierName,
@@ -384,7 +387,9 @@ type updateDespatchBody struct {
 	DriverDocNumber *string `json:"driverDocNumber,omitempty"`
 	DriverLicense   *string `json:"driverLicense,omitempty"`
 	DriverName      *string `json:"driverName,omitempty"`
-	VehiclePlate    *string `json:"vehiclePlate,omitempty"`
+	// DriverFamilyName is the driver's apellidos; DriverName the nombres.
+	DriverFamilyName *string `json:"driverFamilyName,omitempty"`
+	VehiclePlate     *string `json:"vehiclePlate,omitempty"`
 
 	CarrierRUC  *string `json:"carrierRuc,omitempty"`
 	CarrierName *string `json:"carrierName,omitempty"`
@@ -423,6 +428,7 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 		DriverDocNumber:    b.DriverDocNumber,
 		DriverLicense:      b.DriverLicense,
 		DriverName:         b.DriverName,
+		DriverFamilyName:   b.DriverFamilyName,
 		VehiclePlate:       b.VehiclePlate,
 		CarrierRUC:         b.CarrierRUC,
 		CarrierName:        b.CarrierName,

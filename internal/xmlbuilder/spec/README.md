@@ -174,7 +174,6 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
-| F17 | The whole driver name goes in `DriverPerson/cbc:FirstName`; `cbc:FamilyName` (apellidos) is never emitted. Every guía with a driver is rejected. | ERROR 3361 (3360) | `buildShipment`, `model.Despatch.DriverName` | despatch/09 |
 | F18 | No "fecha de entrega de bienes al transportista" (`ShipmentStage/LoadingTransportEvent/cbc:OccurrenceDate`) on transporte público guías; mandatory since 2026-06-01. `model.Despatch` has no field. | ERROR 3617, 3618, 3619 | `buildShipment`, `model.Despatch` | despatch/10 |
 
 ## Upcoming rules
