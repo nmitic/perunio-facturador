@@ -22,6 +22,8 @@ account to pay its own taxes.
 Every rule here was checked against the primary text on **2026-10-17** (see
 [Sources](#sources)). Rules marked ★ have no primary SUNAT source, or SUNAT's
 own publications disagree; they are listed under [Open questions](#open-questions).
+Rules marked ◇ have no primary source either, but Perunio has settled on a
+reading (the conservative one) and does not expect to revisit it without one.
 What Perunio knowingly does not model is listed under [Known gaps](#known-gaps).
 
 ---
@@ -222,15 +224,20 @@ the IGV obligation arose on or after 01-04-2018.
   alike.
 - **Measuring the umbral of a venta con anticipos.** No SUNAT source says whether
   the umbral is measured against the whole operación (its `monto acordado`) or
-  against each comprobante. ★ **Perunio measures the whole operación**, so a
+  against each comprobante. ◇ **Perunio measures the whole operación**, so a
   S/ 360 saldo of a S/ 2,360 operación still deposits 12 % = S/ 43.20. That is
   the conservative reading: it can produce a detracción that was not owed, never
-  omit one that was.
+  omit one that was. Decided 2026-10-17; the monto acordado comes from
+  `ventas_anticipo.monto_acordado` (`IssueRequest.MontoOperacion`, filled by the
+  pipeline in `internal/http/pipeline_core.go`).
 - **027** compares the greater of the importe and the valor referencial del
   servicio against S/ 400, and uses that same figure as the base.
 - **Splitting** one operation into comprobantes of S/ 700 or less: no SUNAT
-  source addresses it. ★ Perunio measures per comprobante unless the
-  comprobante belongs to a venta con anticipos.
+  source addresses it. ◇ Perunio measures per comprobante unless the
+  comprobante belongs to a venta con anticipos, and offers no way to link
+  comprobantes of one contract outside that flow. Decided 2026-10-17: a
+  contract billed in parts that should be measured as one operación is issued
+  as a venta con anticipos.
 
 ---
 
@@ -368,7 +375,7 @@ which rule decided.
    one); Anexo 3 and 027 for a no domiciliado; Anexo 3 with no línea gravada
    con IGV.
 4. **The umbral** of the código, strictly greater than, over the operación in
-   soles: the venta's monto acordado when the comprobante belongs to one (★),
+   soles: the venta's monto acordado when the comprobante belongs to one (◇),
    and for 027 the greater of the importe and the valor referencial. Notas skip
    it, because a partial nota mirrors the referenced comprobante.
 5. **The monto**: porcentaje × importe of this comprobante in soles (027: the
@@ -453,11 +460,9 @@ Rules marked ★ above. Each one is also an entry in `FOLLOWUPS.md`.
 
 | ★ | Question | FU |
 |---|---|---|
-| 1 | Venta con anticipos: is the umbral measured against the whole operación? Informe 103-2013 only says each comprobante deposits on its own importe. Perunio measures the operación. | FU-6 |
-| 2 | Splitting one operation into comprobantes ≤ S/ 700: no SUNAT source addresses it. Perunio measures per comprobante outside ventas con anticipos. | FU-6 |
-| 3 | Status of 038, 042, 043, 046, 047. The workbook's change-log row is struck through, and no resolution up to RS 000204-2026 (14-10-2026) touches the SPOT. | FU-8 |
-| 4 | The Anexo 3 issuer list: the orientación "Servicios" page lists six issuers, and the Cartilla (2019–2020) eight. | FU-8 |
-| 5 | Which exchange rate the S/ 700 test uses on a USD comprobante. Art. 20 governs the deposit; Perunio uses the comprobante's own tipo de cambio for both. | FU-8 |
+| 1 | Status of 038, 042, 043, 046, 047. The workbook's change-log row is struck through, and no resolution up to RS 000204-2026 (14-10-2026) touches the SPOT. | FU-8 |
+| 2 | The Anexo 3 issuer list: the orientación "Servicios" page lists six issuers, and the Cartilla (2019–2020) eight. | FU-8 |
+| 3 | Which exchange rate the S/ 700 test uses on a USD comprobante. Art. 20 governs the deposit; Perunio uses the comprobante's own tipo de cambio for both. | FU-8 |
 
 ## Known gaps
 

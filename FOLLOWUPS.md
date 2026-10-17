@@ -123,26 +123,6 @@ measure an Anexo 1 código (001, 003, 034, 045) only against ½ UIT of the opera
 still subject when the Anexo 1 bienes carried on **one transport unit** add up
 to more than ½ UIT. Needs the guía / transport unit to be known at emission.
 
-## FU-6 — Detracción umbral for an operación spread over several comprobantes
-
-**Status:** two open questions ★. No SUNAT source found answers either.
-
-**Today** the umbral is measured per comprobante, except for a comprobante that
-belongs to a venta con anticipos: there the pipeline fills
-`IssueRequest.MontoOperacion` from `ventas_anticipo.monto_acordado`
-(`internal/http/pipeline_core.go`), and the form uses `ventaMontoAcordado`.
-
-**To decide**
-- Venta con anticipos: is the umbral measured against the whole operación, as
-  Perunio does, or against each comprobante? Informe 103-2013-SUNAT, which this
-  was attributed to, only says that each comprobante deposits on its own
-  importe (the anticipo and the saldo); it never mentions the umbral. Perunio's
-  reading is the conservative one: it can produce a detracción that was not
-  owed, never omit one that was.
-- Splitting: whether two facturas of S/ 400 for one contract are one operación
-  of S/ 800 (subject) or two (not). If they are one, the user needs a way to
-  link them outside the venta con anticipos flow.
-
 ## FU-7 — Detracción 004 (recursos hidrobiológicos)
 
 **Status:** refused by `validateDetraccion`. Since perunio-sunat-catalogs
