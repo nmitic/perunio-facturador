@@ -176,7 +176,6 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 |---|---|---|---|---|
 | F17 | The whole driver name goes in `DriverPerson/cbc:FirstName`; `cbc:FamilyName` (apellidos) is never emitted. Every guía with a driver is rejected. | ERROR 3361 (3360) | `buildShipment`, `model.Despatch.DriverName` | despatch/09 |
 | F18 | No "fecha de entrega de bienes al transportista" (`ShipmentStage/LoadingTransportEvent/cbc:OccurrenceDate`) on transporte público guías; mandatory since 2026-06-01. `model.Despatch` has no field. | ERROR 3617, 3618, 3619 | `buildShipment`, `model.Despatch` | despatch/10 |
-| F19 | `transferReasonDesc` is emitted as `Shipment/cbc:Information`, reserved for motivos 08/09/19; the description belongs in `cbc:HandlingInstructions`, mandatory for motivo 13. | ERROR 3418, 3457 | `buildShipment` | despatch/11 |
 | F22 | Related documents go out as `cac:OrderReference`, which no GRE rule or XSL reads, and `relatedDocType` is dropped. GRE 2.0 expects `cac:AdditionalDocumentReference` (Cat.61 code, SERIE-NÚMERO, issuer RUC). | ERROR 2692, 3441, 3380, 3382; OBSERV 4371 | `despatch_remitente.go` | despatch/14 |
 
 ## Upcoming rules

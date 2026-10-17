@@ -3,6 +3,7 @@ package xmlbuilder
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
@@ -99,10 +100,13 @@ type deliveryCustomerParty struct {
 // shipment carries the transport metadata: weight, packages, mode,
 // origin/destination addresses, driver and vehicle.
 type shipment struct {
-	XMLName                            xml.Name      `xml:"cac:Shipment"`
-	ID                                 string        `xml:"cbc:ID"`
-	HandlingCode                       handlingCode  `xml:"cbc:HandlingCode"`
-	Information                        string        `xml:"cbc:Information,omitempty"`
+	XMLName      xml.Name     `xml:"cac:Shipment"`
+	ID           string       `xml:"cbc:ID"`
+	HandlingCode handlingCode `xml:"cbc:HandlingCode"`
+	// HandlingInstructions is the description of the motivo de traslado,
+	// required for motivo 13 Otros (ERROR 3457). cbc:Information is reserved
+	// for motivos 08/09/19 (ERROR 3418 on any other) and is not emitted.
+	HandlingInstructions               string        `xml:"cbc:HandlingInstructions,omitempty"`
 	GrossWeightMeasure                 weightMeasure `xml:"cbc:GrossWeightMeasure"`
 	TotalTransportHandlingUnitQuantity string        `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
 	SplitConsignmentIndicator          string        `xml:"cbc:SplitConsignmentIndicator,omitempty"`
@@ -321,7 +325,8 @@ func buildShipment(d *model.Despatch) shipment {
 		},
 	}
 	if d.TransferReasonDesc != nil && *d.TransferReasonDesc != "" {
-		ship.Information = *d.TransferReasonDesc
+		// One line, as SUNAT's XSL wants it (no line breaks; 4190 otherwise).
+		ship.HandlingInstructions = strings.Join(strings.Fields(*d.TransferReasonDesc), " ")
 	}
 	if d.TotalPackages != nil {
 		ship.TotalTransportHandlingUnitQuantity = itoa(*d.TotalPackages)

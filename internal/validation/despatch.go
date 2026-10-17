@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
@@ -93,6 +94,14 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 		errs = append(errs, model.ValidationError{
 			Code: 2800, Field: "transferReason",
 			Message: fmt.Sprintf("invalid transfer reason %q (Cat.20)", d.TransferReason),
+		})
+	}
+	// Motivo 13 (Otros) must describe the traslado (ERROR 3457).
+	if d.TransferReason == sunat.Cat20Otros &&
+		(d.TransferReasonDesc == nil || strings.TrimSpace(*d.TransferReasonDesc) == "") {
+		errs = append(errs, model.ValidationError{
+			Code: 3457, Field: "transferReasonDesc",
+			Message: "el motivo de traslado 13 (Otros) requiere una descripción",
 		})
 	}
 

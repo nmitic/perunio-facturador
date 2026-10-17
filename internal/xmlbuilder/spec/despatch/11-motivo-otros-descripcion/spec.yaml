@@ -7,10 +7,6 @@ why: >-
   exportación, mercancía extranjera) and rejected on any other.
 sources:
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
-pending: >-
-  Finding F19: buildShipment maps transferReasonDesc to
-  cbc:Shipment/cbc:Information (ERR 3418 for motivo 13) and never emits
-  cbc:HandlingInstructions (ERR 3457).
 assert:
   - xpath: "/*/cac:Shipment/cbc:HandlingCode"
     equals: "13"
