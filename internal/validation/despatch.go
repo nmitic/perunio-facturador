@@ -96,6 +96,14 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 			Message: fmt.Sprintf("invalid transfer reason %q (Cat.20)", d.TransferReason),
 		})
 	}
+	// A related document is sent with its GRE Cat.61 type (ERROR 2692).
+	if d.RelatedDocSeries != nil && *d.RelatedDocSeries != "" &&
+		(d.RelatedDocType == nil || *d.RelatedDocType == "") {
+		errs = append(errs, model.ValidationError{
+			Code: 2692, Field: "relatedDocType",
+			Message: "el documento relacionado requiere su tipo (catálogo 61)",
+		})
+	}
 	// Motivo 13 (Otros) must describe the traslado (ERROR 3457).
 	if d.TransferReason == sunat.Cat20Otros &&
 		(d.TransferReasonDesc == nil || strings.TrimSpace(*d.TransferReasonDesc) == "") {

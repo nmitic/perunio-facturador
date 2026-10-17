@@ -7,10 +7,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
   - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
-pending: >-
-  Finding F22: buildDespatchRemitenteXML emits the related document as
-  cac:OrderReference, which no GRE rule or XSL reads, and drops
-  relatedDocType.
 assert:
   - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
     equals: "01"

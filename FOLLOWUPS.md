@@ -116,3 +116,29 @@ produce a 10.5 % document yet.
     `greDocTypeSelectEnum`, which still offers EV
     (`perunio-frontend/src/lib/comprobante-form-utils.ts`). Keep EV valid
     (old records still display; the GRE list filter keeps it).
+
+## FU-4 — GRE related document: issuer and catálogo 61
+
+**Status:** the related document goes out as `cac:AdditionalDocumentReference`
+(F22), with the remitente's own RUC as its issuer.
+
+**Today**
+- `model.Despatch` has `relatedDocType/Series/Number` but no issuer, so
+  `internal/xmlbuilder/despatch_remitente.go` declares the remitente as the
+  issuer of the related document (`cac:IssuerParty`, required for Cat.61 01,
+  03, 04, 09, 12, 48, 92: ERROR 3380/3382). Right for a venta (motivo 01);
+  wrong when the document was issued by someone else — e.g. the proveedor's
+  factura on a compra (motivo 02), which SUNAT also observes (4375).
+- Only one related document can be stored; GRE 2.0 allows several.
+- The shared catalog has no **Cat.61** (GRE documento relacionado). The code is
+  taken as given and its name from Cat.01 where the codes coincide; a Cat.61
+  code Cat.01 does not have (48, 50, 92…) goes without `cbc:DocumentType`
+  (OBSERV 4371 only). XSL rule 2692 checks the code against Cat.61 `gre-r`.
+
+**To build it**
+- `related_doc_issuer_ruc` (and a list of related documents) in the backend
+  schema, the facturador routes and the guía form.
+- Add Cat.61 with its `gre-r` / `gre-t` capabilities to
+  `perunio-sunat-catalogs`; validate the code and take the name from it.
+- Spec cases: compra with the proveedor as issuer, two related documents, a
+  Cat.61-only code.

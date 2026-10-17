@@ -33,7 +33,6 @@ type despatchAdvice struct {
 
 	Notes []noteElement `xml:"cbc:Note,omitempty"`
 
-	OrderReference               *orderReference               `xml:"cac:OrderReference,omitempty"`
 	AdditionalDocumentReferences []additionalDocumentReference `xml:"cac:AdditionalDocumentReference,omitempty"`
 
 	Signature cacSignature
@@ -61,12 +60,6 @@ func newDespatchAdviceTypeCode(code string) despatchAdviceTypeCode {
 		ListName:       "Tipo de Documento",
 		ListURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",
 	}
-}
-
-// orderReference points to a related sales document (commonly the
-// invoice backing the shipment). Optional per SUNAT.
-type orderReference struct {
-	ID string `xml:"cbc:ID"`
 }
 
 // additionalDocumentReference carries references to related documents
