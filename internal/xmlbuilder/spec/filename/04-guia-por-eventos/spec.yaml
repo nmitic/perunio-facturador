@@ -1,7 +1,0 @@
-case: guia-por-eventos
-document: filename
-why: >-
-  A por eventos guía is named after its base type (31 here); 'EV' never
-  reaches SUNAT. (SUNAT accepts por evento guías only through SEE-SOL, see
-  despatch/04; this pins the naming helper.)
-output: "20100113612-31-V001-00000003"

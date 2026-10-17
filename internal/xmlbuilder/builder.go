@@ -69,12 +69,8 @@ func BuildDespatchXML(in DespatchXMLInput) ([]byte, error) {
 }
 
 // DespatchFilename returns the SUNAT GRE filename (without extension).
-// Format: {RUC}-{TT}-{SERIE}-{CORRELATIVO}. For por-Eventos guías the
-// base doc type (09 or 31) is used — the "EV" marker is an internal
-// discriminator and is never part of the filename SUNAT sees.
-func DespatchFilename(ruc, docType, series string, correlative int, eventBaseDocType string) string {
-	if docType == sunat.GreDocTypeEvento {
-		docType = eventBaseDocType
-	}
+// Format: {RUC}-{TT}-{SERIE}-{CORRELATIVO}, TT being 09 or 31 (a por evento
+// guía is never built: see ErrDespatchEvento).
+func DespatchFilename(ruc, docType, series string, correlative int) string {
 	return fmt.Sprintf("%s-%s-%s-%08d", ruc, docType, series, correlative)
 }

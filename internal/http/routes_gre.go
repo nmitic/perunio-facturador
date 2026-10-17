@@ -586,9 +586,7 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only 09 and 31 get this far (BuildDespatchXML refuses EV), so no
-	// por evento base type is needed.
-	filename := xmlbuilder.DespatchFilename(deps.company.RUC, d.DocType, d.Series, d.Correlative, "")
+	filename := xmlbuilder.DespatchFilename(deps.company.RUC, d.DocType, d.Series, d.Correlative)
 	zipBytes, err := zipper.CreateZIP(filename, signedXML)
 	if err != nil {
 		s.log.Error("zip despatch", "error", err, "despatchId", despatchID)

@@ -31,8 +31,8 @@ Families: `invoice` (factura 01), `boleta` (03), `creditnote` (07), `debitnote` 
 | `cpe` | one comprobante (factura, boleta, NC, ND) | `model.IssueRequest` (`internal/model/document.go`) |
 | `summary` | Resumen Diario | `model.SummaryRequest` (`internal/model/summary.go`) |
 | `voided` | Comunicación de Baja | `model.VoidRequest` |
-| `despatch` | `{ruc, companyName, companyAddress, eventBaseDocType, despatch, lines}` | `model.Despatch` + `[]model.DespatchLine` |
-| `filename` | `{kind, ruc, docType, series, correlative, issueDate, eventBaseDocType}` | the `*Filename` helpers |
+| `despatch` | `{ruc, companyName, companyAddress, despatch, lines}` | `model.Despatch` + `[]model.DespatchLine` |
+| `filename` | `{kind, ruc, docType, series, correlative, issueDate}` | the `*Filename` helpers |
 
 Amounts are decimal strings. **Totals are inputs, not outputs**: the frontend computes `subtotal`, `totalIgv`, `taxInclusiveAmount` and `totalAmount`, and the builder places them (and derives some document figures from the lines). Every input here is internally consistent. A case with inconsistent totals would test the fixture, not the builder.
 

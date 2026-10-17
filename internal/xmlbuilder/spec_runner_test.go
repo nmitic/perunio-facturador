@@ -217,12 +217,11 @@ func evaluateCase(t *testing.T, dir string, sc specCase, input []byte, invariant
 
 // despatchInput is the JSON shape of a despatch case's input.json.
 type despatchInput struct {
-	RUC              string               `json:"ruc"`
-	CompanyName      string               `json:"companyName"`
-	CompanyAddress   string               `json:"companyAddress"`
-	EventBaseDocType string               `json:"eventBaseDocType"`
-	Despatch         model.Despatch       `json:"despatch"`
-	Lines            []model.DespatchLine `json:"lines"`
+	RUC            string               `json:"ruc"`
+	CompanyName    string               `json:"companyName"`
+	CompanyAddress string               `json:"companyAddress"`
+	Despatch       model.Despatch       `json:"despatch"`
+	Lines          []model.DespatchLine `json:"lines"`
 }
 
 func buildDocument(kind string, input []byte) ([]byte, error) {
@@ -264,13 +263,12 @@ func buildDocument(kind string, input []byte) ([]byte, error) {
 
 // filenameInput is the JSON shape of a filename case's input.json.
 type filenameInput struct {
-	Kind             string `json:"kind"` // cpe | summary | voided | despatch
-	RUC              string `json:"ruc"`
-	DocType          string `json:"docType"`
-	Series           string `json:"series"`
-	Correlative      int    `json:"correlative"`
-	IssueDate        string `json:"issueDate"`
-	EventBaseDocType string `json:"eventBaseDocType"`
+	Kind        string `json:"kind"` // cpe | summary | voided | despatch
+	RUC         string `json:"ruc"`
+	DocType     string `json:"docType"`
+	Series      string `json:"series"`
+	Correlative int    `json:"correlative"`
+	IssueDate   string `json:"issueDate"`
 }
 
 func buildFilename(input []byte) (string, error) {
@@ -286,7 +284,7 @@ func buildFilename(input []byte) (string, error) {
 	case "voided":
 		return xmlbuilder.VoidFilename(in.RUC, in.IssueDate, in.Correlative), nil
 	case "despatch":
-		return xmlbuilder.DespatchFilename(in.RUC, in.DocType, in.Series, in.Correlative, in.EventBaseDocType), nil
+		return xmlbuilder.DespatchFilename(in.RUC, in.DocType, in.Series, in.Correlative), nil
 	default:
 		return "", fmt.Errorf("input.json: unknown filename kind %q", in.Kind)
 	}
