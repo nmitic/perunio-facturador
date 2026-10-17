@@ -30,7 +30,10 @@ func buildDespatchEventoXML(d *model.Despatch, lines []model.DespatchLine, ruc, 
 		return nil, fmt.Errorf("por-eventos GRE requires EventCode (Cat.59)")
 	}
 
-	adv := newDespatchAdviceShell(d, lines, ruc, companyName)
+	adv, err := newDespatchAdviceShell(d, lines, ruc, companyName)
+	if err != nil {
+		return nil, err
+	}
 
 	adv.DespatchAdviceTypeCode = newDespatchAdviceTypeCode(baseDocType)
 	adv.DespatchSupplierParty = newDespatchSupplierParty(ruc, companyName, companyAddress)

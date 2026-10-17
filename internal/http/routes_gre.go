@@ -328,6 +328,18 @@ func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
 		return
 	}
+	// cbc:IssueTime is mandatory on a GRE (SUNAT 3437); a client that sends
+	// none gets the moment the draft is created, on Peru's clock.
+	if body.IssueTime == nil || *body.IssueTime == "" {
+		now, err := peruNow()
+		if err != nil {
+			s.log.Error("load peru timezone", "error", err)
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+			return
+		}
+		t := now.Format("15:04:05")
+		body.IssueTime = &t
+	}
 
 	d, err := s.pool.CreateDespatch(r.Context(), body.toInput(companyID))
 	if err != nil {

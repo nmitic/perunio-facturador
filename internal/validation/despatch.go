@@ -73,6 +73,10 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 1036, Field: "correlative", Message: "correlative must be > 0"})
 	}
 
+	if d.IssueTime == nil || *d.IssueTime == "" {
+		errs = append(errs, model.ValidationError{Code: 3437, Field: "issueTime", Message: "la hora de emisión es obligatoria"})
+	}
+
 	return errs
 }
 

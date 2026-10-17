@@ -426,7 +426,13 @@ func buildDespatchLines(lines []model.DespatchLine) []despatchLineXML {
 // all the fields common to every GRE flavor populated — the three
 // concrete builders overlay the variant-specific fields (type code,
 // supplier/customer parties, seller party, references).
-func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, companyName string) despatchAdvice {
+//
+// cbc:IssueTime is mandatory on every GRE (ERROR 3437), so a despatch without
+// one is refused rather than sent without the tag.
+func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, companyName string) (despatchAdvice, error) {
+	if d.IssueTime == nil || *d.IssueTime == "" {
+		return despatchAdvice{}, fmt.Errorf("despatch %s-%d: issueTime is required (cbc:IssueTime, SUNAT 3437)", d.Series, d.Correlative)
+	}
 	docID := fmt.Sprintf("%s-%08d", d.Series, d.Correlative)
 	root := ublRootFor(sunat.UblDocumentDespatchAdvice)
 
@@ -447,14 +453,13 @@ func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, 
 		ID:              docID,
 		IssueDate:       d.IssueDate.Format("2006-01-02"),
 
+		IssueTime: *d.IssueTime,
+
 		Signature: newCACSignature(ruc, companyName),
 		Shipment:  buildShipment(d),
 	}
-	if d.IssueTime != nil && *d.IssueTime != "" {
-		adv.IssueTime = *d.IssueTime
-	}
 	adv.DespatchLines = buildDespatchLines(lines)
-	return adv
+	return adv, nil
 }
 
 // -----------------------------------------------------------------------------

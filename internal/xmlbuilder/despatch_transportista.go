@@ -15,7 +15,10 @@ import (
 // when the carrier is the one issuing (the handler is responsible for
 // populating RecipientDocNumber with the remitente's RUC).
 func buildDespatchTransportistaXML(d *model.Despatch, lines []model.DespatchLine, carrierRUC, carrierName, carrierAddress string) ([]byte, error) {
-	adv := newDespatchAdviceShell(d, lines, carrierRUC, carrierName)
+	adv, err := newDespatchAdviceShell(d, lines, carrierRUC, carrierName)
+	if err != nil {
+		return nil, err
+	}
 
 	adv.DespatchAdviceTypeCode = newDespatchAdviceTypeCode("31")
 	// The "supplier" in DespatchSupplierParty is the carrier itself.

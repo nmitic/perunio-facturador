@@ -9,7 +9,10 @@ import (
 // (DespatchSupplierParty); the consignee (DeliveryCustomerParty) is
 // the destinatario. No SellerSupplierParty is emitted.
 func buildDespatchRemitenteXML(d *model.Despatch, lines []model.DespatchLine, ruc, companyName, companyAddress string) ([]byte, error) {
-	adv := newDespatchAdviceShell(d, lines, ruc, companyName)
+	adv, err := newDespatchAdviceShell(d, lines, ruc, companyName)
+	if err != nil {
+		return nil, err
+	}
 
 	adv.DespatchAdviceTypeCode = newDespatchAdviceTypeCode("09")
 	adv.DespatchSupplierParty = newDespatchSupplierParty(ruc, companyName, companyAddress)
