@@ -142,3 +142,57 @@ produce a 10.5 % document yet.
   `perunio-sunat-catalogs`; validate the code and take the name from it.
 - Spec cases: compra with the proveedor as issuer, two related documents, a
   Cat.61-only code.
+
+## FU-5 — Detracción Anexo 1: the per-transport-unit rule
+
+**Status:** not modelled. Rule ★ in `DETRACCIONES.md`.
+
+**Today** `resolveDetraccion` (perunio-frontend) and `validateDetraccionCatalogo`
+measure an Anexo 1 código (001, 003, 034, 045) only against ½ UIT of the operación.
+
+**What SUNAT requires** R.S. 183-2004 art. 2.1: an operación of ½ UIT or less is
+still subject when the Anexo 1 bienes carried on **one transport unit** add up
+to more than ½ UIT. Needs the guía / transport unit to be known at emission.
+
+## FU-6 — Detracción umbral when one operation is split into several comprobantes
+
+**Status:** open question ★. No SUNAT source found addresses it.
+
+**Today** the umbral is measured per comprobante, except for a comprobante that
+belongs to a venta con anticipos: there the pipeline fills
+`IssueRequest.MontoOperacion` from `ventas_anticipo.monto_acordado`
+(`internal/http/pipeline_core.go`), and the form uses `ventaMontoAcordado`.
+
+**To decide** whether two facturas of S/ 400 for one contract are one operación
+of S/ 800 (subject) or two (not). If they are one, the user needs a way to link
+them outside the venta con anticipos flow.
+
+## FU-7 — Detracción 004 (recursos hidrobiológicos)
+
+**Status:** refused by `validateDetraccion`.
+
+**Missing**
+- The per-line `cac:AdditionalItemProperty` entries (Cat.55 3001 matrícula,
+  3005 fecha de descarga, 3006 cantidad de especies; faults 3063/3133/3134).
+- The rate: 4 % only when the proveedor is on SUNAT's monthly "Listado de
+  proveedores sujetos al SPOT con el porcentaje de 4 %"; otherwise 10 %
+  (`Cat54PorcentajeAlternativo`). Needs a company setting or a consulta of the
+  listado. Validation already accepts either rate.
+
+## FU-8 — Detracción rules to re-verify
+
+Unverified items from `DETRACCIONES.md` › Open questions. Re-check each against
+SUNAT (and beta where it is an XML question), then update the doc and the
+catalog.
+
+- 038, 042, 043, 046, 047 (espectáculos públicos, ladrillos, estructuras
+  metálicas, cobre, plata): a trade note dates them 01-09-2026, the workbook's
+  change-log row is struck through, no resolution found. If they become law,
+  add them to `perunio-sunat-catalogs/catalogs/cat54.json` with rate, umbral and anexo.
+- The Anexo 3 issuer exclusion list (Cartilla vs "Servicios" page).
+- Cat.51 1003 pinned to 028 vs a factura for 026 (transporte de personas with
+  crédito fiscal), which Perunio emits as 1001.
+- Which tipo de cambio the S/ 700 test uses on a USD comprobante (Perunio uses
+  the comprobante's own).
+- Sector Público buyer receiving a boleta with an Anexo 2/3 código (art. 18 a)
+  LIR): today the boleta exclusion always applies.

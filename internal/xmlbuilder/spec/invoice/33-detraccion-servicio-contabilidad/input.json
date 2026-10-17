@@ -1,0 +1,49 @@
+{
+  "supplierRuc": "20100113612",
+  "supplierName": "EMPRESA TEST SAC",
+  "supplierAddress": "AV. TEST 123",
+  "establishmentCode": "0000",
+  "docType": "01",
+  "series": "F001",
+  "correlative": 8,
+  "issueDate": "2026-10-17",
+  "issueTime": "09:24:17",
+  "currencyCode": "PEN",
+  "operationType": "1001",
+  "customerDocType": "6",
+  "customerDocNumber": "20601327318",
+  "customerName": "CLIENTE TEST SRL",
+  "customerAddress": "AV. CLIENTE 456",
+  "subtotal": "661.02",
+  "totalIgv": "118.98",
+  "totalIsc": "0.00",
+  "totalOtherTaxes": "0.00",
+  "totalDiscount": "0.00",
+  "totalAmount": "780.00",
+  "taxInclusiveAmount": "780.00",
+  "globalDiscount": "0.00",
+  "formaPago": "contado",
+  "items": [
+    {
+      "lineNumber": 1,
+      "description": "Contabilidad",
+      "quantity": "3",
+      "unitCode": "ZZ",
+      "unitPrice": "220.34",
+      "unitPriceWithTax": "260.00",
+      "taxExemptionReasonCode": "10",
+      "igvAmount": "118.98",
+      "iscAmount": "0.00",
+      "iscTierRange": "",
+      "discountAmount": "0.00",
+      "lineTotal": "661.02",
+      "priceTypeCode": "01"
+    }
+  ],
+  "detraccion": {
+    "codigo": "022",
+    "porcentaje": "12.00",
+    "monto": "93.60",
+    "cuentaBN": "00-123-456789"
+  }
+}

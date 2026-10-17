@@ -208,7 +208,7 @@ Same shape: no type-code element, motivo from catalog 10 in `cac:DiscrepancyResp
 | 12      | Documentos relacionados tributarios  | `cac:AdditionalDocumentReference/cbc:DocumentTypeCode` (e.g. `02`/`03` anticipos) |
 | 16      | Tipo de precio                       | `cbc:PriceTypeCode` (`01` = con IGV, `02` = gratuito, `03` = tarifas reguladas) |
 | 17      | Tipo de operación — **sólo la URI**  | `cbc:ProfileID/@schemeURI` dice `catalogo17`, pero los **valores salen del catálogo 51**. Inconsistencia de la propia SUNAT; greenter hace lo mismo. |
-| 51      | Tipo de operación                    | `cbc:ProfileID` (el valor) **y** `cbc:InvoiceTypeCode/@listID` — los dos, siempre iguales (`0101` = Venta interna, `1001`-`1004` = sujeta a detracción) |
+| 51      | Tipo de operación                    | `cbc:ProfileID` (el valor) **y** `cbc:InvoiceTypeCode/@listID` — los dos, siempre iguales (`0101` = Venta interna, `1001`-`1004` = sujeta a detracción — reglas en `DETRACCIONES.md`) |
 | 52      | Códigos de leyendas                  | `cbc:Note/@languageLocaleID` (`1000`, `2000`, etc.) |
 | 18, 20, 61 | GRE: modalidad / motivo de traslado / documentos relacionados | `ShipmentStage/cbc:TransportModeCode`, `Shipment/cbc:HandlingCode`, `cac:AdditionalDocumentReference/cbc:DocumentTypeCode` (numbering of the GRE workbook) |
 

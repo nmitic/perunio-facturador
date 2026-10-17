@@ -103,7 +103,7 @@
     <cbc:ID>Detraccion</cbc:ID>
     <cbc:PaymentMeansID>027</cbc:PaymentMeansID>
     <cbc:PaymentPercent>4.00</cbc:PaymentPercent>
-    <cbc:Amount currencyID="PEN">47.20</cbc:Amount>
+    <cbc:Amount currencyID="PEN">60.00</cbc:Amount>
   </cac:PaymentTerms>
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="PEN">180.00</cbc:TaxAmount>

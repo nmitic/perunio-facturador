@@ -107,7 +107,7 @@
   </cac:PaymentMeans>
   <cac:PaymentTerms>
     <cbc:ID>Detraccion</cbc:ID>
-    <cbc:PaymentMeansID>019</cbc:PaymentMeansID>
+    <cbc:PaymentMeansID>022</cbc:PaymentMeansID>
     <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
     <cbc:Amount currencyID="PEN">141.60</cbc:Amount>
   </cac:PaymentTerms>

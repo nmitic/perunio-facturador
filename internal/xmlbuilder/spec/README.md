@@ -211,7 +211,7 @@ Settled along the way:
 - **Document-level `cbc:Percent`** is not validated: every Percent check in `ValidaExprRegFactura-2.0.1.xsl` runs in the line template. The builder emits it on the 9996 document subtotal (as greenter does); it is harmless.
 - **Detracción on a nota de crédito** is not validated: the NotaCredito2_0 sheet has no detracción rule. The nota de débito sheet does validate it (`debitnote/03`).
 - **`sac:AdditionalMonetaryTotal` 1004** (total gratuito) is UBL 2.0-era markup. The 2.1 validation workbook never reads it. It sits inside `ext:UBLExtensions`, where it is harmless, so it stays until someone decides to drop it.
-- **`cac:TaxCategory/cbc:ID`** (UN/ECE 5305 S/E/O/Z/G) is not validated by SUNAT 2.1, so the cases do not assert it. The builder emits `E` for 9996, while greenter emits `Z`.
+- **`cac:TaxCategory/cbc:ID`** (UN/ECE 5305 S/E/O/Z/G) is not validated by SUNAT 2.1, so the cases do not assert it. The builder emits `Z` for 9996 (the Cat.05 `taxCategoryId` since perunio-sunat-catalogs v1.2.0), as greenter does.
 
 ## Sources
 

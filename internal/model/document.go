@@ -69,10 +69,18 @@ type IssueRequest struct {
 
 	// Detraccion is the SPOT (Sistema de Pago de Obligaciones Tributarias)
 	// withholding. nil = the operation is not subject to detracción. When set,
-	// OperationType must be "1001"/"1002" and the document emits the detracción
-	// cac:PaymentMeans + cac:PaymentTerms + legend 2006. It does not alter the
-	// document totals — it is a payment instruction, not a discount.
+	// OperationType must be 1001-1004 (or 0104 for an anticipo) and the document
+	// emits the detracción cac:PaymentMeans + cac:PaymentTerms + legend 2006. It
+	// does not alter the document totals — it is a payment instruction, not a
+	// discount. The rules are written up in DETRACCIONES.md.
 	Detraccion *Detraccion `json:"detraccion,omitempty"`
+
+	// MontoOperacion is the monto acordado of the venta con anticipos this
+	// comprobante belongs to, in the document's currency; empty otherwise. The
+	// SPOT umbral is measured against the operación, not each comprobante, so
+	// validateDetraccion takes the greater of this and TaxInclusiveAmount. The
+	// pipeline fills it from the venta row — never from the client.
+	MontoOperacion string `json:"-"`
 
 	// TransporteCarga carries the extra data SUNAT demands when the detracción
 	// código is 027 (servicio de transporte de carga), which declares tipo de

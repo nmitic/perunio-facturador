@@ -287,4 +287,6 @@ Read `spec/README.md` before touching a builder.
 
 ## Reference
 
-See `SKILL.md` for complete UBL/XML/SOAP/signing specification.
+See `SKILL.md` for complete UBL/XML/SOAP/signing specification, and
+`DETRACCIONES.md` for when a comprobante is sujeto a detracción (códigos,
+rates, umbrales, exclusions, XML) and where each rule lives.

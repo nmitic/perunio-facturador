@@ -108,7 +108,7 @@
       <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
       <cbc:TaxAmount currencyID="PEN">18.00</cbc:TaxAmount>
       <cac:TaxCategory>
-        <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+        <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
         <cbc:Percent>18.00</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9996</cbc:ID>
@@ -139,7 +139,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">18.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>18.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">11</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>

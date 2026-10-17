@@ -240,6 +240,19 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address, deps.company.CuentaDetraccion)
 	issueReq.Environment = env
 
+	// The SPOT umbral is measured against the whole operación: a comprobante
+	// of a venta con anticipos is judged by the deal's monto acordado.
+	if doc.VentaAnticipoID != nil {
+		venta, err := s.pool.GetVentaAnticipo(ctx, companyID, *doc.VentaAnticipoID)
+		if err != nil {
+			s.log.Error("get venta for issue", "error", err, "docId", docID)
+			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		}
+		if venta != nil {
+			issueReq.MontoOperacion = venta.MontoAcordado
+		}
+	}
+
 	// Pre-submission validation — fail fast before calling SUNAT.
 	if vErrs := validation.Validate(issueReq); len(vErrs) > 0 {
 		return nil, &pipelineError{

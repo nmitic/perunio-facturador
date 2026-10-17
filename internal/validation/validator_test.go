@@ -1,6 +1,7 @@
 package validation_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -220,14 +221,21 @@ func hasErrorField(errs []model.ValidationError, field string) bool {
 }
 
 func newDetraccion() *model.Detraccion {
-	// 12% of 1180.00 = 141.60
-	return &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "141.60", CuentaBN: "00-123-456789"}
+	// Otros servicios empresariales (Anexo 3): 12% of 1180.00 = 141.60
+	return &model.Detraccion{Codigo: sunat.Cat54OtrosServiciosEmpresariales, Porcentaje: "12.00", Monto: "141.60", CuentaBN: "00-123-456789"}
 }
 
-// newBoletaDetraccion is newDetraccion scaled to newBoletaUnder700's total:
-// 12% of 118.00 = 14.16.
+// newInmuebleDetraccion is the venta de inmueble gravada (040): 4% at any
+// amount and outside the Anexo 2/3 boleta exclusion, so it is what a boleta
+// under S/700 can legally carry. total is the comprobante's importe.
+func newInmuebleDetraccion(total float64) *model.Detraccion {
+	return &model.Detraccion{Codigo: sunat.Cat54BienInmuebleGravadoConIgv, Porcentaje: "4.00", Monto: strconv.FormatFloat(total*0.04, 'f', 2, 64), CuentaBN: "00-123-456789"}
+}
+
+// newBoletaDetraccion is newInmuebleDetraccion over newBoletaUnder700's total:
+// 4% of 118.00 = 4.72.
 func newBoletaDetraccion() *model.Detraccion {
-	return &model.Detraccion{Codigo: "019", Porcentaje: "12.00", Monto: "14.16", CuentaBN: "00-123-456789"}
+	return newInmuebleDetraccion(118)
 }
 
 // asConsumidorFinal strips the receptor down to the anonymous placeholder a
@@ -319,7 +327,7 @@ func TestValidateDetraccion(t *testing.T) {
 		req.ReferenceDocSeries = "B001"
 		req.ReferenceDocCorrelative = 1
 		req.ReasonCode = "01"
-		req.Detraccion = newDetraccion()
+		req.Detraccion = newInmuebleDetraccion(1180)
 		errs := validation.Validate(req)
 		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on NC referencing a boleta")
 	})
@@ -334,7 +342,7 @@ func TestValidateDetraccion(t *testing.T) {
 		req.ReferenceDocSeries = "B001"
 		req.ReferenceDocCorrelative = 1
 		req.ReasonCode = "01"
-		req.Detraccion = newDetraccion()
+		req.Detraccion = newInmuebleDetraccion(1180)
 		errs := validation.Validate(req)
 		is.True(t, !hasErrorField(errs, "detraccion"), "should allow detracción on ND referencing a boleta")
 	})
@@ -405,9 +413,139 @@ func TestValidateDetraccion(t *testing.T) {
 	t.Run("a monto exceeding the total a pagar is rejected", func(t *testing.T) {
 		req := newValidInvoice()
 		req.OperationType = "1001"
-		req.Detraccion = &model.Detraccion{Codigo: "019", Porcentaje: "150.00", Monto: "1770.00", CuentaBN: "00-123-456789"}
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54OtrosServiciosEmpresariales, Porcentaje: "150.00", Monto: "1770.00", CuentaBN: "00-123-456789"}
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "detraccion.monto"), "cannot deposit more than the comprobante collects")
+	})
+}
+
+// newServicio780 is factura F001-00000008 as it should have gone out: S/ 780
+// of servicios de contabilidad (Cat.54 022, Anexo 3 numeral 5, 12%).
+func newServicio780() model.IssueRequest {
+	req := newValidInvoice()
+	req.Subtotal = "661.02"
+	req.TotalIGV = "118.98"
+	req.TotalAmount = "780.00"
+	req.TaxInclusiveAmount = "780.00"
+	req.Items[0].Quantity = "3"
+	req.Items[0].UnitPrice = "220.34"
+	req.Items[0].UnitPriceWithTax = "260.00"
+	req.Items[0].IGVAmount = "118.98"
+	req.OperationType = "1001"
+	req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54OtrosServiciosEmpresariales, Porcentaje: "12.00", Monto: "93.60", CuentaBN: "00-123-456789"}
+	return req
+}
+
+func TestValidateDetraccionCatalogo(t *testing.T) {
+	t.Run("servicios de contabilidad over S/700 at 12% pass", func(t *testing.T) {
+		errs := validation.Validate(newServicio780())
+		is.True(t, !hasErrorField(errs, "detraccion") && !hasErrorField(errs, "detraccion.porcentaje") && !hasErrorField(errs, "detraccion.monto"), "022 at 12% over S/780 is the correct detracción")
+	})
+
+	t.Run("a rate other than the catálogo's is rejected", func(t *testing.T) {
+		req := newServicio780()
+		req.Detraccion.Porcentaje = "10.00" // the pre-2018 rate
+		req.Detraccion.Monto = "78.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.porcentaje"), "022 is 12% since R.S. 071-2018")
+	})
+
+	t.Run("a código outside Cat.54 is rejected", func(t *testing.T) {
+		req := newServicio780()
+		req.Detraccion.Codigo = "006" // derogated
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "SUNAT would answer 3033")
+	})
+
+	t.Run("an importe of exactly S/700 is not sujeto", func(t *testing.T) {
+		req := newServicio780()
+		req.TaxInclusiveAmount = "700.00"
+		req.TotalAmount = "700.00"
+		req.Detraccion.Monto = "84.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "the umbral is strictly greater than S/700")
+	})
+
+	t.Run("a comprobante of a larger venta is measured against the monto acordado", func(t *testing.T) {
+		req := newServicio780()
+		req.TaxInclusiveAmount = "590.00"
+		req.TotalAmount = "590.00"
+		req.Detraccion.Monto = "70.80"
+		req.MontoOperacion = "2360.00"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "the umbral is per operación (Informe 103-2013)")
+	})
+
+	t.Run("Anexo 1 needs more than half a UIT", func(t *testing.T) {
+		req := newValidInvoice() // 1180.00 < 2750
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "118.00", CuentaBN: "00-123-456789"}
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "001 applies above S/2,750 in 2026")
+	})
+
+	t.Run("residuos (010) apply at any amount", func(t *testing.T) {
+		req := newBoletaUnder700()
+		req.DocType = "01"
+		req.Series = "F001"
+		req.CustomerDocType = "6"
+		req.CustomerDocNumber = "20601327318"
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54ResiduosSubproductosDesechosRecortesYDesperd, Porcentaje: "15.00", Monto: "17.70", CuentaBN: "00-123-456789"}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion"), "Anexo 2 numeral 6 has no umbral")
+	})
+
+	t.Run("an Anexo 3 servicio on a boleta is rejected", func(t *testing.T) {
+		req := newServicio780()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "1"
+		req.CustomerDocNumber = "12345678"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "a boleta grants no crédito fiscal (R.S. 183-2004 art. 13)")
+	})
+
+	t.Run("an Anexo 1 bien on a boleta is allowed", func(t *testing.T) {
+		req := newValidInvoice()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "1"
+		req.CustomerDocNumber = "12345678"
+		req.Subtotal = "2542.37"
+		req.TotalIGV = "457.63"
+		req.TotalAmount = "3000.00"
+		req.TaxInclusiveAmount = "3000.00"
+		req.Items[0].Quantity = "1"
+		req.Items[0].UnitPrice = "2542.37"
+		req.Items[0].UnitPriceWithTax = "3000.00"
+		req.Items[0].IGVAmount = "457.63"
+		req.OperationType = "1001"
+		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "300.00", CuentaBN: "00-123-456789"}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion") && !hasErrorField(errs, "detraccion.codigo"), "Anexo 1 excludes only póliza de adjudicación and liquidación de compra")
+	})
+
+	t.Run("a dollar factura is checked in soles", func(t *testing.T) {
+		req := newServicio780()
+		req.CurrencyCode = "USD"
+		req.ExchangeRate = "3.500"
+		req.Detraccion.Monto = "327.60" // 12% of 780.00 × 3.5
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion.monto"), "the monto is 12% of the importe in soles")
+
+		req.Detraccion.Monto = "93.60" // forgot to convert
+		errs = validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.monto"), "an unconverted monto is rejected")
+	})
+
+	t.Run("a dollar factura under S/700 in soles is not sujeta", func(t *testing.T) {
+		req := newServicio780()
+		req.CurrencyCode = "USD"
+		req.ExchangeRate = "0.800"     // contrived: 780 × 0.8 = S/ 624
+		req.Detraccion.Monto = "74.88" // 12% of 624
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion"), "the umbral is in soles")
 	})
 }
 
@@ -431,7 +569,9 @@ func newTransporteCargaInvoice() model.IssueRequest {
 	req.OperationType = "1004"
 	req.Detraccion = &model.Detraccion{
 		Codigo: sunat.Cat54ServicioDeTransporteDeCarga, Porcentaje: "4.00",
-		Monto: "47.20", CuentaBN: "00-123-456789", // 4% of 1180.00
+		// 4% of the valor referencial (1500.00), which beats the 1180.00
+		// importe: R.S. 073-2006 art. 4.
+		Monto: "60.00", CuentaBN: "00-123-456789",
 	}
 	req.TransporteCarga = newTransporteCarga()
 	return req
@@ -494,7 +634,7 @@ func TestValidateTransporteCarga(t *testing.T) {
 		req.OperationType = "1004"
 		req.Detraccion = &model.Detraccion{
 			Codigo: sunat.Cat54ServicioDeTransporteDeCarga, Porcentaje: "4.00",
-			Monto: "4.72", CuentaBN: "00-123-456789", // 4% of 118.00
+			Monto: "60.00", CuentaBN: "00-123-456789", // 4% of the 1500.00 valor referencial
 		}
 		req.TransporteCarga = newTransporteCarga()
 		errs := validation.Validate(req)

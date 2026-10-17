@@ -193,6 +193,10 @@ type IssuedDocument struct {
 	DetraccionPorcentaje *string `json:"detraccionPorcentaje"`
 	DetraccionMonto      *string `json:"detraccionMonto"`
 	DetraccionCuentaBN   *string `json:"detraccionCuentaBn"`
+	// DetraccionNoSujeta records that the user, asked at emission whether a
+	// factura over S/700 without detracción was sujeta, answered no. Audit
+	// only: it never reaches the XML. See DETRACCIONES.md.
+	DetraccionNoSujeta bool `json:"detraccionNoSujeta"`
 
 	ReferenceDocType        *string `json:"referenceDocType"`
 	ReferenceDocSeries      *string `json:"referenceDocSeries"`

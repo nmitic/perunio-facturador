@@ -1,0 +1,38 @@
+case: detraccion-servicio-contabilidad
+document: cpe
+why: >-
+  Servicios de contabilidad for S/ 780: Cat.54 022 (otros servicios
+  empresariales, Anexo 3 numeral 5 b), 12 % since R.S. 071-2018), and the
+  importe is over the S/ 700 umbral, so the factura is 1001 with a detracción
+  of 93.60. This is factura F001-00000008, which went out as 0101 because its
+  free-text line carried no código — the case that prompted DETRACCIONES.md.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+  - "R.S. 183-2004/SUNAT Anexo 3 numeral 5; R.S. 071-2018/SUNAT"
+assert:
+  - xpath: "/*/cbc:ProfileID"
+    equals: "1001"
+  - xpath: "/*/cbc:InvoiceTypeCode/@listID"
+    equals: "1001"
+  - xpath: "/*/cbc:Note[@languageLocaleID='2006']"
+    sunat: "4265"
+  - xpath: "/*/cac:PaymentMeans[cbc:ID='Detraccion']/cac:PayeeFinancialAccount/cbc:ID"
+    equals: "00-123-456789"
+    sunat: "3034"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "022"
+    sunat: "3127"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
+    equals: "12.00"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "93.60"
+    sunat: "3035"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
+    equals: "PEN"
+    sunat: "3208"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='FormaPago']/cbc:PaymentMeansID"
+    equals: "Contado"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "780.00"
+    why: >-
+      A detracción is a payment instruction, not a discount

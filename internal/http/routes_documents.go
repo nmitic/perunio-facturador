@@ -289,6 +289,7 @@ type createDocumentBody struct {
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
+	DetraccionNoSujeta      *bool                    `json:"detraccionNoSujeta,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items"`
 }
@@ -362,6 +363,9 @@ func (b *createDocumentBody) validate() string {
 	}
 	if msg := b.Detraccion.validate(); msg != "" {
 		return msg
+	}
+	if b.Detraccion != nil && b.DetraccionNoSujeta != nil && *b.DetraccionNoSujeta {
+		return "detraccion y detraccionNoSujeta se excluyen"
 	}
 	for _, a := range b.Anticipos {
 		if msg := a.validate(); msg != "" {
@@ -466,6 +470,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		in.DetraccionMonto = &d.Monto
 		in.DetraccionCuentaBN = d.CuentaBN
 	}
+	in.DetraccionNoSujeta = b.DetraccionNoSujeta
 	return in
 }
 
@@ -541,6 +546,7 @@ type updateDocumentBody struct {
 	CreditDebitReasonCode   *string                  `json:"creditDebitReasonCode,omitempty"`
 	CreditDebitReasonDesc   *string                  `json:"creditDebitReasonDesc,omitempty"`
 	Detraccion              *detraccionBody          `json:"detraccion,omitempty"`
+	DetraccionNoSujeta      *bool                    `json:"detraccionNoSujeta,omitempty"`
 	TransporteCarga         *transporteCargaBody     `json:"transporteCarga,omitempty"`
 	Items                   []createDocumentItemBody `json:"items,omitempty"`
 }
@@ -592,6 +598,7 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		in.DetraccionMonto = &d.Monto
 		in.DetraccionCuentaBN = d.CuentaBN
 	}
+	in.DetraccionNoSujeta = b.DetraccionNoSujeta
 	if b.Items != nil {
 		items := make([]db.CreateDocumentItemInput, 0, len(b.Items))
 		for i, it := range b.Items {
@@ -641,6 +648,14 @@ func (s *Server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	if msg := body.Detraccion.validate(); msg != "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
+		return
+	}
+	if body.Detraccion != nil && body.DetraccionNoSujeta != nil && *body.DetraccionNoSujeta {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "detraccion y detraccionNoSujeta se excluyen")
+		return
 	}
 
 	doc, err := s.pool.UpdateDraftDocument(r.Context(), docID, body.toInput())

@@ -26,7 +26,7 @@ assert:
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']"
     sunat: "3313"
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
-    equals: "019"
+    equals: "022"
     sunat: "3127/3033"
     why: >-
       Cat.54 bien o servicio

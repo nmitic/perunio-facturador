@@ -41,9 +41,9 @@
     }
   ],
   "detraccion": {
-    "codigo": "019",
-    "porcentaje": "12.00",
-    "monto": "141.60",
+    "codigo": "040",
+    "porcentaje": "4.00",
+    "monto": "47.20",
     "cuentaBN": "00-123-456789"
   }
 }

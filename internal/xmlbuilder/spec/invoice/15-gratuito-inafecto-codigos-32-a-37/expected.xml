@@ -108,7 +108,7 @@
       <cbc:TaxableAmount currencyID="PEN">600.00</cbc:TaxableAmount>
       <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
       <cac:TaxCategory>
-        <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+        <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
         <cbc:Percent>0.00</cbc:Percent>
         <cac:TaxScheme>
           <cbc:ID schemeID="UN/ECE 5153" schemeAgencyID="6">9996</cbc:ID>
@@ -139,7 +139,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">32</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>
@@ -173,7 +173,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">33</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>
@@ -207,7 +207,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">34</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>
@@ -241,7 +241,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">35</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>
@@ -275,7 +275,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">36</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>
@@ -309,7 +309,7 @@
         <cbc:TaxableAmount currencyID="PEN">100.00</cbc:TaxableAmount>
         <cbc:TaxAmount currencyID="PEN">0.00</cbc:TaxAmount>
         <cac:TaxCategory>
-          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">E</cbc:ID>
+          <cbc:ID schemeID="UN/ECE 5305" schemeAgencyID="6">Z</cbc:ID>
           <cbc:Percent>0.00</cbc:Percent>
           <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">37</cbc:TaxExemptionReasonCode>
           <cac:TaxScheme>

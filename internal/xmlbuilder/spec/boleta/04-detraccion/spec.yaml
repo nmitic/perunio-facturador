@@ -3,7 +3,9 @@ document: cpe
 why: >-
   Cat.51 marks 1001-1004 'Factura, Boletas' and the Boleta2_0 sheet carries
   the same detracción rules, so a boleta sujeta a detracción emits the same
-  markup bar the type code.
+  markup bar the type code. The código is 040 (venta de inmueble, 4 % of
+  1180 = 47.20): a boleta grants no crédito fiscal, which excludes every
+  Anexo 2 and 3 código (R.S. 183-2004 arts. 8 and 13) — see DETRACCIONES.md.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
 assert:
@@ -18,13 +20,13 @@ assert:
     why: >-
       Cuenta de detracciones del Banco de la Nación
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
-    equals: "019"
+    equals: "040"
     why: >-
       Cat.54 bien o servicio
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"
-    equals: "12.00"
+    equals: "4.00"
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
-    equals: "141.60"
+    equals: "47.20"
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount/@currencyID"
     equals: "PEN"
     sunat: "3208"

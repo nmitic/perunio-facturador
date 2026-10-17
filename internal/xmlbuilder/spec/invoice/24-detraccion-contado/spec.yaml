@@ -1,7 +1,7 @@
 case: detraccion-contado
 document: cpe
 why: >-
-  A factura sujeta a detracción (Cat.51 1001, Cat.54 019, 12 % of 1180 =
+  A factura sujeta a detracción (Cat.51 1001, Cat.54 022, 12 % of 1180 =
   141.60): leyenda 2006, the cuenta BN as cac:PaymentMeans, and a
   'Detraccion' cac:PaymentTerms in PEN — alongside, not instead of, the
   forma de pago Contado. Totals are unchanged.
@@ -19,7 +19,7 @@ assert:
     why: >-
       Cuenta de detracciones del Banco de la Nación
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
-    equals: "019"
+    equals: "022"
     why: >-
       Cat.54 bien o servicio
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"

@@ -68,6 +68,9 @@ type CreateDocumentInput struct {
 	DetraccionPorcentaje *string
 	DetraccionMonto      *string
 	DetraccionCuentaBN   *string
+	// DetraccionNoSujeta: the user confirmed the operación is not sujeta a
+	// detracción. On update, true also clears the four detracción columns.
+	DetraccionNoSujeta *bool
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -137,6 +140,9 @@ type UpdateDocumentInput struct {
 	DetraccionPorcentaje *string
 	DetraccionMonto      *string
 	DetraccionCuentaBN   *string
+	// DetraccionNoSujeta: the user confirmed the operación is not sujeta a
+	// detracción. On update, true also clears the four detracción columns.
+	DetraccionNoSujeta *bool
 
 	ReferenceDocType        *string
 	ReferenceDocSeries      *string
@@ -248,7 +254,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				billing_period_months,
 				anticipos,
 				transporte_carga,
-				venta_anticipo_id
+				venta_anticipo_id,
+				detraccion_no_sujeta
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, 'draft',
 				$7, $8, $9,
@@ -267,7 +274,8 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$39,
 				$40,
 				$41,
-				$42
+				$42,
+				COALESCE($43, false)
 			)
 			RETURNING `+issuedDocumentColumns,
 			tenantID, companyID, in.SeriesID, docType, seriesCode, correlative,
@@ -288,6 +296,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			anticiposJSON,
 			transporteCargaJSON,
 			in.VentaAnticipoID,
+			in.DetraccionNoSujeta,
 		)
 		if err := scanIssuedDocument(row, &doc); err != nil {
 			var pgErr *pgconn.PgError
@@ -486,6 +495,17 @@ func buildUpdateSet(in UpdateDocumentInput) ([]string, []any) {
 	}
 	if in.DetraccionCuentaBN != nil {
 		add("detraccion_cuenta_bn", *in.DetraccionCuentaBN)
+	}
+	if in.DetraccionNoSujeta != nil {
+		add("detraccion_no_sujeta", *in.DetraccionNoSujeta)
+		// Answering "no está sujeta" withdraws any detracción the draft carried;
+		// a PUT otherwise has no way to clear these columns.
+		if *in.DetraccionNoSujeta && in.DetraccionCodigo == nil {
+			add("detraccion_codigo", nil)
+			add("detraccion_porcentaje", nil)
+			add("detraccion_monto", nil)
+			add("detraccion_cuenta_bn", nil)
+		}
 	}
 	if in.ReferenceDocType != nil {
 		add("reference_doc_type", *in.ReferenceDocType)

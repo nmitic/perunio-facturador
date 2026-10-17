@@ -19,7 +19,7 @@ assert:
     why: >-
       Cuenta de detracciones del Banco de la Nación
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
-    equals: "019"
+    equals: "022"
     why: >-
       Cat.54 bien o servicio
   - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentPercent"

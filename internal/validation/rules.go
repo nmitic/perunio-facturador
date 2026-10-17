@@ -468,10 +468,15 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 
 // validateDetraccion guards the detracción (SPOT). It is nil for the vast
 // majority of documents. When present it must sit on a factura or a boleta, or
-// on a nota de crédito/débito that references a factura. It requires
-// operationType 1001/1002 — or 0104, the anticipo marker, which xmlbuilder maps
-// onto 1001/1002 on the wire — a resolved cuenta BN, and, for PEN documents, a
-// monto within ±1 cent of porcentaje × TotalAmount.
+// on a nota de crédito/débito that references one. It requires operationType
+// 1001-1004 — or 0104, the anticipo marker, which xmlbuilder maps onto 1001-1004
+// on the wire — a resolved cuenta BN, and a monto within ±1 cent of
+// porcentaje × the SPOT base, in soles.
+//
+// The código is checked against Cat.54 (validateDetraccionCatalogo): it must be
+// emittable, carry its catálogo rate, belong to an anexo the comprobante can
+// carry, and the operación must exceed its umbral. DETRACCIONES.md has every
+// rule with its source.
 //
 // Boletas are in scope: SUNAT's current validation pack
 // (resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx) marks catálogo 51 codes
@@ -550,6 +555,10 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la detracción de transporte de pasajeros (028) aún no está soportada: se liquida por monto fijo por vehículo, no como porcentaje del importe", Field: "detraccion.codigo"})
 	case sunat.Cat54ServicioDeTransporteDeCarga:
 		errs = append(errs, validateTransporteCarga(req)...)
+		errs = append(errs, validateDetraccionCatalogo(req)...)
+	case "":
+	default:
+		errs = append(errs, validateDetraccionCatalogo(req)...)
 	}
 	if strings.TrimSpace(d.CuentaBN) == "" {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "configure la cuenta de detracción de la empresa o especifíquela en el comprobante", Field: "detraccion.cuentaBN"})
@@ -570,28 +579,111 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 		}
 	}
 
-	// Arithmetic check only for PEN — detracción monto is always in soles, so a
-	// non-PEN document declares a converted amount we can't reconcile here
-	// (handled upstream). Guard against false negatives by skipping it.
+	// The monto is always in soles. A foreign-currency document is converted
+	// with its tipo de cambio first; without one (already reported above) the
+	// arithmetic cannot be reconciled, so it is skipped rather than guessed.
+	rate, ok := penRate(req)
+	if !ok {
+		return errs
+	}
 	total, _ := strconv.ParseFloat(req.TotalAmount, 64)
-	if req.CurrencyCode == "PEN" {
-		pct, _ := strconv.ParseFloat(d.Porcentaje, 64)
-		expected := total * pct / 100
-		if diff := monto - expected; diff > 0.01 || diff < -0.01 {
-			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f no coincide con %s%% de %.2f", monto, d.Porcentaje, total), Field: "detraccion.monto"})
-		}
+	penTotal := total * rate
+	base := spotBase(req, penTotal)
+	pct, _ := strconv.ParseFloat(d.Porcentaje, 64)
+	expected := base * pct / 100
+	if diff := monto - expected; diff > 0.01 || diff < -0.01 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f no coincide con %s%% de S/ %.2f", monto, d.Porcentaje, base), Field: "detraccion.monto"})
+	}
 
-		// The deposit comes out of what this comprobante collects, so it can
-		// never exceed it. Unreachable while the porcentaje check above holds
-		// (no Cat.54 rate is above 100%), but it is the failure mode of getting
-		// the base wrong — e.g. computing SPOT over the whole operación on a
-		// factura de regularización whose payable is only the saldo.
-		if monto > total+0.01 {
-			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f excede el total a pagar del comprobante %.2f", monto, total), Field: "detraccion.monto"})
-		}
+	// The deposit comes out of what this comprobante collects, so it can
+	// never exceed it. Unreachable while the porcentaje check above holds
+	// (no Cat.54 rate is above 100%), but it is the failure mode of getting
+	// the base wrong — e.g. computing SPOT over the whole operación on a
+	// factura de regularización whose payable is only the saldo.
+	if monto > penTotal+0.01 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("monto de detracción %.2f excede el total a pagar del comprobante S/ %.2f", monto, penTotal), Field: "detraccion.monto"})
 	}
 
 	return errs
+}
+
+// validateDetraccionCatalogo checks the detracción against Cat.54: the código
+// must be emittable, the porcentaje must be its catálogo rate, a comprobante
+// that grants no crédito fiscal (a boleta, or a nota that corrects one) cannot
+// carry an Anexo 2 or 3 código, and the operación must exceed the código's
+// umbral. See DETRACCIONES.md › "Cuándo aplica".
+func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	d := req.Detraccion
+	codigo := strings.TrimSpace(d.Codigo)
+	if !sunat.Cat54Emit(codigo) {
+		return append(errs, model.ValidationError{Code: 3033, Message: fmt.Sprintf("el código de detracción %s no está en el catálogo 54 vigente", codigo), Field: "detraccion.codigo"})
+	}
+
+	// 004 alone has a conditional rate (4% only for proveedores on SUNAT's
+	// listado); porcentajeAlternativo is the other one it may legally declare.
+	pct, _ := strconv.ParseFloat(d.Porcentaje, 64)
+	want := sunat.Cat54Porcentaje(codigo)
+	alt := sunat.Cat54PorcentajeAlternativo(codigo)
+	if math.Abs(pct-want) > 0.001 && (alt == 0 || math.Abs(pct-alt) > 0.001) {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el porcentaje de detracción del código %s es %s%%, no %s%%", codigo, strconv.FormatFloat(want, 'f', -1, 64), d.Porcentaje), Field: "detraccion.porcentaje"})
+	}
+
+	// R.S. 183-2004 arts. 8 and 13: Anexos 2 and 3 exclude comprobantes that
+	// grant no crédito fiscal. Anexo 1 (art. 3) and the inmueble and carga
+	// regimes carry no such exclusion.
+	sinCreditoFiscal := req.DocType == sunat.Cat01Boleta ||
+		(isNota(req.DocType) && req.ReferenceDocType == sunat.Cat01Boleta)
+	if anexo := sunat.Cat54Anexo(codigo); sinCreditoFiscal && (anexo == "2" || anexo == "3") {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s (Anexo %s) no aplica en boletas: la detracción de los Anexos 2 y 3 excluye los comprobantes que no otorgan crédito fiscal", codigo, anexo), Field: "detraccion.codigo"})
+	}
+
+	// Umbral: strictly greater than, over the operación in soles. A nota mirrors
+	// the operation it corrects and an anticipo (0104) is one payment of a larger
+	// operación, so neither is measured on its own.
+	if isNota(req.DocType) || req.OperationType == sunat.Cat51Anticipos {
+		return errs
+	}
+	rate, ok := penRate(req)
+	if !ok {
+		return errs
+	}
+	importe, _ := strconv.ParseFloat(req.TaxInclusiveAmount, 64)
+	if acordado, err := strconv.ParseFloat(req.MontoOperacion, 64); err == nil && acordado > importe {
+		importe = acordado
+	}
+	base := spotBase(req, importe*rate)
+	if umbral := sunat.Cat54Umbral(codigo); base <= umbral {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("la operación (S/ %.2f) no supera el umbral de S/ %s del código %s: no está sujeta a detracción", base, strconv.FormatFloat(umbral, 'f', 2, 64), codigo), Field: "detraccion"})
+	}
+	return errs
+}
+
+// spotBase is the amount the SPOT applies to, in soles: the importe, or for
+// transporte de carga (027) the greater of the importe and the valor
+// referencial del servicio (R.S. 073-2006 art. 4).
+func spotBase(req model.IssueRequest, penImporte float64) float64 {
+	if req.Detraccion == nil || req.Detraccion.Codigo != sunat.Cat54ServicioDeTransporteDeCarga || req.TransporteCarga == nil {
+		return penImporte
+	}
+	if vr, err := strconv.ParseFloat(req.TransporteCarga.ValorReferencialServicio, 64); err == nil && vr > penImporte {
+		return vr
+	}
+	return penImporte
+}
+
+// penRate is the factor that converts the document's amounts into soles: 1 for
+// PEN, the tipo de cambio otherwise. ok is false when a foreign-currency
+// document carries no usable rate.
+func penRate(req model.IssueRequest) (float64, bool) {
+	if req.CurrencyCode == "" || req.CurrencyCode == "PEN" {
+		return 1, true
+	}
+	rate, err := strconv.ParseFloat(req.ExchangeRate, 64)
+	if err != nil || rate <= 0 {
+		return 0, false
+	}
+	return rate, true
 }
 
 // validateTransporteCarga guards the extra block a detracción de transporte de
@@ -752,4 +844,9 @@ func validateDebitNote(req model.IssueRequest) []model.ValidationError {
 	}
 
 	return errs
+}
+
+// isNota reports whether docType is a nota de crédito or débito.
+func isNota(docType string) bool {
+	return docType == sunat.Cat01NotaCredito || docType == sunat.Cat01NotaDebito
 }
