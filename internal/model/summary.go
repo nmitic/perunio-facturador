@@ -81,8 +81,12 @@ type VoidRequest struct {
 	SupplierRUC  string `json:"supplierRuc"`
 	SupplierName string `json:"supplierName"`
 
-	IssueDate   string `json:"issueDate"`
-	Correlative int    `json:"correlative"`
+	IssueDate string `json:"issueDate"`
+	// ReferenceDate is the issue date of the documents being voided
+	// (cbc:ReferenceDate, ERROR 2375). One RA covers documents of a single
+	// date. Empty falls back to IssueDate (same-day void).
+	ReferenceDate string `json:"referenceDate"`
+	Correlative   int    `json:"correlative"`
 
 	Items []VoidItem `json:"items"`
 

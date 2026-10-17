@@ -47,6 +47,10 @@ func voidDocumentID(issueDate string, correlative int) string {
 // BuildVoidedXML creates UBL 2.0 VoidedDocuments XML bytes.
 func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
 	voidID := voidDocumentID(req.IssueDate, req.Correlative)
+	referenceDate := req.ReferenceDate
+	if referenceDate == "" {
+		referenceDate = req.IssueDate
+	}
 
 	root := ublRootFor(sunat.UblDocumentVoidedDocuments)
 
@@ -65,7 +69,7 @@ func BuildVoidedXML(req model.VoidRequest) ([]byte, error) {
 		UBLVersionID:    root.UBLVersionID,
 		CustomizationID: root.CustomizationID,
 		ID:              voidID,
-		ReferenceDate:   req.IssueDate, // reference date = issue date for RA
+		ReferenceDate:   referenceDate, // issue date of the voided documents (2375)
 		IssueDate:       req.IssueDate,
 
 		Signature: newCACSignature(req.SupplierRUC, req.SupplierName),

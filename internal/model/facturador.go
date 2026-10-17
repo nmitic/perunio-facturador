@@ -323,14 +323,17 @@ type VoidedDocument struct {
 
 // VoidedDocumentItem represents one document inside a void communication.
 type VoidedDocumentItem struct {
-	ID          string    `json:"id"`
-	VoidID      string    `json:"voidId"`
-	DocumentID  string    `json:"documentId"`
-	DocType     string    `json:"docType"`
-	Series      string    `json:"series"`
-	Correlative int       `json:"correlative"`
-	Reason      string    `json:"reason"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID          string `json:"id"`
+	VoidID      string `json:"voidId"`
+	DocumentID  string `json:"documentId"`
+	DocType     string `json:"docType"`
+	Series      string `json:"series"`
+	Correlative int    `json:"correlative"`
+	Reason      string `json:"reason"`
+	// IssueDate is the voided document's own issue date (joined from
+	// issued_documents); it becomes the RA's cbc:ReferenceDate.
+	IssueDate time.Time `json:"issueDate"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // FacturadorUsage is the response shape for GET /api/facturador/usage.

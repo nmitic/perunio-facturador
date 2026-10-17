@@ -495,13 +495,25 @@ func (s *Server) issueVoidPipelineHandler(w http.ResponseWriter, r *http.Request
 	}
 	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
+	// cbc:ReferenceDate is the voided documents' issue date, one per RA (2375).
+	// CreateVoidRequest refuses mixed dates; re-check for RAs created before it did.
+	referenceDate := items[0].IssueDate.Format("2006-01-02")
+	for _, it := range items[1:] {
+		if it.IssueDate.Format("2006-01-02") != referenceDate {
+			writeError(w, http.StatusBadRequest, "VOID_MIXED_DATES",
+				"Todos los documentos de una comunicación de baja deben tener la misma fecha de emisión")
+			return
+		}
+	}
+
 	correlative := trailingDigits(voidDoc.VoidID)
 	voidReq := model.VoidRequest{
-		SupplierRUC:  deps.company.RUC,
-		SupplierName: deps.company.CompanyName,
-		IssueDate:    voidDoc.VoidDate.Format("2006-01-02"),
-		Correlative:  correlative,
-		Environment:  env,
+		SupplierRUC:   deps.company.RUC,
+		SupplierName:  deps.company.CompanyName,
+		IssueDate:     voidDoc.VoidDate.Format("2006-01-02"),
+		ReferenceDate: referenceDate,
+		Correlative:   correlative,
+		Environment:   env,
 	}
 	for i, it := range items {
 		voidReq.Items = append(voidReq.Items, model.VoidItem{

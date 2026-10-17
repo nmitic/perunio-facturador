@@ -112,6 +112,9 @@ func (s *Server) createVoidHandler(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "INVALID_DOCUMENT_STATUS", err.Error())
 		case errors.Is(err, db.ErrVoidWindowExpired):
 			writeError(w, http.StatusBadRequest, "VOID_WINDOW_EXPIRED", err.Error())
+		case errors.Is(err, db.ErrVoidMixedDates):
+			writeError(w, http.StatusBadRequest, "VOID_MIXED_DATES",
+				"Todos los documentos de una comunicación de baja deben tener la misma fecha de emisión")
 		default:
 			s.log.Error("create void", "error", err, "companyId", companyID)
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")

@@ -6,12 +6,6 @@ why: >-
   declare 2024-01-15.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Comunicación de Baja1_0"
-pending: >-
-  Finding F11: BuildVoidedXML sets ReferenceDate = IssueDate and
-  model.VoidRequest has no field for the voided documents' date, so voiding
-  anything from a previous day is rejected with ERR 2375. (This input
-  already carries referenceDate; it fails to decode until the model has the
-  field.)
 assert:
   - xpath: "/*/cbc:ReferenceDate"
     equals: "2024-01-15"

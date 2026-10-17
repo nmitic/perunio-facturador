@@ -62,6 +62,14 @@ func (p *Pool) CreateVoidRequest(ctx context.Context, companyID, voidID, voidDat
 			return ErrNotFound
 		}
 
+		// cbc:ReferenceDate is a single date: every document an RA voids must
+		// have been issued on it (ERROR 2375 otherwise).
+		for _, d := range docs[1:] {
+			if !sameDay(d.issueDate, docs[0].issueDate) {
+				return fmt.Errorf("%w: %s-%d", ErrVoidMixedDates, d.series, d.correlative)
+			}
+		}
+
 		now := time.Now()
 		for _, d := range docs {
 			// A Comunicación de Baja only covers facturas/notas (Cat.01
@@ -279,10 +287,12 @@ func (p *Pool) GetVoidedDocumentItems(ctx context.Context, voidID string) ([]mod
 	var out []model.VoidedDocumentItem
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, void_id, document_id, doc_type, series, correlative, reason, created_at
-			FROM voided_document_items
-			WHERE void_id = $1
-			ORDER BY series, correlative
+			SELECT vdi.id, vdi.void_id, vdi.document_id, vdi.doc_type, vdi.series,
+			       vdi.correlative, vdi.reason, d.issue_date, vdi.created_at
+			FROM voided_document_items vdi
+			JOIN issued_documents d ON d.id = vdi.document_id
+			WHERE vdi.void_id = $1
+			ORDER BY vdi.series, vdi.correlative
 		`, voidID)
 		if err != nil {
 			return err
@@ -291,7 +301,7 @@ func (p *Pool) GetVoidedDocumentItems(ctx context.Context, voidID string) ([]mod
 		for rows.Next() {
 			var it model.VoidedDocumentItem
 			if err := rows.Scan(&it.ID, &it.VoidID, &it.DocumentID, &it.DocType,
-				&it.Series, &it.Correlative, &it.Reason, &it.CreatedAt); err != nil {
+				&it.Series, &it.Correlative, &it.Reason, &it.IssueDate, &it.CreatedAt); err != nil {
 				return err
 			}
 			out = append(out, it)
@@ -299,4 +309,10 @@ func (p *Pool) GetVoidedDocumentItems(ctx context.Context, voidID string) ([]mod
 		return rows.Err()
 	})
 	return out, err
+}
+
+// sameDay reports whether two issue_date values (a DATE column) are the same
+// calendar day.
+func sameDay(a, b time.Time) bool {
+	return a.Format("2006-01-02") == b.Format("2006-01-02")
 }
