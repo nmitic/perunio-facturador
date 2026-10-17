@@ -467,6 +467,26 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		})
 	}
 
+	// Exonerado (9997), inafecto (9998) and exportación (9995) subtotals. Each
+	// tributo used by a line with a base > 0 needs its own document subtotal
+	// (ERROR 2638), carrying the Σ of those line bases and no tax (3000).
+	for _, z := range []struct {
+		base    float64
+		taxCode string
+	}{
+		{buckets.exoBase, sunat.Cat05Exonerado},
+		{buckets.inafBase, sunat.Cat05Inafecto},
+		{buckets.expBase, sunat.Cat05Exportacion},
+	} {
+		if z.base > 0 {
+			tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
+				TaxableAmount: newCurrencyAmount(formatDecimal(z.base), cur),
+				TaxAmount:     newCurrencyAmount("0.00", cur),
+				TaxCategory:   newTaxCategory(sunat.Cat05TaxCategoryId(z.taxCode), "", z.taxCode),
+			})
+		}
+	}
+
 	// Gratuita (9996) subtotal — gravado-gratuito lines. The document cbc:TaxAmount
 	// is NOT increased (the customer pays no tax on gratuitas, so it stays the sum
 	// of onerosa IGV/IVAP), but SUNAT requires the referential base + would-be IGV
@@ -506,8 +526,10 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		})
 	}
 
-	// Fallback when no breakdown applies (e.g. exonerado-only document): emit
-	// a single zero IGV subtotal so SUNAT doesn't reject for missing TaxTotal.
+	// Fallback when no line contributed a base at all: emit a single zero IGV
+	// subtotal so SUNAT doesn't reject for missing TaxTotal. Never reached by an
+	// exonerado/inafecto/exportación document, which has its own subtotal above
+	// (a 1000 subtotal there is ERROR 3277 / 3107).
 	if len(tt.TaxSubtotal) == 0 {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
@@ -912,10 +934,14 @@ func newLineTaxCategory(exemptionReasonCode, taxCode string) taxCategory {
 
 	// cbc:Percent is the rate the line declares, which Cat.07 carries per código:
 	// 18.00 for gravado, 4.00 for IVAP, 18.00 for gravado-gratuito (the IGV it
-	// would have carried — SUNAT wants the tag on every tributo that has a rate,
-	// fault 2992), 0.00 for exonerado/inafecto gratuito, and empty for exonerado,
-	// inafecto and exportación, which omit the element entirely.
+	// would have carried), 0.00 for exonerado/inafecto gratuito. Cat.07 has no
+	// rate for exonerado, inafecto and exportación, but SUNAT wants the tag on
+	// every line tributo except ICBPER (ERROR 2992), so they declare 0.00 — a
+	// value SUNAT's 3102 regex accepts.
 	tc.Percent = sunat.Cat07Percent(exemptionReasonCode)
+	if tc.Percent == "" && taxCode != sunat.Cat05ICBPER {
+		tc.Percent = "0.00"
+	}
 	if !sunat.Cat07Valid(exemptionReasonCode) {
 		// Unknown código: buildLineTaxTotal has already fallen back to IGV, so
 		// declare IGV's rate rather than emitting a tributo with no rate.

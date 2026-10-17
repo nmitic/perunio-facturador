@@ -5,13 +5,6 @@ why: >-
   line AND at document level, with no IGV subtotal.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
-pending: >-
-  Finding F1: buildDocumentTaxTotal sums exonerado/inafecto/exportación
-  lines but never emits their document cac:TaxSubtotal (9997/9998/9995); a
-  document with no gravado line falls back to an IGV 1000 subtotal. Finding
-  F2: exonerado/inafecto/exportación line subtotals omit cbc:Percent
-  (sunat.Cat07Percent returns empty), but SUNAT requires the tag on every
-  tributo except 7152.
 assert:
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9998']/cbc:TaxableAmount"
     equals: "500.00"
