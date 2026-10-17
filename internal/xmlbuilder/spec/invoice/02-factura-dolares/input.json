@@ -23,12 +23,6 @@
   "taxInclusiveAmount": "1180.00",
   "globalDiscount": "0.00",
   "formaPago": "contado",
-  "notes": [
-    {
-      "code": "1000",
-      "text": "MIL CIENTO OCHENTA CON 00/100 DOLARES AMERICANOS"
-    }
-  ],
   "items": [
     {
       "lineNumber": 1,

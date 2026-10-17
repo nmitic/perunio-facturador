@@ -84,12 +84,8 @@ func buildCreditNoteXML(req model.IssueRequest) ([]byte, error) {
 		CustomerParty: newCustomerParty(req.CustomerDocType, req.CustomerDocNumber, req.CustomerName, req.CustomerAddress),
 	}
 
-	for _, n := range req.Notes {
-		cn.Notes = append(cn.Notes, noteElement{
-			Value:            n.Text,
-			LanguageLocaleID: n.Code,
-		})
-	}
+	// Leyendas: 1000 (monto en letras) is generated, the rest come from req.
+	cn.Notes = buildNotes(req)
 
 	// Detracción (SPOT) — leyenda 2006 + cuenta BN + código/porcentaje/monto,
 	// mirrored from the referenced factura.

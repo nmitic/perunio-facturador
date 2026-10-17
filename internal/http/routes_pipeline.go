@@ -148,9 +148,10 @@ func buildIssueRequestFromDoc(
 		TransporteCarga: doc.TransporteCarga,
 	}
 
-	if doc.Notes != nil && *doc.Notes != "" {
-		req.Notes = []model.Note{{Code: "1000", Text: *doc.Notes}}
-	}
+	// doc.Notes are the draft's free-text observaciones. They stay in the DB
+	// and on the PDF but are not sent to SUNAT: the only leyenda they could
+	// travel as is 1000, which means "monto en letras" (1-200 characters, no
+	// line breaks, rule 3006). The builder generates the real 1000 itself.
 
 	if doc.ReferenceDocType != nil {
 		req.ReferenceDocType = *doc.ReferenceDocType

@@ -31,6 +31,7 @@
   <cbc:ID>FC01-00000001</cbc:ID>
   <cbc:IssueDate>2024-01-15</cbc:IssueDate>
   <cbc:IssueTime>15:20:30</cbc:IssueTime>
+  <cbc:Note languageLocaleID="1000">CIENTO DIECIOCHO CON 00/100 SOLES</cbc:Note>
   <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency" listAgencyName="United Nations Economic Commission for Europe">PEN</cbc:DocumentCurrencyCode>
   <cac:DiscrepancyResponse>
     <cbc:ReferenceID>F001-00000001</cbc:ReferenceID>

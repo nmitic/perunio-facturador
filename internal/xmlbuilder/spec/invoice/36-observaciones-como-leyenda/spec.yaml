@@ -7,11 +7,6 @@ why: >-
   observaciones need their own channel.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
-pending: >-
-  Finding F4: buildIssueRequestFromDoc (internal/http/routes_pipeline.go)
-  sends every free-text draft note as Cat.52 leyenda 1000; multi-line or
-  >200-char notes break rule 3006 and the real monto en letras is never
-  generated.
 assert:
   - xpath: "/*/cbc:Note[contains(., 'almac')][@languageLocaleID='1000']"
     count: 0

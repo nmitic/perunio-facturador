@@ -89,12 +89,8 @@ func buildDebitNoteXML(req model.IssueRequest) ([]byte, error) {
 		CustomerParty: newCustomerParty(req.CustomerDocType, req.CustomerDocNumber, req.CustomerName, req.CustomerAddress),
 	}
 
-	for _, n := range req.Notes {
-		dn.Notes = append(dn.Notes, noteElement{
-			Value:            n.Text,
-			LanguageLocaleID: n.Code,
-		})
-	}
+	// Leyendas: 1000 (monto en letras) is generated, the rest come from req.
+	dn.Notes = buildNotes(req)
 
 	// Detracción (SPOT) — leyenda 2006 + cuenta BN + código/porcentaje/monto,
 	// mirrored from the referenced factura.

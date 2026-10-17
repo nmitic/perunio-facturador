@@ -174,7 +174,6 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
-| F4 | The issue pipeline sends every free-text draft note as leyenda **1000** ("monto en letras"). Multi-line or >200-character notes break 3006, and the real monto en letras is never produced. | ERROR 3006 | `internal/http/routes_pipeline.go` `buildIssueRequestFromDoc` | invoice/36 |
 | F6 | RC lines use the Resumen **1.0** range shape (`sac:DocumentSerialID` + `Start/EndDocumentNumberID`) under CustomizationID **1.1**, which identifies each comprobante with one `cbc:ID` per line (RC 1.1 guide, sample XML p. 27). | ERROR 2512 | `summary.go` | summary/01–06 |
 | F7 | RC lines omit the IGV `cac:TaxTotal` when the IGV is 0. | ERROR 2278 | `buildSummaryLine` | summary/06 |
 | F8 | GRE **por evento** cannot be sent from a Sistema del Contribuyente at all: R.S. 123-2022/SUNAT, numeral 5.2 — "La GRE - por evento se emite únicamente a través del SEE - SOL" — and both GRE validators reject its event-type tag. The builder still produces one (base type code, plus an `AdditionalDocumentReference` holding Perunio's `despatches.id` UUID and the Cat.59 code), which can only be rejected. It must refuse every EV draft. | ERROR 3374 (event tag); the reference itself breaks 2692 / 3441 / 3380 / 3382, OBSERV 4371 | `despatch_evento.go` | despatch/04 |

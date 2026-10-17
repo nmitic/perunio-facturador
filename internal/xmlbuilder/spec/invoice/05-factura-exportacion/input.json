@@ -23,12 +23,6 @@
   "taxInclusiveAmount": "500.00",
   "globalDiscount": "0.00",
   "formaPago": "contado",
-  "notes": [
-    {
-      "code": "1000",
-      "text": "QUINIENTOS CON 00/100 SOLES"
-    }
-  ],
   "items": [
     {
       "lineNumber": 1,

@@ -32,6 +32,7 @@
   <cbc:IssueDate>2024-01-15</cbc:IssueDate>
   <cbc:IssueTime>15:20:30</cbc:IssueTime>
   <cbc:InvoiceTypeCode listID="0101" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">03</cbc:InvoiceTypeCode>
+  <cbc:Note languageLocaleID="1000">MIL SESENTA Y DOS CON 00/100 SOLES</cbc:Note>
   <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listName="Currency" listAgencyName="United Nations Economic Commission for Europe">PEN</cbc:DocumentCurrencyCode>
   <cac:AdditionalDocumentReference>
     <cbc:ID>B001-00000007</cbc:ID>

@@ -126,13 +126,8 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		CustomerParty:        newCustomerParty(req.CustomerDocType, req.CustomerDocNumber, req.CustomerName, req.CustomerAddress),
 	}
 
-	// Notes
-	for _, n := range req.Notes {
-		inv.Notes = append(inv.Notes, noteElement{
-			Value:            n.Text,
-			LanguageLocaleID: n.Code,
-		})
-	}
+	// Leyendas: 1000 (monto en letras) is generated, the rest come from req.
+	inv.Notes = buildNotes(req)
 
 	// SUNAT leyenda 1002 — auto-injected when any line is gratuito and the
 	// caller didn't already supply it. Required by Anexo 8 for documents that
