@@ -12,8 +12,4 @@ sources:
   - "R.S. 123-2022/SUNAT, numeral 5.2 (resources/normas/rs-123-2022-sunat.pdf)"
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0 (ERR 3374)"
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0 (ERR 3374)"
-pending: >-
-  Finding F8: BuildDespatchXML builds a por evento guía (base type code,
-  plus a cac:AdditionalDocumentReference holding Perunio's despatches.id
-  UUID and the Cat.59 event code) that SUNAT can only reject.
 error_contains: "SEE-SOL"

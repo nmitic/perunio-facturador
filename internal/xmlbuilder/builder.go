@@ -1,6 +1,7 @@
 package xmlbuilder
 
 import (
+	"errors"
 	"fmt"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
@@ -38,12 +39,14 @@ type DespatchXMLInput struct {
 	RUC            string
 	CompanyName    string
 	CompanyAddress string
-
-	// EventBaseDocType is only used when Despatch.DocType == "EV".
-	// It must be "09" or "31" — the underlying flavor of the
-	// superseding por-eventos GRE.
-	EventBaseDocType string
 }
+
+// ErrDespatchEvento refuses a GRE por evento. R.S. 123-2022/SUNAT (numeral 5.2,
+// adding to art. 32 of R.S. 097-2012): "La GRE - por evento se emite
+// únicamente a través del SEE - SOL", and both GRE validators reject the
+// event-type tag it would carry (ERROR 3374). A Sistema del Contribuyente can
+// only produce a por evento guía SUNAT rejects.
+var ErrDespatchEvento = errors.New("la GRE por evento se emite únicamente a través del SEE-SOL (R.S. 123-2022/SUNAT, numeral 5.2); no puede enviarse desde Perunio")
 
 // BuildDespatchXML generates UBL 2.1 DespatchAdvice XML for a Remitente
 // (09), Transportista (31), or por-Eventos (EV) guía. The XML is
@@ -59,7 +62,7 @@ func BuildDespatchXML(in DespatchXMLInput) ([]byte, error) {
 	case sunat.GreDocTypeTransportista:
 		return buildDespatchTransportistaXML(in.Despatch, in.Lines, in.RUC, in.CompanyName, in.CompanyAddress)
 	case sunat.GreDocTypeEvento:
-		return buildDespatchEventoXML(in.Despatch, in.Lines, in.RUC, in.CompanyName, in.CompanyAddress, in.EventBaseDocType)
+		return nil, ErrDespatchEvento
 	default:
 		return nil, fmt.Errorf("unsupported despatch type: %s", in.Despatch.DocType)
 	}

@@ -251,12 +251,11 @@ func buildDocument(kind string, input []byte) ([]byte, error) {
 			return nil, err
 		}
 		return xmlbuilder.BuildDespatchXML(xmlbuilder.DespatchXMLInput{
-			Despatch:         &in.Despatch,
-			Lines:            in.Lines,
-			RUC:              in.RUC,
-			CompanyName:      in.CompanyName,
-			CompanyAddress:   in.CompanyAddress,
-			EventBaseDocType: in.EventBaseDocType,
+			Despatch:       &in.Despatch,
+			Lines:          in.Lines,
+			RUC:            in.RUC,
+			CompanyName:    in.CompanyName,
+			CompanyAddress: in.CompanyAddress,
 		})
 	default:
 		return nil, fmt.Errorf("spec.yaml: unknown document %q (want cpe|summary|voided|despatch|filename)", kind)

@@ -110,3 +110,9 @@ produce a 10.5 % document yet.
     exportación). `FillSummaryTotals` (`internal/xmlbuilder/summary_totals.go`)
     tells exonerado from inafecto gratuitos by the código's first digit
     (2x / 3x).
+  - **GRE doc type `EV` must lose its `select` capability.** The facturador
+    refuses por evento guías (F8: SEE-SOL only, R.S. 123-2022 numeral 5.2),
+    but the frontend guía form builds its type picker from
+    `greDocTypeSelectEnum`, which still offers EV
+    (`perunio-frontend/src/lib/comprobante-form-utils.ts`). Keep EV valid
+    (old records still display; the GRE list filter keeps it).

@@ -58,9 +58,10 @@ func (s *Server) createSeriesHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Datos inválidos")
 		return
 	}
-	// Everything the pipeline emits, plus the por-eventos marker: GRE series
-	// (T001, V001) live in document_series too, and 'EV' is not a Cat.01 código.
-	if !sunat.Cat01Emit(req.DocType) && req.DocType != sunat.GreDocTypeEvento {
+	// Everything the pipeline emits. GRE series (T001, V001) live in
+	// document_series too. 'EV' (por evento) is refused: that guía is issued
+	// only in SUNAT's SEE-SOL (R.S. 123-2022, numeral 5.2).
+	if !sunat.Cat01Emit(req.DocType) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "docType inválido")
 		return
 	}

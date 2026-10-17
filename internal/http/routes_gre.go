@@ -232,6 +232,9 @@ func (b *createDespatchBody) validate() string {
 	if b.DocType == "" {
 		return "docType requerido"
 	}
+	if b.DocType == sunat.GreDocTypeEvento {
+		return "La GRE por evento se emite únicamente a través del SEE-SOL de SUNAT"
+	}
 	// series/correlative are optional: when correlative <= 0 the DB reserves the
 	// next value from the series row and takes the canonical series code from it.
 	if b.RecipientDocNumber == "" {
@@ -548,21 +551,12 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		address = "-"
 	}
 
-	// Por-eventos guías still serialize as 09 or 31 on the wire — the
-	// base doc type defaults to Remitente (09). A future iteration can
-	// accept it from the request body.
-	eventBase := sunat.GreDocTypeRemitente
-	if d.DocType == sunat.GreDocTypeEvento && len(d.Series) > 0 && d.Series[0] == 'V' {
-		eventBase = sunat.GreDocTypeTransportista
-	}
-
 	xmlBytes, err := xmlbuilder.BuildDespatchXML(xmlbuilder.DespatchXMLInput{
-		Despatch:         d,
-		Lines:            lines,
-		RUC:              deps.company.RUC,
-		CompanyName:      deps.company.CompanyName,
-		CompanyAddress:   address,
-		EventBaseDocType: eventBase,
+		Despatch:       d,
+		Lines:          lines,
+		RUC:            deps.company.RUC,
+		CompanyName:    deps.company.CompanyName,
+		CompanyAddress: address,
 	})
 	if err != nil {
 		s.log.Error("build despatch xml", "error", err, "despatchId", despatchID)
@@ -577,7 +571,9 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := xmlbuilder.DespatchFilename(deps.company.RUC, d.DocType, d.Series, d.Correlative, eventBase)
+	// Only 09 and 31 get this far (BuildDespatchXML refuses EV), so no
+	// por evento base type is needed.
+	filename := xmlbuilder.DespatchFilename(deps.company.RUC, d.DocType, d.Series, d.Correlative, "")
 	zipBytes, err := zipper.CreateZIP(filename, signedXML)
 	if err != nil {
 		s.log.Error("zip despatch", "error", err, "despatchId", despatchID)

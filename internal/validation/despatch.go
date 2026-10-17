@@ -30,10 +30,6 @@ func ValidateDespatch(d *model.Despatch, lines []model.DespatchLine) []model.Val
 	errs = append(errs, validateDespatchTransport(d)...)
 	errs = append(errs, validateDespatchLines(lines)...)
 
-	if d.DocType == sunat.GreDocTypeEvento {
-		errs = append(errs, validateDespatchEvento(d)...)
-	}
-
 	return errs
 }
 
@@ -41,8 +37,13 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 	var errs []model.ValidationError
 
 	switch d.DocType {
-	case sunat.GreDocTypeRemitente, sunat.GreDocTypeTransportista, sunat.GreDocTypeEvento:
+	case sunat.GreDocTypeRemitente, sunat.GreDocTypeTransportista:
 		// ok
+	case sunat.GreDocTypeEvento:
+		errs = append(errs, model.ValidationError{
+			Code: 3374, Field: "docType",
+			Message: "la GRE por evento se emite únicamente a través del SEE-SOL de SUNAT",
+		})
 	default:
 		errs = append(errs, model.ValidationError{
 			Code: 1003, Field: "docType",
@@ -51,8 +52,7 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 	}
 
 	// Series format depends on the flavor — Remitente uses T### and
-	// Transportista uses V###. por-Eventos uses whichever underlying
-	// flavor it supersedes, so we accept either.
+	// Transportista uses V###.
 	switch d.DocType {
 	case sunat.GreDocTypeRemitente:
 		if !despatchRemitenteSeriesRegex.MatchString(d.Series) {
@@ -61,11 +61,6 @@ func validateDespatchHeader(d *model.Despatch) []model.ValidationError {
 	case sunat.GreDocTypeTransportista:
 		if !despatchTransportistaSeriesRegex.MatchString(d.Series) {
 			errs = append(errs, model.ValidationError{Code: 1001, Field: "series", Message: "transportista series must match V[A-Z0-9]{3}"})
-		}
-	case sunat.GreDocTypeEvento:
-		if !despatchRemitenteSeriesRegex.MatchString(d.Series) &&
-			!despatchTransportistaSeriesRegex.MatchString(d.Series) {
-			errs = append(errs, model.ValidationError{Code: 1001, Field: "series", Message: "por-eventos series must match T[A-Z0-9]{3} or V[A-Z0-9]{3}"})
 		}
 	}
 
@@ -205,17 +200,6 @@ func validateDespatchLines(lines []model.DespatchLine) []model.ValidationError {
 				errs = append(errs, model.ValidationError{Code: 2833, Field: fmt.Sprintf("lines[%d].quantity", i), Message: "line quantity must be > 0"})
 			}
 		}
-	}
-	return errs
-}
-
-func validateDespatchEvento(d *model.Despatch) []model.ValidationError {
-	var errs []model.ValidationError
-	if d.EventCode == nil || *d.EventCode == "" {
-		errs = append(errs, model.ValidationError{Code: 2840, Field: "eventCode", Message: "event code (Cat.59) is required for por-eventos guías"})
-	}
-	if d.OriginalGreID == nil || *d.OriginalGreID == "" {
-		errs = append(errs, model.ValidationError{Code: 2841, Field: "originalGreId", Message: "original GRE reference is required for por-eventos guías"})
 	}
 	return errs
 }
