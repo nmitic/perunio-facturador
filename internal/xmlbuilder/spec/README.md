@@ -38,7 +38,7 @@ Amounts are decimal strings. **Totals are inputs, not outputs**: the frontend co
 
 Key `IssueRequest` fields: `docType` (Cat.01), `operationType` (Cat.51), `customerDocType` (Cat.06), `items[].taxExemptionReasonCode` (Cat.07 afectación), `items[].priceTypeCode` (Cat.16), `items[].unitPrice` (IGV-exclusive valor unitario), `items[].unitPriceWithTax` (IGV-inclusive precio unitario), `items[].lineTotal` (valor de venta of the line, net of its descuento), `globalDiscount` (Cat.53 02), `anticipos[]` (`baseAmount` without IGV, `totalAmount` with IGV), `detraccion` (Cat.54 código, monto always in PEN), `formaPago` + `cuotas[]`.
 
-A few pending cases carry an input field the model does not have yet (for example `summary/09` sends `customerName`). Inputs are decoded strictly, so such a case fails to decode until the field exists. That is deliberate: the input already says what the fix needs.
+A pending case may carry an input field the model does not have yet. Inputs are decoded strictly, so such a case fails to decode until the field exists. That is deliberate: the input already says what the fix needs. (`summary/09` and `voided/03` worked this way until their fixes added `customerName` and `referenceDate`.)
 
 `spec.yaml`:
 
@@ -172,6 +172,8 @@ xmllint --shell invoice/11-gratuito-gravado-retiro/expected.xml
 
 Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` (GRE: `reglas-validacion-gre-2026-09-25.xlsx`) unless noted.
 
+**None today.** F1–F22 were all fixed in October 2026; `git log --grep '(F[0-9]'` shows the commit for each. A new gap gets a `pending:` case and a row here, continuing at F23. Features deliberately left for later (otros tributos, IGV 10.5 % end to end, catalog additions, the GRE related document's issuer) are in `FOLLOWUPS.md` at the module root, not here: they have no failing case.
+
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
 
@@ -179,22 +181,24 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 
 SUNAT dates some changes in the workbook's *Control de Cambios*. Rules that already have a case carry `effective:`.
 
-| from | rule | case |
-|---|---|---|
-| 2026-06-01 (in force) | GRE: fecha de entrega de bienes al transportista on transporte público (ERR 3617/3618/3619, replacing OBS 4385/4386 and ERR 3407) | despatch/10 |
-| 2027-01-01 | RC: IGV rate on each line subtotal (ERR 2992/3504/3102) | summary/07 |
-| 2027-01-01 | RC: gratuitas split into Cat.11 06–09 and an "IGV gratuitas" TaxTotal (ERR 3051 …) | summary/08 |
-| 2027-01-01 | RC: customer name, field 10.3 (ERR 2022; OBSERV until 2026-12-31) | summary/09 |
-| 2027-01-01 | NC: only one `BillingReference` for every motivo except 11 (ERR 3261); NC amounts may not exceed the original's (ERR 3503, needs the original, not checkable from the XML) | — (the builder already emits one reference) |
-| 2027-01-01 | ND: new motivo 13 Penalidades (Cat.10), with no `BillingReference` required (ERR 2524) and no IGV (ERR 3507); one `BillingReference` for every motivo (ERR 3194) | — (motivo 13 is not offered yet) |
-| 2027-01-01 | Código de producto SUNAT format becomes an error (ERR 3496) | — (not emitted) |
-| 2027-01-01 | Cat.01 25 and the DAE documents 28/56 in NC/ND/RA | — (not issued) |
+The two RC rules that change what may be sent (the line IGV rate and the gratuitas split) apply only to an RC whose `referenceDate` is on or after 2027-01-01 (`rules2027` in `summary.go`): before that date SUNAT does not accept the new field and códigos. Their cases' inputs are therefore dated January 2027; RC cases dated earlier pin the current shape.
+
+| from | rule | case | builder |
+|---|---|---|---|
+| 2026-06-01 (in force) | GRE: fecha de entrega de bienes al transportista on transporte público (ERR 3617/3618/3619, replacing OBS 4385/4386 and ERR 3407) | despatch/10 | emitted |
+| 2027-01-01 | RC: IGV rate on each line subtotal (ERR 2992/3504/3102) | summary/07 | from `referenceDate` 2027-01-01 |
+| 2027-01-01 | RC: gratuitas split into Cat.11 06–09 and an "IGV gratuitas" TaxTotal (ERR 3051 …) | summary/08 | from `referenceDate` 2027-01-01; 05 before |
+| 2027-01-01 | RC: customer name, field 10.3 (ERR 2022; OBSERV until 2026-12-31) | summary/09 | emitted now (only observed before 2027) |
+| 2027-01-01 | NC: only one `BillingReference` for every motivo except 11 (ERR 3261); NC amounts may not exceed the original's (ERR 3503, needs the original, not checkable from the XML) | — | already emits one reference |
+| 2027-01-01 | ND: new motivo 13 Penalidades (Cat.10), with no `BillingReference` required (ERR 2524) and no IGV (ERR 3507); one `BillingReference` for every motivo (ERR 3194) | — | motivo 13 is not offered yet |
+| 2027-01-01 | Código de producto SUNAT format becomes an error (ERR 3496) | — | not emitted |
+| 2027-01-01 | Cat.01 25 and the DAE documents 28/56 in NC/ND/RA | — | not issued |
 
 ## Not covered yet
 
 Rules SUNAT checks that no case pins today. Each is either an observación or a feature Perunio does not offer.
 
-- GRE observaciones: carrier MTC number (4391; `carrierMtc` is ignored), vehicle TUC (4399), freight-payer indicator (4388), proveedor on motivo 02 (4375).
+- GRE observaciones: carrier MTC number (4391; `carrierMtc` is ignored), vehicle TUC (4399), freight-payer indicator (4388), proveedor on motivo 02 (4375; the related document's issuer is always the remitente, `FOLLOWUPS.md` FU-4).
 - GRE motivo 04 needs `AddressTypeCode` on both addresses (ERR 3365/3369); motivos 08/09/19 need customs documents (ERR 3440/3493/3483). The builder can emit neither.
 - Secondary vehicles (`vehiclePlates`) are ignored (no rejection, data loss).
 - Validation-layer gaps (not XML): destinatario = / ≠ remitente by motivo (ERR 2554/2555), carrier name (2563), driver document (2568), start date (3406), issue date in the future (2108).
