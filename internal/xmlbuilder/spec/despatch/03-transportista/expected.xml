@@ -103,11 +103,6 @@
       <cac:TransitPeriod>
         <cbc:StartDate>2024-01-16</cbc:StartDate>
       </cac:TransitPeriod>
-      <cac:TransportMeans>
-        <cac:RoadTransport>
-          <cbc:LicensePlateID>ABC123</cbc:LicensePlateID>
-        </cac:RoadTransport>
-      </cac:TransportMeans>
       <cac:DriverPerson>
         <cbc:ID schemeID="1" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">12345678</cbc:ID>
         <cbc:FirstName>JUAN PEREZ</cbc:FirstName>
@@ -128,17 +123,24 @@
           <cbc:IdentificationCode>PE</cbc:IdentificationCode>
         </cac:Country>
       </cac:DeliveryAddress>
+      <cac:Despatch>
+        <cac:DespatchAddress>
+          <cbc:ID>150101</cbc:ID>
+          <cbc:StreetName>AV. ORIGEN 100</cbc:StreetName>
+          <cac:AddressLine>
+            <cbc:Line>AV. ORIGEN 100</cbc:Line>
+          </cac:AddressLine>
+          <cac:Country>
+            <cbc:IdentificationCode>PE</cbc:IdentificationCode>
+          </cac:Country>
+        </cac:DespatchAddress>
+      </cac:Despatch>
     </cac:Delivery>
-    <cac:OriginAddress>
-      <cbc:ID>150101</cbc:ID>
-      <cbc:StreetName>AV. ORIGEN 100</cbc:StreetName>
-      <cac:AddressLine>
-        <cbc:Line>AV. ORIGEN 100</cbc:Line>
-      </cac:AddressLine>
-      <cac:Country>
-        <cbc:IdentificationCode>PE</cbc:IdentificationCode>
-      </cac:Country>
-    </cac:OriginAddress>
+    <cac:TransportHandlingUnit>
+      <cac:TransportEquipment>
+        <cbc:ID>ABC123</cbc:ID>
+      </cac:TransportEquipment>
+    </cac:TransportHandlingUnit>
   </cac:Shipment>
   <cac:DespatchLine>
     <cbc:ID>1</cbc:ID>

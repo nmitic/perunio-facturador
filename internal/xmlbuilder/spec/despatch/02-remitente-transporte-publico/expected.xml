@@ -113,17 +113,19 @@
           <cbc:IdentificationCode>PE</cbc:IdentificationCode>
         </cac:Country>
       </cac:DeliveryAddress>
+      <cac:Despatch>
+        <cac:DespatchAddress>
+          <cbc:ID>150101</cbc:ID>
+          <cbc:StreetName>AV. ORIGEN 100</cbc:StreetName>
+          <cac:AddressLine>
+            <cbc:Line>AV. ORIGEN 100</cbc:Line>
+          </cac:AddressLine>
+          <cac:Country>
+            <cbc:IdentificationCode>PE</cbc:IdentificationCode>
+          </cac:Country>
+        </cac:DespatchAddress>
+      </cac:Despatch>
     </cac:Delivery>
-    <cac:OriginAddress>
-      <cbc:ID>150101</cbc:ID>
-      <cbc:StreetName>AV. ORIGEN 100</cbc:StreetName>
-      <cac:AddressLine>
-        <cbc:Line>AV. ORIGEN 100</cbc:Line>
-      </cac:AddressLine>
-      <cac:Country>
-        <cbc:IdentificationCode>PE</cbc:IdentificationCode>
-      </cac:Country>
-    </cac:OriginAddress>
   </cac:Shipment>
   <cac:DespatchLine>
     <cbc:ID>1</cbc:ID>

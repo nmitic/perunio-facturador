@@ -109,16 +109,29 @@ type sellerSupplierParty struct {
 // shipment carries the transport metadata: weight, packages, mode,
 // origin/destination addresses, driver and vehicle.
 type shipment struct {
-	XMLName                            xml.Name         `xml:"cac:Shipment"`
-	ID                                 string           `xml:"cbc:ID"`
-	HandlingCode                       handlingCode     `xml:"cbc:HandlingCode"`
-	Information                        string           `xml:"cbc:Information,omitempty"`
-	GrossWeightMeasure                 weightMeasure    `xml:"cbc:GrossWeightMeasure"`
-	TotalTransportHandlingUnitQuantity string           `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
-	SplitConsignmentIndicator          string           `xml:"cbc:SplitConsignmentIndicator,omitempty"`
-	ShipmentStage                      shipmentStage    `xml:"cac:ShipmentStage"`
-	Delivery                           delivery         `xml:"cac:Delivery"`
-	OriginAddress                      *despatchAddress `xml:"cac:OriginAddress,omitempty"`
+	XMLName                            xml.Name      `xml:"cac:Shipment"`
+	ID                                 string        `xml:"cbc:ID"`
+	HandlingCode                       handlingCode  `xml:"cbc:HandlingCode"`
+	Information                        string        `xml:"cbc:Information,omitempty"`
+	GrossWeightMeasure                 weightMeasure `xml:"cbc:GrossWeightMeasure"`
+	TotalTransportHandlingUnitQuantity string        `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
+	SplitConsignmentIndicator          string        `xml:"cbc:SplitConsignmentIndicator,omitempty"`
+	ShipmentStage                      shipmentStage `xml:"cac:ShipmentStage"`
+	Delivery                           delivery      `xml:"cac:Delivery"`
+	// TransportHandlingUnit carries the vehicle plate on GRE 2.0
+	// (TransportEquipment/cbc:ID, ERROR 2566).
+	TransportHandlingUnit *transportHandlingUnit `xml:"cac:TransportHandlingUnit,omitempty"`
+}
+
+// transportHandlingUnit holds the vehicle(s): GRE 2.0 reads the plate from
+// TransportEquipment/cbc:ID. ShipmentStage/TransportMeans/RoadTransport is the
+// GRE 1.0 shape, which no GRE 2.0 rule or validator reads.
+type transportHandlingUnit struct {
+	TransportEquipment []transportEquipment `xml:"cac:TransportEquipment"`
+}
+
+type transportEquipment struct {
+	ID string `xml:"cbc:ID"`
 }
 
 // handlingCode carries the Cat.20 transfer reason code.
@@ -147,12 +160,11 @@ type weightMeasure struct {
 // shipmentStage carries the transport mode (Cat.18), transit period,
 // and either a carrier (public transport) or driver+vehicle (private).
 type shipmentStage struct {
-	XMLName           xml.Name        `xml:"cac:ShipmentStage"`
-	TransportModeCode string          `xml:"cbc:TransportModeCode"`
-	TransitPeriod     *transitPeriod  `xml:"cac:TransitPeriod,omitempty"`
-	CarrierParty      *carrierParty   `xml:"cac:CarrierParty,omitempty"`
-	TransportMeans    *transportMeans `xml:"cac:TransportMeans,omitempty"`
-	DriverPersons     []driverPerson  `xml:"cac:DriverPerson,omitempty"`
+	XMLName           xml.Name       `xml:"cac:ShipmentStage"`
+	TransportModeCode string         `xml:"cbc:TransportModeCode"`
+	TransitPeriod     *transitPeriod `xml:"cac:TransitPeriod,omitempty"`
+	CarrierParty      *carrierParty  `xml:"cac:CarrierParty,omitempty"`
+	DriverPersons     []driverPerson `xml:"cac:DriverPerson,omitempty"`
 }
 
 type transitPeriod struct {
@@ -167,21 +179,6 @@ type carrierParty struct {
 	PartyLegalEntity    *partyLegalEntity   `xml:"cac:PartyLegalEntity,omitempty"`
 }
 
-// transportMeans (transporte privado) — vehicle plates.
-type transportMeans struct {
-	RoadTransport         *roadTransport         `xml:"cac:RoadTransport,omitempty"`
-	MeasurementDimensions []measurementDimension `xml:"cac:MeasurementDimension,omitempty"`
-}
-
-type roadTransport struct {
-	LicensePlateID string `xml:"cbc:LicensePlateID"`
-}
-
-type measurementDimension struct {
-	AttributeID string        `xml:"cbc:AttributeID"`
-	Measure     weightMeasure `xml:"cbc:Measure,omitempty"`
-}
-
 // driverPerson (transporte privado) — driver identity + license.
 type driverPerson struct {
 	XMLName            xml.Name `xml:"cac:DriverPerson"`
@@ -192,10 +189,18 @@ type driverPerson struct {
 	IdentificationCard string   `xml:"cac:IdentityDocumentReference>cbc:ID,omitempty"`
 }
 
-// delivery carries the arrival address (punto de llegada).
+// delivery carries the arrival address (punto de llegada) and, in
+// cac:Despatch, the punto de partida. GRE 2.0 reads the origin from
+// Delivery/Despatch/DespatchAddress (ERROR 2775/2577); Shipment/OriginAddress
+// is the GRE 1.0 shape.
 type delivery struct {
-	XMLName         xml.Name        `xml:"cac:Delivery"`
-	DeliveryAddress despatchAddress `xml:"cac:DeliveryAddress"`
+	XMLName         xml.Name         `xml:"cac:Delivery"`
+	DeliveryAddress despatchAddress  `xml:"cac:DeliveryAddress"`
+	Despatch        deliveryDespatch `xml:"cac:Despatch"`
+}
+
+type deliveryDespatch struct {
+	DespatchAddress despatchAddress `xml:"cac:DespatchAddress"`
 }
 
 // despatchAddress is a 6-digit ubigeo + street for both origin and
@@ -337,8 +342,10 @@ func buildShipment(d *model.Despatch) shipment {
 		},
 		Delivery: delivery{
 			DeliveryAddress: newDespatchAddress(d.ArrivalUbigeo, d.ArrivalAddress),
+			Despatch: deliveryDespatch{
+				DespatchAddress: newDespatchAddress(d.StartUbigeo, d.StartAddress),
+			},
 		},
-		OriginAddress: addrPtr(newDespatchAddress(d.StartUbigeo, d.StartAddress)),
 	}
 	if d.TransferReasonDesc != nil && *d.TransferReasonDesc != "" {
 		ship.Information = *d.TransferReasonDesc
@@ -375,8 +382,8 @@ func buildShipment(d *model.Despatch) shipment {
 	} else {
 		// Private transport — emit driver + vehicle when present.
 		if d.VehiclePlate != nil && *d.VehiclePlate != "" {
-			ship.ShipmentStage.TransportMeans = &transportMeans{
-				RoadTransport: &roadTransport{LicensePlateID: *d.VehiclePlate},
+			ship.TransportHandlingUnit = &transportHandlingUnit{
+				TransportEquipment: []transportEquipment{{ID: *d.VehiclePlate}},
 			}
 		}
 		if d.DriverDocNumber != nil && *d.DriverDocNumber != "" {
@@ -479,7 +486,5 @@ func stringOrDefault(p *string, def string) string {
 	}
 	return *p
 }
-
-func addrPtr(a despatchAddress) *despatchAddress { return &a }
 
 func itoa(n int) string { return fmt.Sprintf("%d", n) }

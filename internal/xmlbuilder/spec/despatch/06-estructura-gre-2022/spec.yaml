@@ -10,9 +10,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
   - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
-pending: >-
-  Finding F9: the builder emits cac:Shipment/cac:OriginAddress and
-  ShipmentStage/TransportMeans/RoadTransport, the pre-2022 GRE 1.0 shapes.
 assert:
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID"
     equals: "150101"
