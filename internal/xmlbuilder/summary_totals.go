@@ -1,8 +1,6 @@
 package xmlbuilder
 
 import (
-	"strings"
-
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
 )
@@ -26,9 +24,8 @@ func FillSummaryTotals(item *model.SummaryItem, subtotal string, lines []model.L
 			case sunat.Cat07GravadoGratuito(code):
 				freeGrav += base
 				freeIGV += parseDecimal(li.IGVAmount)
-			// Cat.07 groups códigos by their first digit: 2x exonerado,
-			// 3x inafecto. There is no gratuito exportación código.
-			case strings.HasPrefix(code, "2"):
+			// There is no gratuito exportación código.
+			case sunat.Cat07Category(code) == "exonerado":
 				freeExo += base
 			default:
 				freeInaf += base

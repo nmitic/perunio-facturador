@@ -82,7 +82,7 @@ assert:
     why: >-
       Leyenda 1002 is auto-injected
   - xpath: "/*/cbc:Note[@languageLocaleID='1002']"
-    equals: "TRANSFERENCIA GRATUITA O A TITULO GRATUITO"
+    equals: "TRANSFERENCIA GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE"
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:LineExtensionAmount"
     equals: "0.00"
   - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"

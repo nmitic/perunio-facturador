@@ -228,25 +228,25 @@ func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLin
 	if !isZeroAmount(item.TotalGravada) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalGravada, cur),
-			InstructionID: "01", // Gravado
+			InstructionID: sunat.Cat11Gravado,
 		})
 	}
 	if !isZeroAmount(item.TotalExonerated) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalExonerated, cur),
-			InstructionID: "02", // Exonerado
+			InstructionID: sunat.Cat11Exonerado,
 		})
 	}
 	if !isZeroAmount(item.TotalUnaffected) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalUnaffected, cur),
-			InstructionID: "03", // Inafecto
+			InstructionID: sunat.Cat11Inafecto,
 		})
 	}
 	if !isZeroAmount(item.TotalExport) {
 		line.BillingPayment = append(line.BillingPayment, summaryBillingPayment{
 			PaidAmount:    newCurrencyAmount(item.TotalExport, cur),
-			InstructionID: "04", // Exportación
+			InstructionID: sunat.Cat11Exportacion,
 		})
 	}
 	line.BillingPayment = append(line.BillingPayment, summaryGratuitas(item, cur, from2027)...)
@@ -288,10 +288,10 @@ func buildSummaryLine(item model.SummaryItem, from2027 bool) summaryDocumentsLin
 // 08 inafecta, 09 exportación.
 func summaryGratuitas(item model.SummaryItem, cur string, from2027 bool) []summaryBillingPayment {
 	split := []struct{ amount, code string }{
-		{item.TotalFreeGravada, "06"},
-		{item.TotalFreeExonerated, "07"},
-		{item.TotalFreeUnaffected, "08"},
-		{item.TotalFreeExport, "09"},
+		{item.TotalFreeGravada, sunat.Cat11GratuitasGravadas},
+		{item.TotalFreeExonerated, sunat.Cat11GratuitasExoneradas},
+		{item.TotalFreeUnaffected, sunat.Cat11GratuitasInafectas},
+		{item.TotalFreeExport, sunat.Cat11GratuitasExportacion},
 	}
 	var total float64
 	hasSplit := false
@@ -310,7 +310,7 @@ func summaryGratuitas(item model.SummaryItem, cur string, from2027 bool) []summa
 		if isZeroAmount(free) {
 			return nil
 		}
-		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(free, cur), InstructionID: "05"}}
+		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(free, cur), InstructionID: sunat.Cat11Gratuitas}}
 	}
 
 	if !hasSplit {
@@ -319,7 +319,7 @@ func summaryGratuitas(item model.SummaryItem, cur string, from2027 bool) []summa
 		if isZeroAmount(item.TotalFree) {
 			return nil
 		}
-		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(item.TotalFree, cur), InstructionID: "06"}}
+		return []summaryBillingPayment{{PaidAmount: newCurrencyAmount(item.TotalFree, cur), InstructionID: sunat.Cat11GratuitasGravadas}}
 	}
 	var out []summaryBillingPayment
 	for _, p := range split {

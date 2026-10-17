@@ -80,43 +80,6 @@ produce a 10.5 % document yet.
 - Spec cases: 10.5 with a global discount, 10.5 with an anticipo, a boleta at
   10.5, a mixed-rate document refused.
 
-## FU-3 — Cat.52 leyenda texts missing from perunio-sunat-catalogs
-
-**Status:** worked around with literals in the builder.
-
-**Today**
-- `sunat.Cat52Texto` returns `""` for 1002 (transferencia gratuita) and 2007
-  (operación sujeta al IVAP) in `perunio-sunat-catalogs` v1.1.0 (only 2006 has
-  a Texto). `internal/xmlbuilder/invoice.go` therefore hard-codes
-  "TRANSFERENCIA GRATUITA O A TITULO GRATUITO" (1002) and
-  "Operación sujeta al IVAP" (2007).
-- The 1002 literal does not match the catalog Description ("TRANSFERENCIA
-  GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE"); SUNAT does not
-  validate the text, only the code, so it is accepted either way.
-
-**To fix**
-- Fill `Texto` for 1002 and 2007 (and any other leyenda the builder may
-  inject) in `perunio-sunat-catalogs/catalogs`, regenerate, tag, then
-  `go get github.com/nmitic/perunio-sunat-catalogs@vX.Y.Z` here and replace the
-  literals with `sunat.Cat52Texto(...)`. `perunio-backend` and
-  `perunio-frontend` consume the same tag.
-- Re-run `go test ./internal/xmlbuilder -run TestSpec -update` and review the
-  leyenda text diffs.
-- While there, add what the RC builder needed and the catalog lacks:
-  - **Cat.11** (código de tipo de valor de venta, RC `sac:BillingPayment/
-    cbc:InstructionID`): 01-05, plus 06-09 from 2027-01-01. Today
-    `internal/xmlbuilder/summary.go` writes them as single literals.
-  - A **category on Cat.07** entries (gravado / exonerado / inafecto /
-    exportación). `FillSummaryTotals` (`internal/xmlbuilder/summary_totals.go`)
-    tells exonerado from inafecto gratuitos by the código's first digit
-    (2x / 3x).
-  - **GRE doc type `EV` must lose its `select` capability.** The facturador
-    refuses por evento guías (F8: SEE-SOL only, R.S. 123-2022 numeral 5.2),
-    but the frontend guía form builds its type picker from
-    `greDocTypeSelectEnum`, which still offers EV
-    (`perunio-frontend/src/lib/comprobante-form-utils.ts`). Keep EV valid
-    (old records still display; the GRE list filter keeps it).
-
 ## FU-4 — GRE related document: issuer and catálogo 61
 
 **Status:** the related document goes out as `cac:AdditionalDocumentReference`
@@ -130,16 +93,21 @@ produce a 10.5 % document yet.
   wrong when the document was issued by someone else — e.g. the proveedor's
   factura on a compra (motivo 02), which SUNAT also observes (4375).
 - Only one related document can be stored; GRE 2.0 allows several.
-- The shared catalog has no **Cat.61** (GRE documento relacionado). The code is
-  taken as given and its name from Cat.01 where the codes coincide; a Cat.61
-  code Cat.01 does not have (48, 50, 92…) goes without `cbc:DocumentType`
-  (OBSERV 4371 only). XSL rule 2692 checks the code against Cat.61 `gre-r`.
+- **Cat.61** is in `perunio-sunat-catalogs` since v1.4.0 (`sunat.Cat61*`,
+  `Cat61GreR` / `Cat61GreT`, `Cat61IssuerRemitente` / `Cat61IssuerTransportista`),
+  but nothing reads it yet: the code is taken as given and its name from Cat.01
+  where the codes coincide, so a Cat.61-only code (48, 50, 92…) goes without
+  `cbc:DocumentType` (OBSERV 4371 only), and 2692 is not pre-checked.
+- The GRE workbook ties the related documents to the motivo de traslado
+  (3440, 3445, 3493, 3494, 3612, 3463, 3613, 3635 on the remitente) and caps
+  how many a transportista lists (3345, 3346); none is pre-checked.
 
 **To build it**
 - `related_doc_issuer_ruc` (and a list of related documents) in the backend
   schema, the facturador routes and the guía form.
-- Add Cat.61 with its `gre-r` / `gre-t` capabilities to
-  `perunio-sunat-catalogs`; validate the code and take the name from it.
+- Validate the code against `Cat61GreR` / `Cat61GreT` and the issuer against
+  the `issuer*` flags; take the name from Cat.61; pre-check the motivo and count
+  rules above.
 - Spec cases: compra with the proveedor as issuer, two related documents, a
   Cat.61-only code.
 

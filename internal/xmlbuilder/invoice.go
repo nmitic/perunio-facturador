@@ -134,18 +134,16 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 	// include transferencia/retiro a título gratuito lines.
 	if hasGratuitoLine(req.Items) && !hasNoteWithCode(inv.Notes, sunat.Cat52TransfGratuita) {
 		inv.Notes = append(inv.Notes, noteElement{
-			Value:            "TRANSFERENCIA GRATUITA O A TITULO GRATUITO",
+			Value:            sunat.Cat52Texto(sunat.Cat52TransfGratuita),
 			LanguageLocaleID: sunat.Cat52TransfGratuita,
 		})
 	}
 
 	// SUNAT leyenda 2007 — operación sujeta al IVAP. A factura or boleta with
-	// IVAP lines that omits it is accepted with OBSERV 4264. The text is the
-	// workbook's, as with 1002 above: the shared catalog has no Texto for either
-	// yet (FOLLOWUPS.md FU-3).
+	// IVAP lines that omits it is accepted with OBSERV 4264.
 	if hasIVAPLine(req.Items) && !hasNoteWithCode(inv.Notes, sunat.Cat52IVAP) {
 		inv.Notes = append(inv.Notes, noteElement{
-			Value:            "Operación sujeta al IVAP",
+			Value:            sunat.Cat52Texto(sunat.Cat52IVAP),
 			LanguageLocaleID: sunat.Cat52IVAP,
 		})
 	}
