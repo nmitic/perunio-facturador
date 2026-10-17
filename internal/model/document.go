@@ -3,6 +3,8 @@ package model
 import (
 	"math"
 	"strconv"
+
+	"github.com/nmitic/perunio-sunat-catalogs/sunat"
 )
 
 // IssueRequest is the payload the backend sends to issue a document.
@@ -76,10 +78,12 @@ type IssueRequest struct {
 	Detraccion *Detraccion `json:"detraccion,omitempty"`
 
 	// MontoOperacion is the monto acordado of the venta con anticipos this
-	// comprobante belongs to, in the document's currency; empty otherwise. The
-	// SPOT umbral is measured against the operación, not each comprobante, so
-	// validateDetraccion takes the greater of this and TaxInclusiveAmount. The
-	// pipeline fills it from the venta row — never from the client.
+	// comprobante belongs to, in the document's currency; empty otherwise.
+	// Perunio measures the SPOT umbral of a venta con anticipos against the whole
+	// operación — its own conservative reading; no SUNAT source settles it
+	// (DETRACCIONES.md › Open questions) — so validateDetraccion takes the
+	// greater of this and TaxInclusiveAmount. The pipeline fills it from the
+	// venta row — never from the client.
 	MontoOperacion string `json:"-"`
 
 	// TransporteCarga carries the extra data SUNAT demands when the detracción
@@ -136,6 +140,21 @@ func (r IssueRequest) DetraccionEnMoneda() (float64, bool) {
 	return math.Round(monto/rate*100) / 100, true
 }
 
+// DetraccionDepositaEmisor reports whether the seller, not the buyer, is the
+// party obligated to make the detracción deposit from the start. Perunio can
+// emit one such case: a venta de inmueble (Cat.54 040) on a comprobante that
+// grants neither crédito fiscal nor gasto/costo — a boleta, or a nota that
+// corrects one (R.S. 183-2004 art. 10.3 b.i, added by R.S. 022-2013). The
+// seller's other cases (paid in full without the deposit; Anexo 1 transport)
+// depend on what happens after emission, so the comprobante cannot know them.
+func (r IssueRequest) DetraccionDepositaEmisor() bool {
+	if r.Detraccion == nil || sunat.Cat54Anexo(r.Detraccion.Codigo) != "inmueble" {
+		return false
+	}
+	isNota := r.DocType == sunat.Cat01NotaCredito || r.DocType == sunat.Cat01NotaDebito
+	return r.DocType == sunat.Cat01Boleta || (isNota && r.ReferenceDocType == sunat.Cat01Boleta)
+}
+
 // NetoPendientePago is the "monto neto pendiente de pago": what the receptor
 // actually transfers to the emisor, in the document's own currency.
 //
@@ -155,11 +174,19 @@ func (r IssueRequest) DetraccionEnMoneda() (float64, bool) {
 // the leading cac:PaymentTerms "Credito" carries it and the cuotas must add up to
 // it. Printed representations state it as "Neto a pagar".
 //
+// Only the deposit the buyer makes comes off (R.S. 193-2020: "el monto del
+// depósito que deba efectuar el adquirente o usuario"). When the seller is the
+// obligated party (DetraccionDepositaEmisor), the buyer pays it the whole total
+// and the seller deposits, so nothing is deducted.
+//
 // Without detracción it is simply the payable, so callers can use it unguarded.
 func (r IssueRequest) NetoPendientePago() float64 {
 	total, err := strconv.ParseFloat(r.TotalAmount, 64)
 	if err != nil {
 		return 0
+	}
+	if r.DetraccionDepositaEmisor() {
+		return total
 	}
 	monto, ok := r.DetraccionEnMoneda()
 	if !ok {

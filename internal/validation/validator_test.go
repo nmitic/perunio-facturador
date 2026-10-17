@@ -473,7 +473,7 @@ func TestValidateDetraccionCatalogo(t *testing.T) {
 		req.Detraccion.Monto = "70.80"
 		req.MontoOperacion = "2360.00"
 		errs := validation.Validate(req)
-		is.True(t, !hasErrorField(errs, "detraccion"), "the umbral is per operación (Informe 103-2013)")
+		is.True(t, !hasErrorField(errs, "detraccion"), "Perunio measures the umbral of a venta con anticipos on the operación")
 	})
 
 	t.Run("Anexo 1 needs more than half a UIT", func(t *testing.T) {
@@ -524,6 +524,26 @@ func TestValidateDetraccionCatalogo(t *testing.T) {
 		req.Detraccion = &model.Detraccion{Codigo: sunat.Cat54AzucarYMelazaDeCana, Porcentaje: "10.00", Monto: "300.00", CuentaBN: "00-123-456789"}
 		errs := validation.Validate(req)
 		is.True(t, !hasErrorField(errs, "detraccion") && !hasErrorField(errs, "detraccion.codigo"), "Anexo 1 excludes only póliza de adjudicación and liquidación de compra")
+	})
+
+	t.Run("an Anexo 3 servicio for a no-domiciliado usuario is rejected", func(t *testing.T) {
+		for _, docType := range []string{sunat.Cat06DocTribNoDomSinRUC, sunat.Cat06DocPaisResidencia} {
+			req := newServicio780()
+			req.CustomerDocType = docType
+			req.CustomerDocNumber = "X1234567"
+			errs := validation.Validate(req)
+			is.True(t, hasErrorField(errs, "detraccion.codigo"), "R.S. 183-2004 art. 13 excludes a no-domiciliado usuario")
+		}
+	})
+
+	t.Run("a venta de inmueble for a no-domiciliado buyer is allowed", func(t *testing.T) {
+		req := newValidInvoice()
+		req.CustomerDocType = sunat.Cat06DocPaisResidencia
+		req.CustomerDocNumber = "X1234567"
+		req.OperationType = "1001"
+		req.Detraccion = newInmuebleDetraccion(1180)
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "detraccion.codigo"), "the no-domiciliado exclusion covers Anexo 3 and carga only")
 	})
 
 	t.Run("a dollar factura is checked in soles", func(t *testing.T) {
@@ -585,6 +605,14 @@ func TestValidateTransporteCarga(t *testing.T) {
 		}
 	})
 
+	t.Run("transporte de carga for a no-domiciliado usuario is rejected", func(t *testing.T) {
+		req := newTransporteCargaInvoice()
+		req.CustomerDocType = sunat.Cat06DocTribNoDomSinRUC
+		req.CustomerDocNumber = "X1234567"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "R.S. 073-2006 art. 3 excludes a no-domiciliado usuario")
+	})
+
 	t.Run("código 027 without the trip block is rejected", func(t *testing.T) {
 		req := newTransporteCargaInvoice()
 		req.TransporteCarga = nil
@@ -629,7 +657,7 @@ func TestValidateTransporteCarga(t *testing.T) {
 		}
 	})
 
-	t.Run("a boleta may also be sujeta a detracción por transporte de carga", func(t *testing.T) {
+	t.Run("transporte de carga on a boleta is rejected", func(t *testing.T) {
 		req := newBoletaUnder700()
 		req.OperationType = "1004"
 		req.Detraccion = &model.Detraccion{
@@ -638,9 +666,7 @@ func TestValidateTransporteCarga(t *testing.T) {
 		}
 		req.TransporteCarga = newTransporteCarga()
 		errs := validation.Validate(req)
-		for _, e := range errs {
-			t.Errorf("unexpected error: %d %s %s", e.Code, e.Field, e.Message)
-		}
+		is.True(t, hasErrorField(errs, "detraccion.codigo"), "R.S. 073-2006 art. 3 excludes comprobantes without crédito fiscal")
 	})
 }
 
@@ -841,6 +867,34 @@ func TestValidatePaymentTerms(t *testing.T) {
 		errs := validation.Validate(req)
 		is.True(t, !hasErrorField(errs, "cuotas"), "the detracción converts at the declared rate")
 		is.True(t, !hasErrorField(errs, "exchangeRate"), "a rate was declared")
+	})
+
+	// A venta de inmueble on a boleta: the seller is the obligated party
+	// (R.S. 183-2004 art. 10.3 b.i), the buyer pays it the whole total, so the
+	// neto pendiente is the full payable (R.S. 193-2020). On a factura the
+	// buyer deposits and the detracción comes off as usual.
+	t.Run("a boleta de inmueble a crédito settles the whole total", func(t *testing.T) {
+		req := newCreditoInvoice()
+		req.DocType = "03"
+		req.Series = "B001"
+		req.CustomerDocType = "1"
+		req.CustomerDocNumber = "12345678"
+		req.OperationType = "1001"
+		req.Detraccion = newInmuebleDetraccion(1180) // 47.20
+		is.Equal(t, 1180.0, req.NetoPendientePago())
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "cuotas"), "a cuota for the full 1180.00 is the neto")
+
+		req.Cuotas[0].Monto = "1132.80"
+		errs = validation.Validate(req)
+		is.True(t, hasErrorField(errs, "cuotas"), "nothing comes off when the seller deposits")
+	})
+
+	t.Run("a factura de inmueble a crédito deducts the buyer's deposit", func(t *testing.T) {
+		req := newCreditoInvoice()
+		req.OperationType = "1001"
+		req.Detraccion = newInmuebleDetraccion(1180)
+		is.Equal(t, 1132.8, req.NetoPendientePago())
 	})
 
 	t.Run("a foreign-currency detracción without tipo de cambio is rejected", func(t *testing.T) {

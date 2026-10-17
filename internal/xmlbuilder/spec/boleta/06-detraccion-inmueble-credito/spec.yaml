@@ -1,0 +1,29 @@
+case: detraccion-inmueble-credito
+document: cpe
+why: >-
+  A venta de inmueble (Cat.54 040) on a boleta a crédito. A boleta grants no
+  crédito fiscal, so the seller, not the buyer, makes the deposit
+  (R.S. 183-2004 art. 10.3 b.i, added by R.S. 022-2013). The monto neto
+  pendiente de pago excludes only the deposit the buyer must make
+  (R.S. 193-2020), so here nothing comes off: the 'Credito' entry and the
+  cuotas carry the whole 1180.00, not 1180.00 − 47.20. See DETRACCIONES.md ›
+  Amounts and currency.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
+  - "R.S. 193-2020/SUNAT (items 64-A/64-B of Anexo 1 of R.S. 097-2012)"
+assert:
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:PaymentMeansID"
+    equals: "040"
+  - xpath: "/*/cac:PaymentTerms[cbc:ID='Detraccion']/cbc:Amount"
+    equals: "47.20"
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    equals: "1180.00"
+    sunat: "3265"
+    why: >-
+      The seller deposits, so the neto pendiente is the whole payable
+  - xpath: "/*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount = /*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    true: true
+  - xpath: "sum(/*/cac:PaymentTerms[starts-with(cbc:PaymentMeansID,'Cuota')]/cbc:Amount) = /*/cac:PaymentTerms[cbc:PaymentMeansID='Credito']/cbc:Amount"
+    true: true
+    why: >-
+      The cuotas add up to the neto pendiente

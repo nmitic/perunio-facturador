@@ -176,8 +176,8 @@ func validateCustomer(req model.IssueRequest) []model.ValidationError {
 	// meaningless against "CLIENTES VARIOS": the constancia de depósito SPOT is
 	// filed under the adquirente, and an anticipo can only be reconciled against
 	// the final comprobante if both name the same buyer. The S/700 rule above
-	// does not cover it — Cat.54 código 027 has a S/400 umbral and 039 has none
-	// at all, so a SPOT boleta can sit well below S/700.
+	// does not cover it — the venta de inmueble (040) applies at any amount and
+	// carries no boleta exclusion, so a SPOT boleta can sit well below S/700.
 	//
 	// A DNI is enough; do not require a RUC (type "6"). Natural persons are the
 	// normal receptor of a boleta.
@@ -537,10 +537,13 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 	// so refuse them here with something the user can act on instead of letting
 	// SUNAT reject the emission with a cryptic fault.
 	//
-	//   004 → 1002: SUNAT demands three per-line cac:AdditionalItemProperty
-	//        entries (Cat.55 3001 matrícula de embarcación, 3006 cantidad de
-	//        especies, 3005 fecha de descarga — faults 3063/3133/3134), and the
-	//        builder has no AdditionalItemProperty support at all.
+	//   004 → 1002: SUNAT demands six per-line cac:AdditionalItemProperty
+	//        entries (Cat.55 3001 matrícula de la embarcación, 3002 nombre de
+	//        la embarcación, 3003 tipo de especie, 3004 lugar de descarga,
+	//        3005 fecha de descarga, 3006 cantidad de especie — faults 3063,
+	//        3130–3135), and the builder has no AdditionalItemProperty support
+	//        at all. Cat.54 no longer grants 004 `select`, so the picker does
+	//        not offer it; this catches a producto that still carries it.
 	//   028 → 1003: transporte público de pasajeros is not a percentage of the
 	//        importe; it is a fixed amount per vehicle, which the monto
 	//        arithmetic below (porcentaje × total) cannot express.
@@ -610,8 +613,10 @@ func validateDetraccion(req model.IssueRequest) []model.ValidationError {
 // validateDetraccionCatalogo checks the detracción against Cat.54: the código
 // must be emittable, the porcentaje must be its catálogo rate, a comprobante
 // that grants no crédito fiscal (a boleta, or a nota that corrects one) cannot
-// carry an Anexo 2 or 3 código, and the operación must exceed the código's
-// umbral. See DETRACCIONES.md › "Cuándo aplica".
+// carry an Anexo 2 or 3 or transporte de carga código, neither can one for a
+// no-domiciliado usuario (Anexo 3 and carga), and the operación must exceed
+// the código's umbral. See DETRACCIONES.md › "Cuándo aplica" and "Cuándo NO
+// aplica".
 func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 	d := req.Detraccion
@@ -629,13 +634,23 @@ func validateDetraccionCatalogo(req model.IssueRequest) []model.ValidationError 
 		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el porcentaje de detracción del código %s es %s%%, no %s%%", codigo, strconv.FormatFloat(want, 'f', -1, 64), d.Porcentaje), Field: "detraccion.porcentaje"})
 	}
 
-	// R.S. 183-2004 arts. 8 and 13: Anexos 2 and 3 exclude comprobantes that
-	// grant no crédito fiscal. Anexo 1 (art. 3) and the inmueble and carga
-	// regimes carry no such exclusion.
-	sinCreditoFiscal := req.DocType == sunat.Cat01Boleta ||
-		(isNota(req.DocType) && req.ReferenceDocType == sunat.Cat01Boleta)
-	if anexo := sunat.Cat54Anexo(codigo); sinCreditoFiscal && (anexo == "2" || anexo == "3") {
-		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s (Anexo %s) no aplica en boletas: la detracción de los Anexos 2 y 3 excluye los comprobantes que no otorgan crédito fiscal", codigo, anexo), Field: "detraccion.codigo"})
+	// R.S. 183-2004 arts. 8 and 13 and R.S. 073-2006 art. 3: Anexos 2 and 3
+	// and transporte de carga exclude comprobantes that grant no crédito
+	// fiscal. Anexo 1 (art. 3) and the inmueble regime carry no such exclusion.
+	//
+	// The same Anexo 3 and carga exclude a no-domiciliado usuario (R.S. 183-2004
+	// art. 13; R.S. 073-2006 art. 3). Operation type 0401 (venta a no
+	// domiciliado) is already refused by validateDetraccion; here the receptor's
+	// own document type says it. It is checked only off a boleta, whose
+	// anonymous consumidor final also uses Cat.06 "0" and is excluded above.
+	anexo := sunat.Cat54Anexo(codigo)
+	noDomiciliado := req.CustomerDocType == sunat.Cat06DocTribNoDomSinRUC ||
+		req.CustomerDocType == sunat.Cat06DocPaisResidencia
+	switch {
+	case isSinCreditoFiscal(req) && (anexo == "2" || anexo == "3" || anexo == "carga"):
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s no aplica en boletas: la detracción de los Anexos 2 y 3 y del transporte de carga excluye los comprobantes que no otorgan crédito fiscal", codigo), Field: "detraccion.codigo"})
+	case !isSinCreditoFiscal(req) && noDomiciliado && (anexo == "3" || anexo == "carga"):
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("el código %s no aplica a un usuario no domiciliado: la detracción del Anexo 3 y del transporte de carga lo excluye", codigo), Field: "detraccion.codigo"})
 	}
 
 	// Umbral: strictly greater than, over the operación in soles. A nota mirrors
@@ -844,6 +859,13 @@ func validateDebitNote(req model.IssueRequest) []model.ValidationError {
 	}
 
 	return errs
+}
+
+// isSinCreditoFiscal reports whether the comprobante grants no crédito fiscal:
+// a boleta, or a nota that corrects one.
+func isSinCreditoFiscal(req model.IssueRequest) bool {
+	return req.DocType == sunat.Cat01Boleta ||
+		(isNota(req.DocType) && req.ReferenceDocType == sunat.Cat01Boleta)
 }
 
 // isNota reports whether docType is a nota de crédito or débito.
