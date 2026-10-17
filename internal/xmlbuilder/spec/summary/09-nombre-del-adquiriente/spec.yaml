@@ -6,10 +6,6 @@ why: >-
   31/12/2026 SUNAT only observes a bad value.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1 (Control de Cambios: ERR-2022)"
-pending: >-
-  Finding F14: model.SummaryItem has no customer name and buildSummaryLine
-  emits no cac:PartyLegalEntity. (This input already carries customerName;
-  it fails to decode until the model has the field.)
 effective: "2027-01-01"
 assert:
   - xpath: "/*/sac:SummaryDocumentsLine/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName"

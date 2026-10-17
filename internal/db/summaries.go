@@ -237,6 +237,7 @@ type SummaryIssueItem struct {
 	Correlative       int
 	CustomerDocType   string
 	CustomerDocNumber string
+	CustomerName      string
 	CurrencyCode      string
 	TotalAmount       string
 	Subtotal          string
@@ -254,6 +255,7 @@ func (p *Pool) GetDailySummaryIssueItems(ctx context.Context, summaryID string) 
 			SELECT dsi.document_id, dsi.condition_code,
 			       d.doc_type, d.series, d.correlative,
 			       d.customer_doc_type, d.customer_doc_number,
+			       COALESCE(d.customer_name, ''),
 			       d.currency_code, d.total_amount, d.subtotal, d.total_igv,
 			       COALESCE(d.total_isc, '0.00'),
 			       COALESCE(d.total_other_taxes, '0.00')
@@ -270,7 +272,7 @@ func (p *Pool) GetDailySummaryIssueItems(ctx context.Context, summaryID string) 
 			var it SummaryIssueItem
 			if err := rows.Scan(&it.DocumentID, &it.ConditionCode,
 				&it.DocType, &it.Series, &it.Correlative,
-				&it.CustomerDocType, &it.CustomerDocNumber,
+				&it.CustomerDocType, &it.CustomerDocNumber, &it.CustomerName,
 				&it.CurrencyCode, &it.TotalAmount, &it.Subtotal, &it.TotalIgv,
 				&it.TotalIsc, &it.TotalOtherTaxes); err != nil {
 				return err

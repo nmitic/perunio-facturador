@@ -3,6 +3,7 @@ package xmlbuilder
 import (
 	"encoding/xml"
 	"fmt"
+	"strings"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
@@ -92,6 +93,9 @@ type summaryTaxScheme struct {
 type summaryCustomerParty struct {
 	CustomerAssignedID  string `xml:"cbc:CustomerAssignedAccountID"`
 	AdditionalAccountID string `xml:"cbc:AdditionalAccountID"`
+	// Party carries the customer's name (field 10.3, OBSERV until 2026-12-31,
+	// then ERROR 2022).
+	Party *summaryParty `xml:"cac:Party,omitempty"`
 }
 
 type summaryBillingRef struct {
@@ -186,6 +190,11 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 			CustomerAssignedID:  item.CustomerDocNumber,
 			AdditionalAccountID: item.CustomerDocType,
 		}
+		if name := summaryCustomerName(item.CustomerName); name != "" {
+			line.AccountingCustomerParty.Party = &summaryParty{
+				PartyLegalEntity: summaryPartyLegalEntity{RegistrationName: name},
+			}
+		}
 	}
 
 	// Billing reference (NC/ND in summary) — also precedes cac:Status.
@@ -241,6 +250,20 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	}
 
 	return line
+}
+
+// summaryCustomerName fits a customer name to RC field 10.3: 3-250 characters,
+// no line breaks or tabs. A name that cannot fit is left out rather than sent
+// malformed; until 2027 SUNAT only observes a missing one.
+func summaryCustomerName(name string) string {
+	name = strings.Join(strings.Fields(name), " ")
+	if r := []rune(name); len(r) > 250 {
+		name = strings.TrimSpace(string(r[:250]))
+	}
+	if len([]rune(name)) < 3 {
+		return ""
+	}
+	return name
 }
 
 // newSummaryTax builds a cac:TaxTotal for an RC line from a tax amount, its line

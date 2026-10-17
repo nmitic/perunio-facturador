@@ -31,6 +31,7 @@ type SummaryItem struct {
 	ConditionCode     string `json:"conditionCode"` // "1"=add, "2"=modify, "3"=void
 	CustomerDocType   string `json:"customerDocType"`
 	CustomerDocNumber string `json:"customerDocNumber"`
+	CustomerName      string `json:"customerName"` // RC field 10.3
 	ReferenceDocType  string `json:"referenceDocType"`
 	ReferenceSeries   string `json:"referenceSeries"`
 	ReferenceCorr     int    `json:"referenceCorrelative"`

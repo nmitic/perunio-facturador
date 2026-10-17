@@ -310,6 +310,7 @@ func (s *Server) issueSummaryPipelineHandler(w http.ResponseWriter, r *http.Requ
 			ConditionCode:     it.ConditionCode,
 			CustomerDocType:   it.CustomerDocType,
 			CustomerDocNumber: it.CustomerDocNumber,
+			CustomerName:      it.CustomerName,
 			CurrencyCode:      it.CurrencyCode,
 			TotalAmount:       it.TotalAmount,
 			TotalGravada:      it.Subtotal,
