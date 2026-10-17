@@ -53,9 +53,13 @@ type Despatch struct {
 	TransferReason     string     `json:"transferReason"`    // Cat.20
 	TransferReasonDesc *string    `json:"transferReasonDesc"`
 	StartDate          *time.Time `json:"startDate"` // fecha de inicio del traslado
-	TotalWeightKg      string     `json:"totalWeightKg"`
-	WeightUnitCode     string     `json:"weightUnitCode"` // "KGM" per SUNAT
-	TotalPackages      *int       `json:"totalPackages"`
+	// DeliveryDate is the fecha de entrega de bienes al transportista,
+	// mandatory on a remitente guía with transporte público since 2026-06-01
+	// (ShipmentStage/LoadingTransportEvent/cbc:OccurrenceDate, ERROR 3617).
+	DeliveryDate   *time.Time `json:"deliveryDate"`
+	TotalWeightKg  string     `json:"totalWeightKg"`
+	WeightUnitCode string     `json:"weightUnitCode"` // "KGM" per SUNAT
+	TotalPackages  *int       `json:"totalPackages"`
 
 	// Addresses — both punto de partida (origin) and punto de llegada
 	// (arrival) require 6-digit ubigeo codes.

@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"time"
 
 	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/model"
@@ -151,7 +152,14 @@ type shipmentStage struct {
 	TransportModeCode string         `xml:"cbc:TransportModeCode"`
 	TransitPeriod     *transitPeriod `xml:"cac:TransitPeriod,omitempty"`
 	CarrierParty      *carrierParty  `xml:"cac:CarrierParty,omitempty"`
-	DriverPersons     []driverPerson `xml:"cac:DriverPerson,omitempty"`
+	// LoadingTransportEvent is the fecha de entrega de bienes al
+	// transportista (ERROR 3617/3618/3619 since 2026-06-01).
+	LoadingTransportEvent *transportEvent `xml:"cac:LoadingTransportEvent,omitempty"`
+	DriverPersons         []driverPerson  `xml:"cac:DriverPerson,omitempty"`
+}
+
+type transportEvent struct {
+	OccurrenceDate string `xml:"cbc:OccurrenceDate"`
 }
 
 type transitPeriod struct {
@@ -353,6 +361,9 @@ func buildShipment(d *model.Despatch) shipment {
 			}
 			ship.ShipmentStage.CarrierParty = cp
 		}
+		ship.ShipmentStage.LoadingTransportEvent = &transportEvent{
+			OccurrenceDate: carrierDeliveryDate(d).Format("2006-01-02"),
+		}
 	} else {
 		// Private transport — emit driver + vehicle when present.
 		if d.VehiclePlate != nil && *d.VehiclePlate != "" {
@@ -444,6 +455,24 @@ func newDespatchAdviceShell(d *model.Despatch, lines []model.DespatchLine, ruc, 
 // -----------------------------------------------------------------------------
 // Small internal helpers
 // -----------------------------------------------------------------------------
+
+// carrierDeliveryDate is the fecha de entrega de bienes al transportista of a
+// transporte público guía. Drafts without one take the start of the traslado,
+// the day the carrier receives the goods; it may not precede the issue date
+// (ERROR 3618), so an earlier date is moved up to it.
+func carrierDeliveryDate(d *model.Despatch) time.Time {
+	date := d.IssueDate
+	switch {
+	case d.DeliveryDate != nil:
+		date = *d.DeliveryDate
+	case d.StartDate != nil:
+		date = *d.StartDate
+	}
+	if date.Before(d.IssueDate) {
+		date = d.IssueDate
+	}
+	return date
+}
 
 // driverNames returns the principal driver's nombres (cbc:FirstName, ERROR
 // 3360) and apellidos (cbc:FamilyName, ERROR 3361). Drafts saved before

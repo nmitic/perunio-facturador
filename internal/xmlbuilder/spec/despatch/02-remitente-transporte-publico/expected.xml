@@ -101,6 +101,9 @@
           <cbc:RegistrationName>TRANSPORTES SAC</cbc:RegistrationName>
         </cac:PartyLegalEntity>
       </cac:CarrierParty>
+      <cac:LoadingTransportEvent>
+        <cbc:OccurrenceDate>2024-01-16</cbc:OccurrenceDate>
+      </cac:LoadingTransportEvent>
     </cac:ShipmentStage>
     <cac:Delivery>
       <cac:DeliveryAddress>

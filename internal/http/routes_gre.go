@@ -186,6 +186,8 @@ type createDespatchBody struct {
 	TransferReason     string  `json:"transferReason"`
 	TransferReasonDesc *string `json:"transferReasonDesc,omitempty"`
 	StartDate          *string `json:"startDate,omitempty"`
+	// DeliveryDate is the fecha de entrega de bienes al transportista.
+	DeliveryDate *string `json:"deliveryDate,omitempty"`
 
 	TotalWeightKg  string `json:"totalWeightKg"`
 	WeightUnitCode string `json:"weightUnitCode"`
@@ -230,6 +232,9 @@ func (b *createDespatchBody) validate() string {
 	}
 	if b.StartDate != nil && *b.StartDate != "" && !dateRegex.MatchString(*b.StartDate) {
 		return "startDate inválido"
+	}
+	if b.DeliveryDate != nil && *b.DeliveryDate != "" && !dateRegex.MatchString(*b.DeliveryDate) {
+		return "deliveryDate inválido"
 	}
 	if b.DocType == "" {
 		return "docType requerido"
@@ -293,6 +298,7 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 		TransferReason:     b.TransferReason,
 		TransferReasonDesc: b.TransferReasonDesc,
 		StartDate:          b.StartDate,
+		DeliveryDate:       b.DeliveryDate,
 		TotalWeightKg:      b.TotalWeightKg,
 		WeightUnitCode:     b.WeightUnitCode,
 		TotalPackages:      b.TotalPackages,
@@ -373,6 +379,8 @@ type updateDespatchBody struct {
 	TransferReason     *string `json:"transferReason,omitempty"`
 	TransferReasonDesc *string `json:"transferReasonDesc,omitempty"`
 	StartDate          *string `json:"startDate,omitempty"`
+	// DeliveryDate is the fecha de entrega de bienes al transportista.
+	DeliveryDate *string `json:"deliveryDate,omitempty"`
 
 	TotalWeightKg  *string `json:"totalWeightKg,omitempty"`
 	WeightUnitCode *string `json:"weightUnitCode,omitempty"`
@@ -417,6 +425,7 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 		TransferReason:     b.TransferReason,
 		TransferReasonDesc: b.TransferReasonDesc,
 		StartDate:          b.StartDate,
+		DeliveryDate:       b.DeliveryDate,
 		TotalWeightKg:      b.TotalWeightKg,
 		WeightUnitCode:     b.WeightUnitCode,
 		TotalPackages:      b.TotalPackages,

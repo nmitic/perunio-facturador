@@ -96,6 +96,14 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 			Message: fmt.Sprintf("invalid transfer reason %q (Cat.20)", d.TransferReason),
 		})
 	}
+	// The fecha de entrega de bienes al transportista may not precede the
+	// issue date (ERROR 3618).
+	if d.DeliveryDate != nil && d.DeliveryDate.Format("2006-01-02") < d.IssueDate.Format("2006-01-02") {
+		errs = append(errs, model.ValidationError{
+			Code: 3618, Field: "deliveryDate",
+			Message: "la fecha de entrega al transportista no puede ser anterior a la fecha de emisión",
+		})
+	}
 	// A related document is sent with its GRE Cat.61 type (ERROR 2692).
 	if d.RelatedDocSeries != nil && *d.RelatedDocSeries != "" &&
 		(d.RelatedDocType == nil || *d.RelatedDocType == "") {

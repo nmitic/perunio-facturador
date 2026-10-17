@@ -35,7 +35,7 @@ const despatchColumns = `
 	transport_modality, transfer_reason, transfer_reason_desc, start_date,
 	total_weight_kg, weight_unit_code, total_packages,
 	start_ubigeo, start_address, arrival_ubigeo, arrival_address,
-	driver_doc_type, driver_doc_number, driver_license, driver_name, driver_family_name,
+	driver_doc_type, driver_doc_number, driver_license, driver_name, driver_family_name, delivery_date,
 	vehicle_plate,
 	carrier_ruc, carrier_name, carrier_mtc,
 	event_code, original_gre_id,
@@ -53,7 +53,7 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 		&d.TransportModality, &d.TransferReason, &d.TransferReasonDesc, &d.StartDate,
 		&d.TotalWeightKg, &d.WeightUnitCode, &d.TotalPackages,
 		&d.StartUbigeo, &d.StartAddress, &d.ArrivalUbigeo, &d.ArrivalAddress,
-		&d.DriverDocType, &d.DriverDocNumber, &d.DriverLicense, &d.DriverName, &d.DriverFamilyName,
+		&d.DriverDocType, &d.DriverDocNumber, &d.DriverLicense, &d.DriverName, &d.DriverFamilyName, &d.DeliveryDate,
 		&d.VehiclePlate,
 		&d.CarrierRUC, &d.CarrierName, &d.CarrierMTC,
 		&d.EventCode, &d.OriginalGreID,
@@ -193,6 +193,7 @@ type DespatchCreateInput struct {
 	TransferReason     string
 	TransferReasonDesc *string
 	StartDate          *string // YYYY-MM-DD
+	DeliveryDate       *string // YYYY-MM-DD, fecha de entrega al transportista
 
 	TotalWeightKg  string
 	WeightUnitCode string
@@ -278,7 +279,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				carrier_ruc, carrier_name, carrier_mtc,
 				event_code, original_gre_id,
 				related_doc_type, related_doc_series, related_doc_number,
-				driver_family_name
+				driver_family_name, delivery_date
 			) VALUES (
 				$1,$2,$3,$4,$5,$6,'draft',
 				$7,$8,
@@ -291,7 +292,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				$29,$30,$31,
 				$32,$33,
 				$34,$35,$36,
-				$37
+				$37, $38
 			) RETURNING `+despatchColumns,
 			tenantID, in.CompanyID, in.SeriesID, in.DocType, series, correlative,
 			in.IssueDate, in.IssueTime,
@@ -304,7 +305,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 			in.CarrierRUC, in.CarrierName, in.CarrierMTC,
 			in.EventCode, in.OriginalGreID,
 			in.RelatedDocType, in.RelatedDocSeries, in.RelatedDocNumber,
-			in.DriverFamilyName,
+			in.DriverFamilyName, in.DeliveryDate,
 		)
 		if err := scanDespatch(row, &out); err != nil {
 			return err
@@ -367,6 +368,7 @@ type DespatchUpdateInput struct {
 	TransferReason     *string
 	TransferReasonDesc *string
 	StartDate          *string
+	DeliveryDate       *string
 
 	TotalWeightKg  *string
 	WeightUnitCode *string
@@ -495,6 +497,9 @@ func buildDespatchUpdateSet(in DespatchUpdateInput) ([]string, []any) {
 	}
 	if in.StartDate != nil {
 		add("start_date", *in.StartDate)
+	}
+	if in.DeliveryDate != nil {
+		add("delivery_date", *in.DeliveryDate)
 	}
 	if in.TotalWeightKg != nil {
 		add("total_weight_kg", *in.TotalWeightKg)
