@@ -10,10 +10,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
   - "resources/xsl/cpe/ValidaExprRegFactura-2.0.1.xsl"
-pending: >-
-  Finding F15: sunat.Cat07Percent is fixed per Cat.07 código (always 18.00
-  for 10), so the builder writes cbc:Percent 18.00 on a line whose IGV was
-  computed at 10.5 % and SUNAT answers ERROR 3103.
 assert:
   - xpath: "number(/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent) = 10.5"
     true: true

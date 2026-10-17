@@ -239,7 +239,7 @@ To change a catálogo, edit it in `perunio-sunat-catalogs`, tag, then
 - Encoding MUST be ISO-8859-1, not UTF-8
 - XMLDSig uses RSA-**SHA1** for SOAP interop
 - Tax tolerance: SUNAT recomputes totals and allows **±1 in the document currency** ("tolerancia + - 1", i.e. one sol, not one céntimo); the RC IGV check (OBS 4019) allows ±5
-- IGV rate: 18 %, or **10.5 %** for MYPE restaurantes/hoteles/alojamientos in padrón 01 (OBS 4439 otherwise); every IGV line of a document must declare the same rate (ERR 3462). The builder only emits 18 (spec F15)
+- IGV rate: 18 %, or **10.5 %** for MYPE restaurantes/hoteles/alojamientos in padrón 01 (OBS 4439 otherwise); every IGV line of a document must declare the same rate (ERR 3462). The builder declares each line's own rate (IGV ÷ base, snapped to 18 or 10.5); validation and the frontend still assume 18 (FOLLOWUPS.md FU-2)
 - Boleta > S/700 requires customer identity
 - NC on boletas: motivos 04, 05, 08 get **OBSERV 4367** (accepted with a warning); our validator blocks them anyway
 - RC: a boleta can be anulada (estado 3) only within 7 days (ERR 2957); a late *adicionar* only gets OBS 4443. RA: 7 days (ERR 2957). Max 500 lines per RC block

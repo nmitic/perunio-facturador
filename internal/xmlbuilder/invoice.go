@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 
@@ -278,8 +279,46 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 	return b
 }
 
-// igvRate is the IGV rate (18%) applied to the gravado base imponible.
-const igvRate = 0.18
+// The IGV rates SUNAT accepts on a gravado line ("por la tasa vigente del IGV
+// (18.00 o 10.50)", rule 3279). 10.5 % is the MYPE restaurantes / hoteles /
+// alojamientos regime (padrón 01, OBSERV 4439 otherwise). Cat.07 carries only
+// 18.00, so the rate a line was taxed at is read from its own amounts.
+const (
+	igvRateGeneral = "18.00"
+	igvRateReduced = "10.50"
+)
+
+// lineIGVRate is the IGV rate an onerosa gravado line was taxed at, snapped to
+// the nearer of the two rates SUNAT accepts: IGV ÷ base (base includes ISC).
+// A line with no base falls back to the general rate.
+func lineIGVRate(li model.LineItem) string {
+	base := parseDecimal(li.LineTotal) + parseDecimal(li.ISCAmount)
+	if base <= 0 {
+		return igvRateGeneral
+	}
+	pct := parseDecimal(li.IGVAmount) / base * 100
+	if math.Abs(pct-10.5) < math.Abs(pct-18) {
+		return igvRateReduced
+	}
+	return igvRateGeneral
+}
+
+// documentIGVRate is the rate the document's gravado lines declare. Every IGV
+// line of a document must declare the same one (ERROR 3462), so the first
+// onerosa gravado line stands for all of them.
+func documentIGVRate(items []model.LineItem) string {
+	for _, li := range items {
+		if isOnerosaIGVLine(li) {
+			return lineIGVRate(li)
+		}
+	}
+	return igvRateGeneral
+}
+
+func isOnerosaIGVLine(li model.LineItem) bool {
+	return sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) == sunat.Cat05IGV &&
+		!sunat.Cat07Gratuito(li.TaxExemptionReasonCode)
+}
 
 // globalDiscountReasonCode is Cat.53 "02" — descuento global que afecta la base
 // imponible del IGV/IVAP, the only global-discount type this service emits.
@@ -439,13 +478,14 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	// IGV: la factura de anticipo ya declaró el IGV de lo cobrado, así que la
 	// factura de regularización solo tributa el saldo. Las líneas siguen
 	// declarando la venta completa — solo este total del documento va neto.
+	docRate := documentIGVRate(req.Items)
 	anticipoBase, _ := anticipoTotals(req)
 	if deduction := globalDiscountValue(req) + anticipoBase; deduction > 0 {
 		buckets.regularBase -= deduction
 		if buckets.regularBase < 0 {
 			buckets.regularBase = 0
 		}
-		buckets.regularIGV = parseDecimal(formatDecimal(buckets.regularBase * igvRate))
+		buckets.regularIGV = parseDecimal(formatDecimal(buckets.regularBase * parseDecimal(docRate) / 100))
 	}
 
 	// Document-level cbc:TaxAmount: SUNAT expects the sum of taxes declared
@@ -458,12 +498,12 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		TaxAmount: newCurrencyAmount(formatDecimal(totalTax), cur),
 	}
 
-	// IGV (regular gravado, 18%) subtotal
+	// IGV (regular gravado) subtotal, at the rate the lines declare
 	if buckets.regularBase > 0 || buckets.regularIGV > 0 {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.regularBase), cur),
 			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.regularIGV), cur),
-			TaxCategory:   newTaxCategory("S", sunat.Cat05Rate(sunat.Cat05IGV), sunat.Cat05IGV),
+			TaxCategory:   newTaxCategory("S", docRate, sunat.Cat05IGV),
 		})
 	}
 
@@ -892,13 +932,19 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 		lineTax = formatDecimal(parseDecimal(taxAmount) + parseDecimal(li.ISCAmount))
 	}
 
+	lineCat := newLineTaxCategory(li.TaxExemptionReasonCode, taxCode)
+	if isOnerosaIGVLine(li) {
+		// The rate the line was actually taxed at, 18 or 10.5 (3103).
+		lineCat.Percent = lineIGVRate(li)
+	}
+
 	tt := taxTotal{
 		TaxAmount: newCurrencyAmount(lineTax, cur),
 		TaxSubtotal: []taxSubtotal{
 			{
 				TaxableAmount: newCurrencyAmount(taxableAmount, cur),
 				TaxAmount:     newCurrencyAmount(taxAmount, cur),
-				TaxCategory:   newLineTaxCategory(li.TaxExemptionReasonCode, taxCode),
+				TaxCategory:   lineCat,
 			},
 		},
 	}

@@ -47,3 +47,35 @@ README), then fix, then delete the entry here.
 - Validation: refuse 9999 on exportación.
 - Spec cases: a gravado line with 9999, a line with ISC + 9999, an exportación
   refusal, and an RC line.
+
+## FU-2 — IGV 10.5 % (MYPE restaurantes / hoteles / alojamientos) end to end
+
+**Status:** the XML builder is done (F15: each gravado line declares the rate
+it was taxed at, read from IGV ÷ base, and the document IGV subtotal and the
+global-discount / anticipo recalculation follow it). Nothing upstream can
+produce a 10.5 % document yet.
+
+**Today**
+- Validation checks every gravado line's IGV at the Cat.07 rate, 18 %
+  (`internal/validation/rules.go`, `validateIGVTolerance(li,
+  cat07RateFraction(...))`), so a 10.5 % draft is refused before it reaches
+  the builder.
+- Anticipo validation hard-codes `base*1.18` (`internal/validation/rules.go`,
+  anticipo block).
+- The frontend computes IGV at 18 % (`perunio-frontend/src/lib/factura-decimal.ts`,
+  `lib/facturador-utils.ts`, `sunat/cat07.ts`) and has no rate choice.
+
+**What SUNAT requires** (`reglas-validacion-cpe-2026-08-26.xlsx`)
+- Line rate 18.00 or 10.50 (3103 / 3279); every IGV line of a document the
+  same rate (ERROR 3462).
+- The issuer must be in padrón 01 (MYPE restaurantes/hoteles/alojamientos),
+  otherwise OBSERV 4439.
+
+**To build it**
+- A per-company setting ("IGV reducido 10.5 %", padrón 01) in the backend
+  schema and the company settings screen.
+- Frontend: compute line IGV at the company's rate; one rate per document.
+- Validation: accept 10.5 when the company has it, enforce a single rate per
+  document (3462), and use the document rate for anticipos.
+- Spec cases: 10.5 with a global discount, 10.5 with an anticipo, a boleta at
+  10.5, a mixed-rate document refused.
