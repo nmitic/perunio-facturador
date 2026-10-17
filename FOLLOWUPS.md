@@ -111,20 +111,20 @@ produce a 10.5 % document yet.
 - Spec cases: compra with the proveedor as issuer, two related documents, a
   Cat.61-only code.
 
-## FU-8 — Detracción rules to re-verify or model
+## FU-8 — Detracción rules to re-verify
 
-Items from `DETRACCIONES.md` › Open questions and Known gaps. Re-check each
-against SUNAT (and beta where it is an XML question), then update the doc and
-the catalog.
+Items from `DETRACCIONES.md` › Open questions that no SUNAT source settles yet.
+Re-check each against SUNAT's legislation index, then update the doc and the
+catalog. (The Anexo 3 issuer list was settled and the Sector Público buyer
+modelled on 2026-10-17.)
 
 - 038, 042, 043, 046, 047 (espectáculos públicos, ladrillos, estructuras
   metálicas, cobre, plata): the workbook's change-log row is struck through,
-  and no resolution through R.S. 000204-2026 (14-10-2026) touches the SPOT. A
-  trade note dated them 01-09-2026. If they become law, add them to
+  and no resolution through R.S. 000204-2026 touches the SPOT (re-checked
+  2026-10-17). A trade note dated them 01-09-2026. If they become law, add
+  them to
   `perunio-sunat-catalogs/catalogs/cat54.json` with rate, umbral and anexo.
-- The Anexo 3 issuer list (R.S. 183-2004 art. 13 c): the orientación
-  "Servicios" page lists six issuers; the Cartilla (2019–2020) adds EPS,
-  financial and insurance entities and cooperativas, and the Iglesia Católica
-  for leases. Find the amending resolution to settle which list is current.
 - Which tipo de cambio the S/ 700 test uses on a USD comprobante. Perunio uses
-  the comprobante's own; art. 20 governs only the deposit.
+  the comprobante's own. R.S. 183-2004 art. 20 governs only the deposit (SBS
+  promedio ponderado venta, earlier of the IGV obligation and the deposit
+  date), and no article says how the umbral converts (re-read 2026-10-17).

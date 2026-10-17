@@ -205,7 +205,7 @@ the IGV obligation arose on or after 01-04-2018.
 ### Not carried
 
 - **013 and 015** (animales vivos; abonos, cueros y pieles) are in Cat.54 but in no current anexo. In the catalog: `anexo: null`, no rate.
-- **038, 042, 043, 046, 047** (espectáculos públicos, ladrillos, estructuras metálicas, cobre, plata) appear in the workbook's Catálogos sheet. But the Control de Cambios row that added them is struck through, and no resolution puts them in the SPOT: none of the 204 resolutions in SUNAT's 2026 index (to 14-10-2026) touches it. They are not in the catalog. ★
+- **038, 042, 043, 046, 047** (espectáculos públicos, ladrillos, estructuras metálicas, cobre, plata) appear in the workbook's Catálogos sheet. But the Control de Cambios row that added them is struck through, and no resolution puts them in the SPOT: none of the 204 resolutions in SUNAT's 2026 index (to R.S. 000204-2026, re-checked 2026-10-17) touches it. They are not in the catalog. ★
 - **006, 018, 029, 033** were derogated and are gone from Cat.54.
 
 ### Códigos the facturador refuses
@@ -276,7 +276,7 @@ goods of art. 7.1.
 | Usuario **no domiciliado** (or whoever commissions the construction) | Anexo 3 (art. 13); 027 (RS 073-2006 art. 3) | Excluded for Anexo 3 and 027 when the receptor doc is 0 / B: in the form, and in the facturador on a factura (on a boleta the crédito-fiscal exclusion already applies, and its anonymous consumidor final also uses doc 0). The form also excludes Cat.51 0401, which the facturador refuses with any detracción. |
 | No línea gravada con el IGV | Anexo 3 ("servicios gravados") | Form: excluded. |
 | The documents of art. 4 num. 6.1 of the Reglamento de Comprobantes de Pago | Anexo 2 (except Bolsa de Productos pólizas), Anexo 3 | Not issued by Perunio. |
-| Listed issuers, when they issue an electronic comprobante for the listed operations (Anexo 3, art. 13 c). Both SUNAT lists: AFPs; centros de inspección técnica vehicular; public rail passenger transport; domestic water freight (conocimiento de embarque); domestic air cargo (carta de porte aéreo); non-scheduled and special air passenger transport. Cartilla only: EPS; financial and insurance entities and cooperativas de ahorro y crédito; the Iglesia Católica, for leases of inmuebles. ★ | Anexo 3 | Not modelled. Such a company simply sets no default código, and answers "No está sujeta". |
+| A documento autorizado of art. 4 numeral 6.1 of the Reglamento de Comprobantes de Pago (R.S. 183-2004 art. 13 numeral 3, as substituted by R.S. 032-2006). The current 6.1 lists eighteen, literals a)–r): boletos de transporte aéreo regular; documents of the empresas del sistema financiero y de seguros and the cooperativas de ahorro y crédito under the SBS; AFPs and EPS; recibos de servicios públicos (luz, agua, telecomunicaciones; gas natural por red, o); pólizas de bolsa; cartas de porte aéreo and conocimientos de embarque; pólizas de adjudicación; PERUPETRO regalías; IPSS formats; the adquirentes of card payment systems (j, q); recaudadoras of the Garantía de Red Principal; boletos de transporte nacional de pasajeros; the operator and the other parties of a contrato de colaboración empresarial (m, n); revisiones técnicas vehiculares; and the services sold with a boleto aéreo (r). SUNAT's orientación page (six issuers) and its 2019–2020 Cartilla (eight) both summarise this list partially; the Iglesia Católica's leases are 6.2 b), which grants no crédito fiscal and is excluded under numeral 2 already. Read 2026-10-17 from SUNAT's consolidated Reglamento, capítulo I. | Anexo 3 | Not modelled: these are not facturas or boletas, so they are not issued through Perunio at all. |
 | A comprobante that entitles the buyer to deduct the expense under art. 46 (2nd paragraph, a) of the Income Tax Law (Cartilla, item e; the orientación page does not mention it) | Anexo 3 | Not modelled. |
 | Liquidación de compra | Anexos 1 and 2 | Not issued by Perunio. |
 | **Numeral 10 literal exclusions** (037 only). Detail below the table. | 037 | Not modelled: the user does not pick 037 for these. |
@@ -485,8 +485,7 @@ Rules marked ★ above. Each one is also an entry in `FOLLOWUPS.md`.
 | ★ | Question | FU |
 |---|---|---|
 | 1 | Status of 038, 042, 043, 046, 047. The workbook's change-log row is struck through, and no resolution up to RS 000204-2026 (14-10-2026) touches the SPOT. | FU-8 |
-| 2 | The Anexo 3 issuer list: the orientación "Servicios" page lists six issuers, and the Cartilla (2019–2020) eight. | FU-8 |
-| 3 | Which exchange rate the S/ 700 test uses on a USD comprobante. Art. 20 governs the deposit; Perunio uses the comprobante's own tipo de cambio for both. | FU-8 |
+| 2 | Which exchange rate the S/ 700 test uses on a USD comprobante. Art. 20 governs the deposit; Perunio uses the comprobante's own tipo de cambio for both. | FU-8 |
 
 ## Known gaps
 
