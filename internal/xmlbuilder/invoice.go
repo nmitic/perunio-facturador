@@ -144,6 +144,17 @@ func buildInvoiceXML(req model.IssueRequest) ([]byte, error) {
 		})
 	}
 
+	// SUNAT leyenda 2007 — operación sujeta al IVAP. A factura or boleta with
+	// IVAP lines that omits it is accepted with OBSERV 4264. The text is the
+	// workbook's, as with 1002 above: the shared catalog has no Texto for either
+	// yet (FOLLOWUPS.md FU-3).
+	if hasIVAPLine(req.Items) && !hasNoteWithCode(inv.Notes, sunat.Cat52IVAP) {
+		inv.Notes = append(inv.Notes, noteElement{
+			Value:            "Operación sujeta al IVAP",
+			LanguageLocaleID: sunat.Cat52IVAP,
+		})
+	}
+
 	// SUNAT leyenda 2006 — operación sujeta a detracción.
 	inv.Notes = appendDetraccionLegend(inv.Notes, req)
 
@@ -594,6 +605,15 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 func hasGratuitoLine(items []model.LineItem) bool {
 	for _, li := range items {
 		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasIVAPLine(items []model.LineItem) bool {
+	for _, li := range items {
+		if sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) == sunat.Cat05IVAP {
 			return true
 		}
 	}

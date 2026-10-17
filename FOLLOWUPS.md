@@ -79,3 +79,26 @@ produce a 10.5 % document yet.
   document (3462), and use the document rate for anticipos.
 - Spec cases: 10.5 with a global discount, 10.5 with an anticipo, a boleta at
   10.5, a mixed-rate document refused.
+
+## FU-3 — Cat.52 leyenda texts missing from perunio-sunat-catalogs
+
+**Status:** worked around with literals in the builder.
+
+**Today**
+- `sunat.Cat52Texto` returns `""` for 1002 (transferencia gratuita) and 2007
+  (operación sujeta al IVAP) in `perunio-sunat-catalogs` v1.1.0 (only 2006 has
+  a Texto). `internal/xmlbuilder/invoice.go` therefore hard-codes
+  "TRANSFERENCIA GRATUITA O A TITULO GRATUITO" (1002) and
+  "Operación sujeta al IVAP" (2007).
+- The 1002 literal does not match the catalog Description ("TRANSFERENCIA
+  GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE"); SUNAT does not
+  validate the text, only the code, so it is accepted either way.
+
+**To fix**
+- Fill `Texto` for 1002 and 2007 (and any other leyenda the builder may
+  inject) in `perunio-sunat-catalogs/catalogs`, regenerate, tag, then
+  `go get github.com/nmitic/perunio-sunat-catalogs@vX.Y.Z` here and replace the
+  literals with `sunat.Cat52Texto(...)`. `perunio-backend` and
+  `perunio-frontend` consume the same tag.
+- Re-run `go test ./internal/xmlbuilder -run TestSpec -update` and review the
+  leyenda text diffs.
