@@ -231,6 +231,10 @@ type docTaxBuckets struct {
 	expBase     float64
 	gratBase    float64
 	gratIGV     float64
+	// iscBase / iscAmount are the Σ of the ISC line subtotals (onerosa lines
+	// only): the document ISC subtotal must equal them (3296 / 3298).
+	iscBase   float64
+	iscAmount float64
 }
 
 func sumLineBuckets(items []model.LineItem) docTaxBuckets {
@@ -248,6 +252,10 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 		base := parseDecimal(li.LineTotal)
 		isc := parseDecimal(li.ISCAmount)
 		igv := parseDecimal(li.IGVAmount)
+		if isc != 0 {
+			b.iscBase += base
+			b.iscAmount += isc
+		}
 		switch taxCode {
 		case "1000":
 			// IGV base = valor_venta + ISC when ISC applies (SUNAT spec).
@@ -444,7 +452,8 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	// across all subtotals (IGV + IVAP). Gratuita IGV is informativo and lives
 	// inside its own subtotal; including it in the top-level TaxAmount also
 	// matches the value emitted for documents without gratuito lines.
-	totalTax := buckets.regularIGV + buckets.ivapIGV
+	// ISC is a tributo the customer pays, so it is part of the total too (3294).
+	totalTax := buckets.regularIGV + buckets.ivapIGV + buckets.iscAmount
 	tt := taxTotal{
 		TaxAmount: newCurrencyAmount(formatDecimal(totalTax), cur),
 	}
@@ -508,11 +517,12 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		})
 	}
 
-	// ISC subtotal (document-level total comes from req.TotalISC).
-	if !isZeroAmount(req.TotalISC) {
+	// ISC subtotal: the Σ of the ISC lines' bases and amounts, not the whole
+	// valor de venta — a plain line next to an ISC line carries no ISC (3296).
+	if buckets.iscBase > 0 || buckets.iscAmount > 0 {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
-			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
-			TaxAmount:     newCurrencyAmount(req.TotalISC, cur),
+			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.iscBase), cur),
+			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.iscAmount), cur),
 			TaxCategory:   newTaxCategory("S", "", sunat.Cat05ISC),
 		})
 	}
@@ -875,8 +885,15 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 		}
 	}
 
+	// The line cbc:TaxAmount is the sum of its tributos: IGV plus ISC (3292).
+	lineTax := taxAmount
+	hasISC := !isZeroAmount(li.ISCAmount) && !sunat.Cat07Gratuito(li.TaxExemptionReasonCode)
+	if hasISC {
+		lineTax = formatDecimal(parseDecimal(taxAmount) + parseDecimal(li.ISCAmount))
+	}
+
 	tt := taxTotal{
-		TaxAmount: newCurrencyAmount(taxAmount, cur),
+		TaxAmount: newCurrencyAmount(lineTax, cur),
 		TaxSubtotal: []taxSubtotal{
 			{
 				TaxableAmount: newCurrencyAmount(taxableAmount, cur),
@@ -887,8 +904,10 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	}
 
 	// ✅ ISC subtotal (only for onerosa)
-	if !isZeroAmount(li.ISCAmount) && !sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
-		iscCat := newTaxCategory("S", "", sunat.Cat05ISC)
+	if hasISC {
+		// The ISC rate is the line's own (ISC ÷ valor de venta), declared like
+		// every other line tributo (2992 / 3104).
+		iscCat := newTaxCategory("S", iscPercent(li), sunat.Cat05ISC)
 		iscCat.TierRange = li.ISCTierRange
 
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
@@ -899,6 +918,16 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	}
 
 	return tt
+}
+
+// iscPercent is the ISC rate the line was taxed at, ISC ÷ valor de venta, as a
+// percentage with two decimals.
+func iscPercent(li model.LineItem) string {
+	base := parseDecimal(li.LineTotal)
+	if base == 0 {
+		return "0.00"
+	}
+	return formatDecimal(parseDecimal(li.ISCAmount) / base * 100)
 }
 
 // newTaxCategory builds a cac:TaxCategory for a Cat.05 tributo. The two UN/ECE

@@ -174,7 +174,6 @@ Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/regl
 
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|
-| F3 | ISC: missing from the document `cbc:TaxAmount` and from the line `cbc:TaxAmount`; the ISC line subtotal has no `cbc:Percent`; the document ISC base is `req.Subtotal`, not Σ ISC line bases. | ERROR 3294, 3292, 2992, 3296 | `buildDocumentTaxTotal`, `buildLineTaxTotal` | invoice/09–10 |
 | F4 | The issue pipeline sends every free-text draft note as leyenda **1000** ("monto en letras"). Multi-line or >200-character notes break 3006, and the real monto en letras is never produced. | ERROR 3006 | `internal/http/routes_pipeline.go` `buildIssueRequestFromDoc` | invoice/36 |
 | F5 | IVAP documents lack leyenda 2007. | OBSERV 4264 | `buildInvoiceXML` | invoice/08 |
 | F6 | RC lines use the Resumen **1.0** range shape (`sac:DocumentSerialID` + `Start/EndDocumentNumberID`) under CustomizationID **1.1**, which identifies each comprobante with one `cbc:ID` per line (RC 1.1 guide, sample XML p. 27). | ERROR 2512 | `summary.go` | summary/01–06 |

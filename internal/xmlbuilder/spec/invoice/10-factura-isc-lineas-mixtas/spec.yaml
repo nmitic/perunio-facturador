@@ -5,11 +5,6 @@ why: >-
   the ISC line's base (100), not the document's whole valor de venta (200).
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
-pending: >-
-  Finding F3: ISC is left out of the document cbc:TaxAmount (3294) and of
-  the line cbc:TaxAmount (3292), the ISC line subtotal has no cbc:Percent
-  (2992), and the document ISC base is the whole req.Subtotal instead of Σ
-  ISC line bases (3296).
 assert:
   - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='2000']/cbc:TaxableAmount"
     equals: "100.00"
