@@ -239,6 +239,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	// 4. Build the IssueRequest and run the compliance pipeline.
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address, deps.company.CuentaDetraccion)
 	issueReq.Environment = env
+	issueReq.IGVReducido = deps.company.IgvReducido
 
 	// The SPOT umbral is measured against the whole operación: a comprobante
 	// of a venta con anticipos is judged by the deal's monto acordado.

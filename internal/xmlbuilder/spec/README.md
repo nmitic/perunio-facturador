@@ -172,7 +172,7 @@ xmllint --shell invoice/11-gratuito-gravado-retiro/expected.xml
 
 Each row is a `pending` reason. The SUNAT codes come from `resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx` (GRE: `reglas-validacion-gre-2026-09-25.xlsx`) unless noted.
 
-**None today.** F1–F22 were all fixed in October 2026; `git log --grep '(F[0-9]'` shows the commit for each. A new gap gets a `pending:` case and a row here, continuing at F23. Features deliberately left for later (otros tributos, IGV 10.5 % end to end, catalog additions, the GRE related document's issuer) are in `FOLLOWUPS.md` at the module root, not here: they have no failing case.
+**None today.** F1–F22 were all fixed in October 2026; `git log --grep '(F[0-9]'` shows the commit for each. A new gap gets a `pending:` case and a row here, continuing at F23. Features deliberately left for later (otros tributos, the GRE related documents and their issuer) are in `FOLLOWUPS.md` at the module root, not here: they have no failing case.
 
 | id | what is wrong | SUNAT | where | cases |
 |---|---|---|---|---|

@@ -1,0 +1,19 @@
+case: igv-10-5-con-gratuito
+document: cpe
+why: >-
+  A 10.5 % factura that also gives a gravado gratuito (Cat.07 11). ERROR 3462
+  compares the rate of every IGV line, the 9996 gravado gratuitas included, so
+  the gratuito line declares the 10.5 % it was taxed at (1.05 / 10.00), not the
+  18.00 Cat.07 lists, and so does the document 9996 subtotal.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0 (3462)"
+assert:
+  - xpath: "number(/*/cac:InvoiceLine[cbc:ID='2']/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+    sunat: "3103/3462"
+  - xpath: "number(/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+  - xpath: "number(/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9996']/cbc:TaxAmount"
+    equals: "1.05"

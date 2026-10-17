@@ -48,38 +48,6 @@ README), then fix, then delete the entry here.
 - Spec cases: a gravado line with 9999, a line with ISC + 9999, an exportación
   refusal, and an RC line.
 
-## FU-2 — IGV 10.5 % (MYPE restaurantes / hoteles / alojamientos) end to end
-
-**Status:** the XML builder is done (F15: each gravado line declares the rate
-it was taxed at, read from IGV ÷ base, and the document IGV subtotal and the
-global-discount / anticipo recalculation follow it). Nothing upstream can
-produce a 10.5 % document yet.
-
-**Today**
-- Validation checks every gravado line's IGV at the Cat.07 rate, 18 %
-  (`internal/validation/rules.go`, `validateIGVTolerance(li,
-  cat07RateFraction(...))`), so a 10.5 % draft is refused before it reaches
-  the builder.
-- Anticipo validation hard-codes `base*1.18` (`internal/validation/rules.go`,
-  anticipo block).
-- The frontend computes IGV at 18 % (`perunio-frontend/src/lib/factura-decimal.ts`,
-  `lib/facturador-utils.ts`, `sunat/cat07.ts`) and has no rate choice.
-
-**What SUNAT requires** (`reglas-validacion-cpe-2026-08-26.xlsx`)
-- Line rate 18.00 or 10.50 (3103 / 3279); every IGV line of a document the
-  same rate (ERROR 3462).
-- The issuer must be in padrón 01 (MYPE restaurantes/hoteles/alojamientos),
-  otherwise OBSERV 4439.
-
-**To build it**
-- A per-company setting ("IGV reducido 10.5 %", padrón 01) in the backend
-  schema and the company settings screen.
-- Frontend: compute line IGV at the company's rate; one rate per document.
-- Validation: accept 10.5 when the company has it, enforce a single rate per
-  document (3462), and use the document rate for anticipos.
-- Spec cases: 10.5 with a global discount, 10.5 with an anticipo, a boleta at
-  10.5, a mixed-rate document refused.
-
 ## FU-4 — GRE related document: issuer and catálogo 61
 
 **Status:** the related document goes out as `cac:AdditionalDocumentReference`
@@ -128,3 +96,26 @@ modelled on 2026-10-17.)
   the comprobante's own. R.S. 183-2004 art. 20 governs only the deposit (SBS
   promedio ponderado venta, earlier of the IGV obligation and the deposit
   date), and no article says how the umbral converts (re-read 2026-10-17).
+
+## FU-12 — A nota at a different IGV rate than its comprobante
+
+**Status:** found while building FU-2; not handled.
+
+**Today** the IGV rate of every comprobante is the company's current setting
+(`companies.igv_reducido`), in the form and in `igvRateFraction`
+(`internal/validation/rules.go`). A nota de crédito or débito is computed and
+validated at that rate too. If the company switched between 18 % and 10.5 %
+after issuing the factura or boleta, its nota is computed at the new rate and
+refused (3103), although it has to mirror the rate the comprobante was taxed
+at.
+
+Also: the disminución (motivo 09) guard in `use-nota-form.ts` (`makeNotaSchema`)
+derives a line's base with `computeLine` without the company rate, so for a
+10.5 % issuer with "precio incluye IGV" it slightly underestimates the credited
+base.
+
+**Fix** Take a nota's rate from the referenced comprobante's own lines (IGV ÷
+base of its gravado lines), in the nota form (prefill), in
+`buildBoletaAnulacionRequest`, and in the facturador (`buildIssueRequestFromDoc`
+can read the referenced document), instead of the company setting. Spec/validation
+cases: a nota at 18 % for a 10.5 % company's older factura, and the reverse.

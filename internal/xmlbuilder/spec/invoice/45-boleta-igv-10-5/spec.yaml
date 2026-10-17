@@ -1,0 +1,16 @@
+case: boleta-igv-10-5
+document: cpe
+why: >-
+  A boleta at the 10.5 % rate: the reduced regime is the issuer's, so it
+  applies to boletas exactly as to facturas (Boleta2_0 carries the same
+  3103/3462 rules).
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Boleta2_0"
+assert:
+  - xpath: "/*/cbc:InvoiceTypeCode"
+    equals: "03"
+  - xpath: "number(/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cac:TaxCategory/cbc:Percent) = 10.5"
+    true: true
+    sunat: "3103/3462"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "105.00"

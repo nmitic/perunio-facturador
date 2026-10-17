@@ -1003,3 +1003,68 @@ func TestValidatePaymentTerms(t *testing.T) {
 		is.True(t, hasErrorField(errs, "exchangeRate"), "soles cannot be netted off a USD total without a rate")
 	})
 }
+
+// newReducidoInvoice is newValidInvoice taxed at the IGV reducido: 1000.00 + 105.00.
+func newReducidoInvoice() model.IssueRequest {
+	req := newValidInvoice()
+	req.IGVReducido = true
+	req.TotalIGV = "105.00"
+	req.TotalAmount = "1105.00"
+	req.TaxInclusiveAmount = "1105.00"
+	req.Items[0].UnitPriceWithTax = "110.50"
+	req.Items[0].IGVAmount = "105.00"
+	return req
+}
+
+func TestValidateIGVReducido(t *testing.T) {
+	t.Run("an issuer under the IGV reducido taxes at 10.5%", func(t *testing.T) {
+		errs := validation.Validate(newReducidoInvoice())
+		is.Equal(t, 0, len(errs))
+	})
+
+	t.Run("10.5% without the company setting is refused", func(t *testing.T) {
+		req := newReducidoInvoice()
+		req.IGVReducido = false
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "items[1].igvAmount"), "3103: an 18% issuer's line at 10.5%")
+	})
+
+	t.Run("an 18% line on a 10.5% document is refused", func(t *testing.T) {
+		req := newReducidoInvoice()
+		req.Items = append(req.Items, model.LineItem{
+			LineNumber: 2, Description: "OTRO", Quantity: "1", UnitCode: "NIU",
+			UnitPrice: "100.00", UnitPriceWithTax: "118.00", TaxExemptionReasonCode: "10",
+			IGVAmount: "18.00", LineTotal: "100.00", PriceTypeCode: "01",
+		})
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "items[2].igvAmount"), "3462: one IGV rate per document")
+	})
+
+	t.Run("a gravado gratuito at 18% on a 10.5% document is refused", func(t *testing.T) {
+		req := newReducidoInvoice()
+		req.Items = append(req.Items, model.LineItem{
+			LineNumber: 2, Description: "CORTESIA", Quantity: "1", UnitCode: "NIU",
+			UnitPrice: "0.00", UnitPriceWithTax: "11.80", TaxExemptionReasonCode: "11",
+			IGVAmount: "1.80", LineTotal: "0.00", PriceTypeCode: "02",
+		})
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "items[2].igvAmount"), "3462 compares the gravado gratuitos too")
+
+		req.Items[1].UnitPriceWithTax = "11.05"
+		req.Items[1].IGVAmount = "1.05"
+		errs = validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "items[2].igvAmount"), "a gratuito at 10.5% matches the document")
+	})
+
+	t.Run("an anticipo of a 10.5% issuer is its base plus 10.5%", func(t *testing.T) {
+		req := newReducidoInvoice()
+		req.TotalAmount = "994.50"
+		req.Anticipos = []model.Anticipo{{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "110.50", BaseAmount: "100.00"}}
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].baseAmount"), "100 + 10.5% = 110.50")
+
+		req.Anticipos[0].TotalAmount = "118.00"
+		errs = validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].baseAmount"), "an 18% anticipo does not match a 10.5% issuer")
+	})
+}

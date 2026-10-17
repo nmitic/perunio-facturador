@@ -1,0 +1,17 @@
+case: igv-10-5-regularizacion-anticipo
+document: cpe
+why: >-
+  A 10.5 % factura de regularización that applies an anticipo of 110.50
+  (base 100.00 + 10.50 IGV). The Cat.53 04 deduction reduces the gravada base
+  and the document IGV follows the 10.5 % rate.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "94.50"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PrepaidAmount"
+    equals: "110.50"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "994.50"

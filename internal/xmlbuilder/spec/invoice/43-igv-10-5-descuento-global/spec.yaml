@@ -1,0 +1,18 @@
+case: igv-10-5-descuento-global
+document: cpe
+why: >-
+  A 10.5 % factura with a S/ 100 descuento global (Cat.53 02): the discount
+  reduces the gravada base, and the document IGV is recomputed at the
+  document's own rate, 10.5 %, not at 18 %.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxableAmount"
+    equals: "900.00"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='1000']/cbc:TaxAmount"
+    equals: "94.50"
+    sunat: "3291"
+    why: >-
+      900 × 10.5 %
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:PayableAmount"
+    equals: "994.50"

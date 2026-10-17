@@ -52,6 +52,23 @@ func cat07RateFraction(code string) float64 {
 	return pct / 100
 }
 
+// igvRateFraction is the IGV rate a gravado line must be taxed at: 10.5 % for an
+// issuer under the IGV reducido (Ley 31556, model.IssueRequest.IGVReducido),
+// otherwise the Cat.07 rate (18 %). Every IGV line of a document shares it,
+// gravado gratuitos included (ERROR 3462), so checking each line against it
+// also enforces the single rate.
+func igvRateFraction(req model.IssueRequest, code string) float64 {
+	if req.IGVReducido && cat07RateFraction(code) > 0 {
+		return igvReducidoFraction
+	}
+	return cat07RateFraction(code)
+}
+
+// igvReducidoFraction is the IGV reducido of Ley 31556 (MYPE restaurantes,
+// hoteles y alojamientos turísticos in padrón 01), as SUNAT's rules write it
+// next to the general rate: "18.00 o 10.50" (3279).
+const igvReducidoFraction = 0.105
+
 func validateHeader(req model.IssueRequest) []model.ValidationError {
 	var errs []model.ValidationError
 
@@ -268,12 +285,13 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 		}
 
 		// Tolerance check (±1 cent) on the tax an onerosa gravado line declares.
-		// Which tributo applies and at what rate both come from the código, so the
-		// checked rate and the emitted cbc:Percent cannot disagree.
+		// Which tributo applies comes from the código; the IGV rate from the
+		// issuer (18 %, or 10.5 % under the IGV reducido), and the builder emits
+		// the rate the line was taxed at, so the two cannot disagree.
 		switch sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) {
 		case sunat.Cat05IGV:
 			// IGV base = valor_venta + ISC when ISC applies (SUNAT spec).
-			errs = append(errs, validateIGVTolerance(li, cat07RateFraction(li.TaxExemptionReasonCode), true)...)
+			errs = append(errs, validateIGVTolerance(li, igvRateFraction(req, li.TaxExemptionReasonCode), true)...)
 		case sunat.Cat05IVAP:
 			// IVAP base = valor_venta only — does not stack on ISC.
 			errs = append(errs, validateIGVTolerance(li, cat07RateFraction(li.TaxExemptionReasonCode), false)...)
@@ -315,6 +333,22 @@ func validateLines(req model.IssueRequest) []model.ValidationError {
 					Message: fmt.Sprintf("line %d: igvAmount debe ser > 0 para gravado-gratuito (cat.07 codes 11-16)", li.LineNumber),
 					Field:   fmt.Sprintf("items[%d].igvAmount", li.LineNumber),
 				})
+			}
+			// Its would-be IGV is taxed at the same rate as every other IGV line
+			// of the document (3103 on the line, 3462 across lines): the
+			// referential base is the precio referencial net of that IGV.
+			if sunat.Cat07GravadoGratuito(li.TaxExemptionReasonCode) && !isZeroDecimal(li.IGVAmount) {
+				upwt, _ := strconv.ParseFloat(li.UnitPriceWithTax, 64)
+				qty, _ := strconv.ParseFloat(li.Quantity, 64)
+				igv, _ := strconv.ParseFloat(li.IGVAmount, 64)
+				rate := igvRateFraction(req, sunat.Cat07GravadoOnerosa)
+				if base := upwt*qty - igv; base > 0 && math.Abs(base*rate-igv) > 0.01 {
+					errs = append(errs, model.ValidationError{
+						Code:    3462,
+						Message: fmt.Sprintf("line %d: el IGV del gratuito %.2f no corresponde a la tasa del documento (%s%% de %.2f)", li.LineNumber, igv, strconv.FormatFloat(rate*100, 'f', -1, 64), base),
+						Field:   fmt.Sprintf("items[%d].igvAmount", li.LineNumber),
+					})
+				}
 			}
 		} else if li.PriceTypeCode != "" && li.PriceTypeCode != "01" {
 			errs = append(errs, model.ValidationError{
@@ -361,7 +395,7 @@ func validateIGVTolerance(li model.LineItem, rate float64, includeISCInBase bool
 	if math.Abs(expectedIGV-igvAmount) > 0.01 { // ±0.01 sol tolerance per SUNAT manual §7
 		errs = append(errs, model.ValidationError{
 			Code:    3103,
-			Message: fmt.Sprintf("line %d: IGV amount %.2f exceeds tolerance (expected ~%.2f at %.0f%%)", li.LineNumber, igvAmount, expectedIGV, rate*100),
+			Message: fmt.Sprintf("line %d: IGV amount %.2f exceeds tolerance (expected ~%.2f at %s%%)", li.LineNumber, igvAmount, expectedIGV, strconv.FormatFloat(rate*100, 'f', -1, 64)),
 			Field:   fmt.Sprintf("items[%d].igvAmount", li.LineNumber),
 		})
 	}
@@ -450,9 +484,11 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "base de anticipo debe ser mayor a 0 y menor al total con IGV", Field: field + ".baseAmount"})
 			continue
 		}
-		// Gravado-only in v1: total must be base + 18% IGV (±2 cents rounding).
-		if diff := base*1.18 - total; diff > 0.02 || diff < -0.02 {
-			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("anticipo %s: total %.2f no equivale a base %.2f más IGV 18%%", a.DocID, total, base), Field: field + ".baseAmount"})
+		// Gravado-only in v1: total must be base + IGV at the issuer's rate, 18 %
+		// or 10.5 % (±2 cents rounding).
+		rate := igvRateFraction(req, sunat.Cat07GravadoOnerosa)
+		if diff := base*(1+rate) - total; diff > 0.02 || diff < -0.02 {
+			errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("anticipo %s: total %.2f no equivale a base %.2f más IGV %s%%", a.DocID, total, base, strconv.FormatFloat(rate*100, 'f', -1, 64)), Field: field + ".baseAmount"})
 		}
 		totalSum += total
 	}

@@ -86,6 +86,14 @@ type IssueRequest struct {
 	// venta row — never from the client.
 	MontoOperacion string `json:"-"`
 
+	// IGVReducido: the issuer applies the IGV reducido of 10.5 % (Ley 31556,
+	// MYPE restaurantes, hoteles y alojamientos turísticos in padrón 01), so
+	// every gravado onerosa line is taxed at 10.5 % instead of 18 %. The pipeline
+	// fills it from the company settings, never from the client. SUNAT accepts
+	// either rate (3103) but one per document (3462), and observes 4439 when the
+	// issuer is not in the padrón.
+	IGVReducido bool `json:"-"`
+
 	// AdquirenteSectorPublico: the buyer is a Sector Público Nacional entity
 	// (art. 18 a) LIR). The exclusion of a comprobante without crédito fiscal
 	// (Anexos 2 and 3, R.S. 183-2004 arts. 8 and 13; transporte de carga, R.S.

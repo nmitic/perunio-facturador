@@ -245,6 +245,9 @@ type docTaxBuckets struct {
 	expBase     float64
 	gratBase    float64
 	gratIGV     float64
+	// gratGravBase is the part of gratBase from gravado gratuitos (11-16), the
+	// base their would-be IGV (gratIGV) was computed on.
+	gratGravBase float64
 	// iscBase / iscAmount are the Σ of the ISC line subtotals (onerosa lines
 	// only): the document ISC subtotal must equal them (3296 / 3298).
 	iscBase   float64
@@ -257,10 +260,15 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 		taxCode := sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode)
 		if sunat.Cat07Gratuito(li.TaxExemptionReasonCode) {
 			// Every gratuito line contributes its referential base (+ would-be
-			// IGV) to the 9996 bucket. IGV is 18% for gravado-gratuito (11-16)
-			// and 0 for exonerado/inafecto gratuito (21, 31-37).
-			b.gratBase += gratuitoReferentialBase(li)
+			// IGV) to the 9996 bucket. IGV is the issuer's rate (18 or 10.5) for
+			// gravado-gratuito (11-16) and 0 for exonerado/inafecto gratuito
+			// (21, 31-37).
+			base := gratuitoReferentialBase(li)
+			b.gratBase += base
 			b.gratIGV += parseDecimal(li.IGVAmount)
+			if sunat.Cat07GravadoGratuito(li.TaxExemptionReasonCode) {
+				b.gratGravBase += base
+			}
 			continue
 		}
 		base := parseDecimal(li.LineTotal)
@@ -305,11 +313,24 @@ const (
 // the nearer of the two rates SUNAT accepts: IGV ÷ base (base includes ISC).
 // A line with no base falls back to the general rate.
 func lineIGVRate(li model.LineItem) string {
-	base := parseDecimal(li.LineTotal) + parseDecimal(li.ISCAmount)
+	return snapIGVRate(parseDecimal(li.IGVAmount), parseDecimal(li.LineTotal)+parseDecimal(li.ISCAmount))
+}
+
+// gratuitoIGVRate is the rate a gravado gratuito line (Cat.07 11-16) declares
+// for its would-be IGV, read the same way from its referential base. ERROR 3462
+// compares it with the onerosa lines', so a 10.5 % issuer's gratuitos are
+// 10.5 % too, never the 18.00 Cat.07 lists.
+func gratuitoIGVRate(li model.LineItem) string {
+	return snapIGVRate(parseDecimal(li.IGVAmount), gratuitoReferentialBase(li))
+}
+
+// snapIGVRate snaps igv ÷ base to the nearer of the two rates SUNAT accepts.
+// No base falls back to the general rate.
+func snapIGVRate(igv, base float64) string {
 	if base <= 0 {
 		return igvRateGeneral
 	}
-	pct := parseDecimal(li.IGVAmount) / base * 100
+	pct := igv / base * 100
 	if math.Abs(pct-10.5) < math.Abs(pct-18) {
 		return igvRateReduced
 	}
@@ -555,13 +576,14 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	// to be consigned here under the GRA scheme so it reconciles with each line's
 	// gratuita TaxSubtotal. Matches greenter's Factura-Gratuita output.
 	if buckets.gratBase > 0 || buckets.gratIGV > 0 {
-		// The rate tag is always emitted (fault 2992). 18% when there is would-be
-		// IGV (gravado-gratuito, 11-16); 0.00 for exonerado/inafecto gratuito
+		// The rate tag is always emitted (fault 2992). The gravado gratuitos'
+		// rate (18 or 10.5, 3462) when there is would-be IGV (11-16), read from
+		// their own base; 0.00 for exonerado/inafecto gratuito
 		// (21, 31-37), which carry no IGV — matching their zero TaxAmount so
 		// SUNAT's base×rate check still holds.
 		gratPercent := "0.00"
 		if buckets.gratIGV > 0 {
-			gratPercent = "18.00"
+			gratPercent = snapIGVRate(buckets.gratIGV, buckets.gratGravBase)
 		}
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
 			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.gratBase), cur),
@@ -1002,9 +1024,13 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	}
 
 	lineCat := newLineTaxCategory(li.TaxExemptionReasonCode, taxCode)
-	if isOnerosaIGVLine(li) {
+	switch {
+	case isOnerosaIGVLine(li):
 		// The rate the line was actually taxed at, 18 or 10.5 (3103).
 		lineCat.Percent = lineIGVRate(li)
+	case sunat.Cat07GravadoGratuito(li.TaxExemptionReasonCode):
+		// Same for a gravado gratuito's would-be IGV (3103, 3462).
+		lineCat.Percent = gratuitoIGVRate(li)
 	}
 
 	tt := taxTotal{

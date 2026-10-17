@@ -45,6 +45,10 @@ type Company struct {
 	// used as the default cuenta on documents sujetos a detracción. Empty when
 	// the company has not configured one.
 	CuentaDetraccion string
+	// IgvReducido: the company applies the IGV reducido of 10.5 % (Ley 31556,
+	// padrón 01 of MYPE restaurantes, hoteles y alojamientos turísticos). Set by
+	// the user in the company settings.
+	IgvReducido bool
 }
 
 // GetCompany loads the company + SUNAT credentials for the issue pipeline,
@@ -62,7 +66,8 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			       COALESCE(sunat_environment::text, 'production'),
 			       COALESCE(brand_color, ''),
 			       COALESCE(logo_base64, ''),
-			       COALESCE(cuenta_detraccion, '')
+			       COALESCE(cuenta_detraccion, ''),
+			       COALESCE(igv_reducido, false)
 			FROM companies
 			WHERE id = $1
 			LIMIT 1
@@ -75,7 +80,7 @@ func (p *Pool) GetCompany(ctx context.Context, companyID string) (*Company, erro
 			&got.EncryptedClientID, &got.EncryptedClientSecret,
 			&got.IsActive, &got.SunatEnvironment,
 			&got.BrandColor, &got.LogoBase64,
-			&got.CuentaDetraccion); err != nil {
+			&got.CuentaDetraccion, &got.IgvReducido); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
