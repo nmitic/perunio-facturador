@@ -39,7 +39,6 @@ type despatchAdvice struct {
 
 	DespatchSupplierParty despatchSupplierParty
 	DeliveryCustomerParty deliveryCustomerParty
-	SellerSupplierParty   *sellerSupplierParty `xml:"cac:SellerSupplierParty,omitempty"`
 
 	Shipment      shipment
 	DespatchLines []despatchLineXML
@@ -95,15 +94,6 @@ type despatchSupplierParty struct {
 type deliveryCustomerParty struct {
 	XMLName xml.Name `xml:"cac:DeliveryCustomerParty"`
 	Party   party    `xml:"cac:Party"`
-}
-
-// sellerSupplierParty is the extra party used by Transportista (31):
-// references the remitente (the party whose goods are being carried).
-// For por Eventos with a type-31 issuer this is likewise the remitente.
-type sellerSupplierParty struct {
-	XMLName                   xml.Name  `xml:"cac:SellerSupplierParty"`
-	CustomerAssignedAccountID *schemeID `xml:"cbc:CustomerAssignedAccountID,omitempty"`
-	Party                     party     `xml:"cac:Party"`
 }
 
 // shipment carries the transport metadata: weight, packages, mode,
@@ -201,6 +191,9 @@ type delivery struct {
 
 type deliveryDespatch struct {
 	DespatchAddress despatchAddress `xml:"cac:DespatchAddress"`
+	// DespatchParty is the remitente on a GRE transportista (31): the party
+	// whose goods travel (ERROR 3383 / 2541 / 3387).
+	DespatchParty *party `xml:"cac:DespatchParty,omitempty"`
 }
 
 // despatchAddress is a 6-digit ubigeo + street for both origin and
@@ -294,26 +287,6 @@ func newDeliveryCustomerParty(docType, docNumber, name, address string) delivery
 		}
 	}
 	return p
-}
-
-// newSellerSupplierParty — the remitente reference on type 31 despatches.
-func newSellerSupplierParty(ruc, name string) *sellerSupplierParty {
-	return &sellerSupplierParty{
-		Party: party{
-			PartyIdentification: partyIdentification{
-				ID: schemeID{
-					Value:            ruc,
-					SchemeID:         "6",
-					SchemeName:       "Documento de Identidad",
-					SchemeAgencyName: "PE:SUNAT",
-					SchemeURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06",
-				},
-			},
-			PartyLegalEntity: partyLegalEntity{
-				RegistrationName: name,
-			},
-		},
-	}
 }
 
 // newDespatchAddress builds an origin/arrival address block with a

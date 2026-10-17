@@ -83,16 +83,6 @@
       </cac:PartyLegalEntity>
     </cac:Party>
   </cac:DeliveryCustomerParty>
-  <cac:SellerSupplierParty>
-    <cac:Party>
-      <cac:PartyIdentification>
-        <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20100113612</cbc:ID>
-      </cac:PartyIdentification>
-      <cac:PartyLegalEntity>
-        <cbc:RegistrationName>EMPRESA TEST SAC</cbc:RegistrationName>
-      </cac:PartyLegalEntity>
-    </cac:Party>
-  </cac:SellerSupplierParty>
   <cac:Shipment>
     <cbc:ID>SUNAT_Envio</cbc:ID>
     <cbc:HandlingCode listAgencyName="PE:SUNAT" listName="Motivo de traslado" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20">01</cbc:HandlingCode>
@@ -134,6 +124,14 @@
             <cbc:IdentificationCode>PE</cbc:IdentificationCode>
           </cac:Country>
         </cac:DespatchAddress>
+        <cac:DespatchParty>
+          <cac:PartyIdentification>
+            <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20100113612</cbc:ID>
+          </cac:PartyIdentification>
+          <cac:PartyLegalEntity>
+            <cbc:RegistrationName>EMPRESA TEST SAC</cbc:RegistrationName>
+          </cac:PartyLegalEntity>
+        </cac:DespatchParty>
       </cac:Despatch>
     </cac:Delivery>
     <cac:TransportHandlingUnit>

@@ -8,10 +8,6 @@ why: >-
 sources:
   - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0"
   - "resources/xsl/gre/ValidaExprRegGreTransportista-2.0.1.xsl"
-pending: >-
-  Finding F16: buildDespatchTransportistaXML puts the remitente in
-  cac:SellerSupplierParty, which SUNAT ignores, so it reports the remitente
-  as missing.
 assert:
   - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty/cac:PartyIdentification/cbc:ID"
     equals: "20100113612"
