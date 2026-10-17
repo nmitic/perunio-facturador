@@ -48,11 +48,12 @@ type summaryPartyLegalEntity struct {
 // then sac:BillingPayment, then cac:TaxTotal. Emitting them out of order triggers
 // schema fault "cvc-complex-type 2.4 ... next item should be end-element".
 type summaryDocumentsLine struct {
-	LineID                  string                  `xml:"cbc:LineID"`
-	DocumentTypeCode        string                  `xml:"cbc:DocumentTypeCode"`
-	DocumentSerialID        string                  `xml:"sac:DocumentSerialID"`
-	StartDocumentNumberID   string                  `xml:"sac:StartDocumentNumberID"`
-	EndDocumentNumberID     string                  `xml:"sac:EndDocumentNumberID"`
+	LineID           string `xml:"cbc:LineID"`
+	DocumentTypeCode string `xml:"cbc:DocumentTypeCode"`
+	// ID is SERIE-NÚMERO of the one comprobante this line reports. Resumen
+	// 1.1 has no ranges: sac:DocumentSerialID + Start/EndDocumentNumberID are
+	// the Resumen 1.0 shape, and under CustomizationID 1.1 they are ERROR 2512.
+	ID                      string                  `xml:"cbc:ID"`
 	AccountingCustomerParty *summaryCustomerParty   `xml:"cac:AccountingCustomerParty,omitempty"`
 	BillingReference        *summaryBillingRef      `xml:"cac:BillingReference,omitempty"`
 	ConditionCode           string                  `xml:"cac:Status>cbc:ConditionCode"`
@@ -146,6 +147,10 @@ func BuildSummaryXML(req model.SummaryRequest) ([]byte, error) {
 	}
 
 	for _, item := range req.Items {
+		if item.EndCorrelative != 0 && item.EndCorrelative != item.StartCorrelative {
+			return nil, fmt.Errorf("summary line %d: Resumen 1.1 reports one comprobante per line, got the range %s %d-%d",
+				item.LineNumber, item.Series, item.StartCorrelative, item.EndCorrelative)
+		}
 		doc.SummaryLines = append(doc.SummaryLines, buildSummaryLine(item))
 	}
 
@@ -168,13 +173,11 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 	// Field order below is irrelevant (Go marshals in struct-definition order);
 	// the schema-critical sequence lives in the summaryDocumentsLine type.
 	line := summaryDocumentsLine{
-		LineID:                fmt.Sprint(item.LineNumber),
-		DocumentTypeCode:      item.DocType,
-		DocumentSerialID:      item.Series,
-		StartDocumentNumberID: fmt.Sprint(item.StartCorrelative),
-		EndDocumentNumberID:   fmt.Sprint(item.EndCorrelative),
-		ConditionCode:         item.ConditionCode,
-		TotalAmount:           newCurrencyAmount(item.TotalAmount, cur),
+		LineID:           fmt.Sprint(item.LineNumber),
+		DocumentTypeCode: item.DocType,
+		ID:               fmt.Sprintf("%s-%d", item.Series, item.StartCorrelative),
+		ConditionCode:    item.ConditionCode,
+		TotalAmount:      newCurrencyAmount(item.TotalAmount, cur),
 	}
 
 	// Customer (optional) — must precede cac:Status per the schema sequence.
@@ -223,10 +226,13 @@ func buildSummaryLine(item model.SummaryItem) summaryDocumentsLine {
 		})
 	}
 
-	// TaxTotal: one cac:TaxTotal per tributo present (IGV, ISC, otros).
-	if !isZeroAmount(item.TotalIGV) {
-		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalIGV, cur, sunat.Cat05IGV))
+	// TaxTotal: the IGV cac:TaxTotal is mandatory on every line, 0.00 included
+	// (an exonerada or inafecta boleta; ERROR 2278). ISC and otros only when present.
+	igv := item.TotalIGV
+	if igv == "" {
+		igv = "0.00"
 	}
+	line.TaxTotal = append(line.TaxTotal, newSummaryTax(igv, cur, sunat.Cat05IGV))
 	if !isZeroAmount(item.TotalISC) {
 		line.TaxTotal = append(line.TaxTotal, newSummaryTax(item.TotalISC, cur, sunat.Cat05ISC))
 	}

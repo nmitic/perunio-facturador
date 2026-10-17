@@ -7,10 +7,6 @@ why: >-
 sources:
   - "Guía de elaboración del Resumen Diario 1.1 (resources/guias/guia-resumen-diario-1.1-2018-01.pdf)"
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1"
-pending: >-
-  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
-  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
-  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
 assert:
   - xpath: "/*/sac:SummaryDocumentsLine/cbc:DocumentTypeCode"
     equals: "07"

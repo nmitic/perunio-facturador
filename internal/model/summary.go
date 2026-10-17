@@ -21,9 +21,11 @@ type SummaryRequest struct {
 
 // SummaryItem is a single boleta/NC/ND in a Resumen Diario.
 type SummaryItem struct {
-	LineNumber        int    `json:"lineNumber"`
-	DocType           string `json:"docType"` // "03","07","08"
-	Series            string `json:"series"`
+	LineNumber int    `json:"lineNumber"`
+	DocType    string `json:"docType"` // "03","07","08"
+	Series     string `json:"series"`
+	// StartCorrelative is the comprobante's number. Resumen 1.1 reports one
+	// comprobante per line, so EndCorrelative must equal it (or be 0).
 	StartCorrelative  int    `json:"startCorrelative"`
 	EndCorrelative    int    `json:"endCorrelative"`
 	ConditionCode     string `json:"conditionCode"` // "1"=add, "2"=modify, "3"=void

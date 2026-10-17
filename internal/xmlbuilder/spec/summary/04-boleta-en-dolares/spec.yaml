@@ -5,10 +5,6 @@ why: >-
   hardcoded to PEN.
 sources:
   - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Resumen Diario1_1"
-pending: >-
-  Finding F6: RC lines use the Resumen 1.0 range shape (sac:DocumentSerialID
-  + Start/EndDocumentNumberID) under CustomizationID 1.1, which identifies
-  each comprobante with one cbc:ID per line (guía RC 1.1; ERR 2512).
 assert:
   - xpath: "//*[@currencyID='PEN']"
     count: 0
