@@ -25,15 +25,3 @@ modelled on 2026-10-17.)
   the comprobante's own. R.S. 183-2004 art. 20 governs only the deposit (SBS
   promedio ponderado venta, earlier of the IGV obligation and the deposit
   date), and no article says how the umbral converts (re-read 2026-10-17).
-
-## FU-13 — Drop the legacy `despatches.related_doc_*` columns
-
-**Status:** superseded on 2026-10-17, not yet dropped.
-
-Every guía's documentos relacionados live in `despatch_related_documents`
-(perunio-backend migrations 0147 / 0148 copied the single old one there). The
-three columns `related_doc_type`, `related_doc_series` and `related_doc_number`
-are still read into `model.Despatch` and the frontend `Despatch` type for
-display, and the create/update routes still accept them as a one-item list for
-an old client. Drop them, and those fields, once no client sends them and
-migration 0148 has run in every environment.

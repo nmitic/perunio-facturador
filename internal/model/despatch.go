@@ -91,12 +91,6 @@ type Despatch struct {
 	EventCode     *string `json:"eventCode"`     // Cat.59
 	OriginalGreID *string `json:"originalGreId"` // FK to despatches.id
 
-	// Legacy single related document, superseded by RelatedDocuments (migration
-	// 0148 copied it there). Read for display only; nothing builds from it.
-	RelatedDocType   *string `json:"relatedDocType"`
-	RelatedDocSeries *string `json:"relatedDocSeries"`
-	RelatedDocNumber *string `json:"relatedDocNumber"`
-
 	// RelatedDocuments are the guía's documentos relacionados, each a
 	// cac:AdditionalDocumentReference, in the order they were entered.
 	RelatedDocuments []RelatedDocument `json:"relatedDocuments"`

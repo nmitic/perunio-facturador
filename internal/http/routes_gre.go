@@ -214,12 +214,6 @@ type createDespatchBody struct {
 	EventCode     *string `json:"eventCode,omitempty"`
 	OriginalGreID *string `json:"originalGreId,omitempty"`
 
-	// Legacy single related document; mapped to one relatedDocuments entry
-	// when relatedDocuments is absent.
-	RelatedDocType   *string `json:"relatedDocType,omitempty"`
-	RelatedDocSeries *string `json:"relatedDocSeries,omitempty"`
-	RelatedDocNumber *string `json:"relatedDocNumber,omitempty"`
-
 	RelatedDocuments []model.RelatedDocument `json:"relatedDocuments,omitempty"`
 
 	Lines []despatchLineBody `json:"lines"`
@@ -322,23 +316,15 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 		CarrierMTC:         b.CarrierMTC,
 		EventCode:          b.EventCode,
 		OriginalGreID:      b.OriginalGreID,
-		RelatedDocuments:   relatedDocumentsFromBody(b.RelatedDocuments, b.RelatedDocType, b.RelatedDocSeries, b.RelatedDocNumber),
+		RelatedDocuments:   relatedDocumentsFromBody(b.RelatedDocuments),
 		Lines:              lines,
 	}
 }
 
 // relatedDocumentsFromBody normalises a guía body's documentos relacionados:
-// the list when sent, else the legacy single relatedDocType/Series/Number as
-// one entry ("<serie>-<número>"), else nil. Entries are trimmed and the
-// número upper-cased, as SUNAT compares it (3340, 3441).
-func relatedDocumentsFromBody(list []model.RelatedDocument, docType, series, number *string) []model.RelatedDocument {
-	if list == nil && docType != nil && number != nil && strings.TrimSpace(*number) != "" {
-		n := strings.TrimSpace(*number)
-		if series != nil && strings.TrimSpace(*series) != "" {
-			n = strings.TrimSpace(*series) + "-" + n
-		}
-		list = []model.RelatedDocument{{DocType: *docType, Number: n}}
-	}
+// entries are trimmed and the número upper-cased, as SUNAT compares it (3340,
+// 3441). nil stays nil.
+func relatedDocumentsFromBody(list []model.RelatedDocument) []model.RelatedDocument {
 	if list == nil {
 		return nil
 	}
@@ -435,10 +421,6 @@ type updateDespatchBody struct {
 	EventCode     *string `json:"eventCode,omitempty"`
 	OriginalGreID *string `json:"originalGreId,omitempty"`
 
-	RelatedDocType   *string `json:"relatedDocType,omitempty"`
-	RelatedDocSeries *string `json:"relatedDocSeries,omitempty"`
-	RelatedDocNumber *string `json:"relatedDocNumber,omitempty"`
-
 	// Replaces the guía's documentos relacionados when present (nil = keep).
 	RelatedDocuments *[]model.RelatedDocument `json:"relatedDocuments,omitempty"`
 
@@ -478,12 +460,10 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 		OriginalGreID:      b.OriginalGreID,
 	}
 	if b.RelatedDocuments != nil {
-		in.RelatedDocuments = relatedDocumentsFromBody(*b.RelatedDocuments, nil, nil, nil)
+		in.RelatedDocuments = relatedDocumentsFromBody(*b.RelatedDocuments)
 		if in.RelatedDocuments == nil {
 			in.RelatedDocuments = []model.RelatedDocument{}
 		}
-	} else if docs := relatedDocumentsFromBody(nil, b.RelatedDocType, b.RelatedDocSeries, b.RelatedDocNumber); docs != nil {
-		in.RelatedDocuments = docs
 	}
 	if b.Lines != nil {
 		lines := make([]db.DespatchLineInput, 0, len(b.Lines))

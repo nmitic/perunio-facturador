@@ -39,7 +39,6 @@ const despatchColumns = `
 	vehicle_plate,
 	carrier_ruc, carrier_name, carrier_mtc,
 	event_code, original_gre_id,
-	related_doc_type, related_doc_series, related_doc_number,
 	sunat_ticket, sunat_response_code, sunat_response_description,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key,
 	sent_at, accepted_at, created_at, updated_at
@@ -57,7 +56,6 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 		&d.VehiclePlate,
 		&d.CarrierRUC, &d.CarrierName, &d.CarrierMTC,
 		&d.EventCode, &d.OriginalGreID,
-		&d.RelatedDocType, &d.RelatedDocSeries, &d.RelatedDocNumber,
 		&d.SunatTicket, &d.SunatResponseCode, &d.SunatResponseDescription,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
@@ -274,10 +272,6 @@ type DespatchCreateInput struct {
 	EventCode     *string
 	OriginalGreID *string
 
-	RelatedDocType   *string
-	RelatedDocSeries *string
-	RelatedDocNumber *string
-
 	Lines []DespatchLineInput
 	// RelatedDocuments are the guía's documentos relacionados.
 	RelatedDocuments []model.RelatedDocument
@@ -334,7 +328,6 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				vehicle_plate,
 				carrier_ruc, carrier_name, carrier_mtc,
 				event_code, original_gre_id,
-				related_doc_type, related_doc_series, related_doc_number,
 				driver_family_name, delivery_date
 			) VALUES (
 				$1,$2,$3,$4,$5,$6,'draft',
@@ -347,8 +340,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				$28,
 				$29,$30,$31,
 				$32,$33,
-				$34,$35,$36,
-				$37, $38
+				$34, $35
 			) RETURNING `+despatchColumns,
 			tenantID, in.CompanyID, in.SeriesID, in.DocType, series, correlative,
 			in.IssueDate, in.IssueTime,
@@ -360,7 +352,6 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 			in.VehiclePlate,
 			in.CarrierRUC, in.CarrierName, in.CarrierMTC,
 			in.EventCode, in.OriginalGreID,
-			in.RelatedDocType, in.RelatedDocSeries, in.RelatedDocNumber,
 			in.DriverFamilyName, in.DeliveryDate,
 		)
 		if err := scanDespatch(row, &out); err != nil {
@@ -459,10 +450,6 @@ type DespatchUpdateInput struct {
 
 	EventCode     *string
 	OriginalGreID *string
-
-	RelatedDocType   *string
-	RelatedDocSeries *string
-	RelatedDocNumber *string
 
 	Lines []DespatchLineInput
 	// RelatedDocuments replace the existing set when non-nil (nil = keep).
@@ -632,15 +619,6 @@ func buildDespatchUpdateSet(in DespatchUpdateInput) ([]string, []any) {
 	}
 	if in.OriginalGreID != nil {
 		add("original_gre_id", *in.OriginalGreID)
-	}
-	if in.RelatedDocType != nil {
-		add("related_doc_type", *in.RelatedDocType)
-	}
-	if in.RelatedDocSeries != nil {
-		add("related_doc_series", *in.RelatedDocSeries)
-	}
-	if in.RelatedDocNumber != nil {
-		add("related_doc_number", *in.RelatedDocNumber)
 	}
 	return set, args
 }
