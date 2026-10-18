@@ -505,3 +505,37 @@ func stringOrDefault(p *string, def string) string {
 }
 
 func itoa(n int) string { return fmt.Sprintf("%d", n) }
+
+// buildRelatedDocumentReferences emits one cac:AdditionalDocumentReference per
+// documento relacionado, in entry order: the Cat.61 code (2692), the whole
+// number (3441), the code's Cat.61 name (OBSERV 4371 without it) and, when the
+// draft states one, its issuer's RUC (cac:IssuerParty, schemeID 6: 3380/3382).
+// Which codes need an issuer, and the per-type formats, are validation's
+// (validateRelatedDocuments); the builder emits what it is given.
+func buildRelatedDocumentReferences(docs []model.RelatedDocument) []additionalDocumentReference {
+	out := make([]additionalDocumentReference, 0, len(docs))
+	for _, doc := range docs {
+		ref := additionalDocumentReference{
+			ID:               doc.Number,
+			DocumentTypeCode: doc.DocType,
+		}
+		if e, ok := sunat.Cat61(doc.DocType); ok {
+			ref.DocumentType = e.Label
+		}
+		if doc.IssuerRUC != "" {
+			ref.IssuerParty = &docRefIssuerParty{
+				PartyIdentification: partyIdentification{
+					ID: schemeID{
+						Value:            doc.IssuerRUC,
+						SchemeID:         sunat.Cat06RUC,
+						SchemeName:       "Documento de Identidad",
+						SchemeAgencyName: "PE:SUNAT",
+						SchemeURI:        "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06",
+					},
+				},
+			}
+		}
+		out = append(out, ref)
+	}
+	return out
+}

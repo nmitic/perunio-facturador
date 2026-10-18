@@ -1,0 +1,19 @@
+case: documento-solo-catalogo-61
+document: despatch
+why: >-
+  An importación (motivo 08) must relate its DAM (Cat.61 50, ERROR 3440), a
+  code Cat.01 does not have. Its name comes from Cat.61 (OBSERV 4371 without
+  it), and its ID is the DAM's own aduana-año-régimen-correlativo (3441:
+  régimen 10 under motivo 08), not a serie-número.
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "50"
+    sunat: "2692"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentType"
+    equals: "Declaración Aduanera de Mercancías"
+    sunat: "4371"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    equals: "118-2024-10-123456"
+    sunat: "3441"

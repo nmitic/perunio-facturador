@@ -46,6 +46,7 @@ func buildDespatchTransportistaXML(d *model.Despatch, lines []model.DespatchLine
 		}
 		adv.Shipment.Delivery.Despatch.DespatchParty = &remitente
 	}
+	adv.AdditionalDocumentReferences = buildRelatedDocumentReferences(d.RelatedDocuments)
 
 	return marshalISO8859(&adv)
 }

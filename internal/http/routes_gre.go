@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -213,9 +214,13 @@ type createDespatchBody struct {
 	EventCode     *string `json:"eventCode,omitempty"`
 	OriginalGreID *string `json:"originalGreId,omitempty"`
 
+	// Legacy single related document; mapped to one relatedDocuments entry
+	// when relatedDocuments is absent.
 	RelatedDocType   *string `json:"relatedDocType,omitempty"`
 	RelatedDocSeries *string `json:"relatedDocSeries,omitempty"`
 	RelatedDocNumber *string `json:"relatedDocNumber,omitempty"`
+
+	RelatedDocuments []model.RelatedDocument `json:"relatedDocuments,omitempty"`
 
 	Lines []despatchLineBody `json:"lines"`
 }
@@ -317,11 +322,35 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 		CarrierMTC:         b.CarrierMTC,
 		EventCode:          b.EventCode,
 		OriginalGreID:      b.OriginalGreID,
-		RelatedDocType:     b.RelatedDocType,
-		RelatedDocSeries:   b.RelatedDocSeries,
-		RelatedDocNumber:   b.RelatedDocNumber,
+		RelatedDocuments:   relatedDocumentsFromBody(b.RelatedDocuments, b.RelatedDocType, b.RelatedDocSeries, b.RelatedDocNumber),
 		Lines:              lines,
 	}
+}
+
+// relatedDocumentsFromBody normalises a guía body's documentos relacionados:
+// the list when sent, else the legacy single relatedDocType/Series/Number as
+// one entry ("<serie>-<número>"), else nil. Entries are trimmed and the
+// número upper-cased, as SUNAT compares it (3340, 3441).
+func relatedDocumentsFromBody(list []model.RelatedDocument, docType, series, number *string) []model.RelatedDocument {
+	if list == nil && docType != nil && number != nil && strings.TrimSpace(*number) != "" {
+		n := strings.TrimSpace(*number)
+		if series != nil && strings.TrimSpace(*series) != "" {
+			n = strings.TrimSpace(*series) + "-" + n
+		}
+		list = []model.RelatedDocument{{DocType: *docType, Number: n}}
+	}
+	if list == nil {
+		return nil
+	}
+	out := make([]model.RelatedDocument, 0, len(list))
+	for _, d := range list {
+		out = append(out, model.RelatedDocument{
+			DocType:   strings.TrimSpace(d.DocType),
+			Number:    strings.ToUpper(strings.TrimSpace(d.Number)),
+			IssuerRUC: strings.TrimSpace(d.IssuerRUC),
+		})
+	}
+	return out
 }
 
 func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
@@ -410,6 +439,9 @@ type updateDespatchBody struct {
 	RelatedDocSeries *string `json:"relatedDocSeries,omitempty"`
 	RelatedDocNumber *string `json:"relatedDocNumber,omitempty"`
 
+	// Replaces the guía's documentos relacionados when present (nil = keep).
+	RelatedDocuments *[]model.RelatedDocument `json:"relatedDocuments,omitempty"`
+
 	Lines []despatchLineBody `json:"lines,omitempty"`
 }
 
@@ -444,9 +476,14 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 		CarrierMTC:         b.CarrierMTC,
 		EventCode:          b.EventCode,
 		OriginalGreID:      b.OriginalGreID,
-		RelatedDocType:     b.RelatedDocType,
-		RelatedDocSeries:   b.RelatedDocSeries,
-		RelatedDocNumber:   b.RelatedDocNumber,
+	}
+	if b.RelatedDocuments != nil {
+		in.RelatedDocuments = relatedDocumentsFromBody(*b.RelatedDocuments, nil, nil, nil)
+		if in.RelatedDocuments == nil {
+			in.RelatedDocuments = []model.RelatedDocument{}
+		}
+	} else if docs := relatedDocumentsFromBody(nil, b.RelatedDocType, b.RelatedDocSeries, b.RelatedDocNumber); docs != nil {
+		in.RelatedDocuments = docs
 	}
 	if b.Lines != nil {
 		lines := make([]db.DespatchLineInput, 0, len(b.Lines))

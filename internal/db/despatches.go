@@ -135,10 +135,64 @@ func (p *Pool) GetDespatch(ctx context.Context, companyID, despatchID string) (*
 			}
 			return err
 		}
+		docs, err := getDespatchRelatedDocuments(ctx, tx, got.ID)
+		if err != nil {
+			return err
+		}
+		got.RelatedDocuments = docs
 		out = &got
 		return nil
 	})
 	return out, err
+}
+
+// getDespatchRelatedDocuments returns a guía's documentos relacionados in
+// entry order. Never nil, so the JSON is always a list.
+func getDespatchRelatedDocuments(ctx context.Context, tx pgx.Tx, despatchID string) ([]model.RelatedDocument, error) {
+	out := []model.RelatedDocument{}
+	rows, err := tx.Query(ctx, `
+		SELECT doc_type, number, COALESCE(issuer_ruc, '')
+		FROM despatch_related_documents
+		WHERE despatch_id = $1
+		ORDER BY position
+	`, despatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d model.RelatedDocument
+		if err := rows.Scan(&d.DocType, &d.Number, &d.IssuerRUC); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// replaceDespatchRelatedDocuments replaces a guía's documentos relacionados
+// with docs (positions 1..n).
+func replaceDespatchRelatedDocuments(ctx context.Context, tx pgx.Tx, despatchID string, docs []model.RelatedDocument) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM despatch_related_documents WHERE despatch_id = $1`, despatchID); err != nil {
+		return err
+	}
+	if len(docs) == 0 {
+		return nil
+	}
+	rows := make([][]any, 0, len(docs))
+	for i, d := range docs {
+		var issuer any
+		if d.IssuerRUC != "" {
+			issuer = d.IssuerRUC
+		}
+		rows = append(rows, []any{despatchID, i + 1, d.DocType, d.Number, issuer})
+	}
+	_, err := tx.CopyFrom(ctx,
+		pgx.Identifier{"despatch_related_documents"},
+		[]string{"despatch_id", "position", "doc_type", "number", "issuer_ruc"},
+		pgx.CopyFromRows(rows),
+	)
+	return err
 }
 
 // GetDespatchLines returns the goods lines for a despatch, ordered by
@@ -225,6 +279,8 @@ type DespatchCreateInput struct {
 	RelatedDocNumber *string
 
 	Lines []DespatchLineInput
+	// RelatedDocuments are the guía's documentos relacionados.
+	RelatedDocuments []model.RelatedDocument
 }
 
 // DespatchLineInput is one goods line for creating or updating a despatch.
@@ -320,12 +376,21 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				out.ID, l.LineNumber, l.Description, l.Quantity, l.UnitCode, l.ProductCode,
 			})
 		}
-		_, err := tx.CopyFrom(ctx,
+		if _, err := tx.CopyFrom(ctx,
 			pgx.Identifier{"despatch_lines"},
 			[]string{"despatch_id", "line_number", "description", "quantity", "unit_code", "product_code"},
 			pgx.CopyFromRows(linkRows),
-		)
-		return err
+		); err != nil {
+			return err
+		}
+		if err := replaceDespatchRelatedDocuments(ctx, tx, out.ID, in.RelatedDocuments); err != nil {
+			return err
+		}
+		out.RelatedDocuments = in.RelatedDocuments
+		if out.RelatedDocuments == nil {
+			out.RelatedDocuments = []model.RelatedDocument{}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -400,6 +465,8 @@ type DespatchUpdateInput struct {
 	RelatedDocNumber *string
 
 	Lines []DespatchLineInput
+	// RelatedDocuments replace the existing set when non-nil (nil = keep).
+	RelatedDocuments []model.RelatedDocument
 }
 
 // UpdateDraftDespatch patches a draft despatch and (optionally) replaces
@@ -430,6 +497,17 @@ func (p *Pool) UpdateDraftDespatch(ctx context.Context, despatchID string, in De
 		if err := scanDespatch(tx.QueryRow(ctx, sql, args...), &d); err != nil {
 			return err
 		}
+
+		if in.RelatedDocuments != nil {
+			if err := replaceDespatchRelatedDocuments(ctx, tx, despatchID, in.RelatedDocuments); err != nil {
+				return err
+			}
+		}
+		docs, err := getDespatchRelatedDocuments(ctx, tx, despatchID)
+		if err != nil {
+			return err
+		}
+		d.RelatedDocuments = docs
 
 		if in.Lines != nil {
 			if _, err := tx.Exec(ctx,

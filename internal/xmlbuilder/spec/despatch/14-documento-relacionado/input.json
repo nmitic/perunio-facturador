@@ -28,9 +28,13 @@
     "driverName": "JUAN PEREZ",
     "vehiclePlate": "ABC123",
     "status": "draft",
-    "relatedDocType": "01",
-    "relatedDocSeries": "F001",
-    "relatedDocNumber": "123"
+    "relatedDocuments": [
+      {
+        "docType": "01",
+        "number": "F001-123",
+        "issuerRuc": "20100113612"
+      }
+    ]
   },
   "lines": [
     {

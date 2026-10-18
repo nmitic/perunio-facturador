@@ -1,0 +1,21 @@
+case: dos-documentos-relacionados
+document: despatch
+why: >-
+  GRE 2.0 takes several documentos relacionados, one
+  cac:AdditionalDocumentReference each, in the order entered: here the factura
+  and the constancia de depósito de detracción (Cat.61 80), which needs no
+  issuer (3380 lists only 01, 03, 04, 09, 12, 48 and 92).
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference"
+    count: 2
+  - xpath: "/*/cac:AdditionalDocumentReference[1]/cbc:DocumentTypeCode"
+    equals: "01"
+  - xpath: "/*/cac:AdditionalDocumentReference[2]/cbc:DocumentTypeCode"
+    equals: "80"
+  - xpath: "/*/cac:AdditionalDocumentReference[2]/cbc:ID"
+    equals: "123456789"
+    sunat: "3441"
+  - xpath: "/*/cac:AdditionalDocumentReference[2]/cac:IssuerParty"
+    absent: true

@@ -91,10 +91,15 @@ type Despatch struct {
 	EventCode     *string `json:"eventCode"`     // Cat.59
 	OriginalGreID *string `json:"originalGreId"` // FK to despatches.id
 
-	// Related document reference (optional — e.g. the invoice/order).
+	// Legacy single related document, superseded by RelatedDocuments (migration
+	// 0148 copied it there). Read for display only; nothing builds from it.
 	RelatedDocType   *string `json:"relatedDocType"`
 	RelatedDocSeries *string `json:"relatedDocSeries"`
 	RelatedDocNumber *string `json:"relatedDocNumber"`
+
+	// RelatedDocuments are the guía's documentos relacionados, each a
+	// cac:AdditionalDocumentReference, in the order they were entered.
+	RelatedDocuments []RelatedDocument `json:"relatedDocuments"`
 
 	Status string `json:"status"`
 
@@ -125,4 +130,17 @@ type DespatchLine struct {
 	UnitCode    string    `json:"unitCode"` // UN/ECE rec 20 (e.g. NIU, KGM)
 	ProductCode *string   `json:"productCode"`
 	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// RelatedDocument is one documento relacionado of a guía (GRE 2.0
+// cac:AdditionalDocumentReference). DocType is Cat.61; Number is the whole
+// cbc:ID — "<serie>-<número>" for a comprobante, a DAM's
+// "<aduana>-<año>-<régimen>-<correlativo>", a constancia's number — whose format
+// SUNAT checks per type (3441). IssuerRUC is the RUC of whoever issued it
+// (cac:IssuerParty), mandatory for the Cat.61 types SUNAT flags (3380/3382):
+// the remitente's own on a venta, the proveedor's on a compra.
+type RelatedDocument struct {
+	DocType   string `json:"docType"`
+	Number    string `json:"number"`
+	IssuerRUC string `json:"issuerRuc,omitempty"`
 }

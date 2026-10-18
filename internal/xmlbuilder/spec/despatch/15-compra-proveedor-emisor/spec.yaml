@@ -1,0 +1,18 @@
+case: compra-proveedor-emisor
+document: despatch
+why: >-
+  A compra (motivo 02): the related factura is the proveedor's, so its
+  cac:IssuerParty is the proveedor's RUC, not the remitente's. Declaring the
+  remitente as the issuer would point SUNAT at a factura that does not exist
+  (OBSERV 4382).
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+assert:
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    equals: "F002-4587"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID"
+    equals: "20601327318"
+    sunat: "3380"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID/@schemeID"
+    equals: "6"
+    sunat: "3382"

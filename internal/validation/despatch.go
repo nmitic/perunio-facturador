@@ -104,14 +104,7 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 			Message: "la fecha de entrega al transportista no puede ser anterior a la fecha de emisión",
 		})
 	}
-	// A related document is sent with its GRE Cat.61 type (ERROR 2692).
-	if d.RelatedDocSeries != nil && *d.RelatedDocSeries != "" &&
-		(d.RelatedDocType == nil || *d.RelatedDocType == "") {
-		errs = append(errs, model.ValidationError{
-			Code: 2692, Field: "relatedDocType",
-			Message: "el documento relacionado requiere su tipo (catálogo 61)",
-		})
-	}
+	errs = append(errs, validateRelatedDocuments(d)...)
 	// A declared driver carries nombres and apellidos (ERROR 3360 / 3361).
 	// driverName alone, from drafts older than driverFamilyName, must hold
 	// both so the builder can split it.

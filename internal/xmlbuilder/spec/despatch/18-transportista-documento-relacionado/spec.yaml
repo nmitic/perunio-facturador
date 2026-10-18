@@ -1,0 +1,21 @@
+case: transportista-documento-relacionado
+document: despatch
+why: >-
+  A GRE transportista relates the remitente's guía (Cat.61 09, valid on a 31:
+  gre-t). Its issuer is the remitente, whose RUC the transportista states
+  (3380 on the 31 lists 09).
+sources:
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Transportista2_0"
+assert:
+  - xpath: "/*/cbc:DespatchAdviceTypeCode"
+    equals: "31"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentTypeCode"
+    equals: "09"
+    sunat: "2692"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:ID"
+    equals: "T001-45"
+  - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentType"
+    equals: "Guía de Remisión Remitente"
+  - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID"
+    equals: "20601327318"
+    sunat: "3380"
