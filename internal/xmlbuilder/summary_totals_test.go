@@ -9,7 +9,7 @@ import (
 func TestFillSummaryTotals(t *testing.T) {
 	lines := []model.LineItem{
 		// gravado 1000, after a global discount the document subtotal is 1450
-		{TaxExemptionReasonCode: "10", LineTotal: "1000.00", IGVAmount: "180.00"},
+		{TaxExemptionReasonCode: "10", LineTotal: "1000.00", IGVAmount: "180.00", OtherTaxesRate: "5.00", OtherTaxesAmount: "50.00"},
 		{TaxExemptionReasonCode: "20", LineTotal: "200.00"},
 		{TaxExemptionReasonCode: "30", LineTotal: "300.00"},
 		// gratuitos: referential base = unitPriceWithTax × qty − IGV
@@ -30,6 +30,7 @@ func TestFillSummaryTotals(t *testing.T) {
 		TotalFreeExonerated: "20.00",
 		TotalFreeUnaffected: "5.00",
 		TotalFreeIGV:        "9.00",
+		TotalOtherTaxes:     "50.00",
 	}
 	if got != want {
 		t.Errorf("FillSummaryTotals =\n%+v\nwant\n%+v", got, want)

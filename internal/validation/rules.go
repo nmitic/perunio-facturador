@@ -746,6 +746,45 @@ func penRate(req model.IssueRequest) (float64, bool) {
 	return rate, true
 }
 
+// validateOtrosTributos checks the otros tributos (Cat.05 9999) a line carries.
+// SUNAT pairs 9999 with every main tributo (3223), so the checks are its own:
+// a rate in the n(3,5) format greater than zero (3102), an amount of rate ×
+// the line's valor de venta (3109), never on a gratuito line (Perunio only
+// models it on onerosa lines, whose payable includes it), and never on an
+// exportación (3107) — operation types 0200-0208, or a nota de ajustes de
+// exportación (motivo 11).
+func validateOtrosTributos(req model.IssueRequest) []model.ValidationError {
+	var errs []model.ValidationError
+	exportacion := sunat.Cat51Exportacion(req.OperationType) ||
+		(req.DocType == sunat.Cat01NotaCredito && req.ReasonCode == sunat.Cat09AjustesExportacion) ||
+		(req.DocType == sunat.Cat01NotaDebito && req.ReasonCode == sunat.Cat10AjustesExportacion)
+	for _, li := range req.Items {
+		amount, _ := strconv.ParseFloat(strings.TrimSpace(li.OtherTaxesAmount), 64)
+		if amount == 0 && strings.TrimSpace(li.OtherTaxesRate) == "" {
+			continue
+		}
+		field := fmt.Sprintf("items[%d].otherTaxesAmount", li.LineNumber)
+		switch {
+		case exportacion:
+			errs = append(errs, model.ValidationError{Code: 3107, Message: fmt.Sprintf("line %d: una exportación no lleva otros tributos", li.LineNumber), Field: field})
+			continue
+		case sunat.Cat07Gratuito(li.TaxExemptionReasonCode):
+			errs = append(errs, model.ValidationError{Code: 3223, Message: fmt.Sprintf("line %d: una línea gratuita no lleva otros tributos", li.LineNumber), Field: field})
+			continue
+		}
+		rate, err := strconv.ParseFloat(strings.TrimSpace(li.OtherTaxesRate), 64)
+		if err != nil || rate <= 0 || rate >= 1000 {
+			errs = append(errs, model.ValidationError{Code: 3102, Message: fmt.Sprintf("line %d: la tasa de otros tributos debe ser mayor a 0", li.LineNumber), Field: fmt.Sprintf("items[%d].otherTaxesRate", li.LineNumber)})
+			continue
+		}
+		base, _ := strconv.ParseFloat(li.LineTotal, 64)
+		if expected := base * rate / 100; math.Abs(expected-amount) > 0.01 {
+			errs = append(errs, model.ValidationError{Code: 3109, Message: fmt.Sprintf("line %d: otros tributos %.2f no es %s%% de %.2f (%.2f)", li.LineNumber, amount, strconv.FormatFloat(rate, 'f', -1, 64), base, expected), Field: field})
+		}
+	}
+	return errs
+}
+
 // validateHidrobiologicos guards the six Cat.55 concepts a detracción de
 // recursos hidrobiológicos (Cat.54 004 → 1002) declares on every line. Each is
 // an ERROR when missing (3063, 3130-3135); the lengths are SUNAT's formats

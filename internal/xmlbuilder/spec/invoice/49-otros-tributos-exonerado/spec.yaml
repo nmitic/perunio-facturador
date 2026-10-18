@@ -1,0 +1,22 @@
+case: otros-tributos-exonerado
+document: cpe
+why: >-
+  9997 + 9999 on an exonerado line, next to a gravado line without otros
+  tributos. The document 9999 subtotal is the Σ of the 9999 lines only (3297),
+  never the document's whole valor de venta.
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']"
+    absent: true
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxAmount"
+    equals: "20.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='2']/cac:TaxTotal/cbc:TaxAmount"
+    equals: "20.00"
+    sunat: "3292"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxableAmount"
+    equals: "200.00"
+    sunat: "3297"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "200.00"
+    sunat: "3294"

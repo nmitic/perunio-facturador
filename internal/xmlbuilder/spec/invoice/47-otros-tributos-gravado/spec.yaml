@@ -1,0 +1,37 @@
+case: otros-tributos-gravado
+document: cpe
+why: >-
+  A gravado line that also pays otros tributos (Cat.05 9999) at 10 %. The 9999
+  is a line tributo next to the IGV: its own cac:TaxSubtotal, base the line's
+  valor de venta, amount rate × base (3109), and no afectación code (3050). The
+  line and document cbc:TaxAmount add it to the IGV (3292, 3294), and the
+  document 9999 subtotal is the Σ of the lines' (3297, 3299).
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxableAmount"
+    equals: "1000.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxAmount"
+    equals: "100.00"
+    sunat: "3109"
+  - xpath: "number(/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cac:TaxCategory/cbc:Percent) = 10"
+    true: true
+    sunat: "2992"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+    absent: true
+    sunat: "3050"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cbc:TaxAmount"
+    equals: "280.00"
+    sunat: "3292"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxableAmount"
+    equals: "1000.00"
+    sunat: "3297"
+  - xpath: "/*/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxAmount"
+    equals: "100.00"
+    sunat: "3299"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "280.00"
+    sunat: "3294"
+  - xpath: "/*/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"
+    equals: "1280.00"
+    sunat: "3279"

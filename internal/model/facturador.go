@@ -260,9 +260,12 @@ type IssuedDocumentItem struct {
 	LineTotal              string  `json:"lineTotal"`
 	PriceTypeCode          *string `json:"priceTypeCode"`
 	// Detracción de recursos hidrobiológicos (004) only; see model.LineItem.
-	EspecieVendida  *string   `json:"especieVendida"`
-	CantidadEspecie *string   `json:"cantidadEspecie"`
-	CreatedAt       time.Time `json:"createdAt"`
+	EspecieVendida  *string `json:"especieVendida"`
+	CantidadEspecie *string `json:"cantidadEspecie"`
+	// Otros tributos (Cat.05 9999); see model.LineItem.
+	OtherTaxesRate   *string   `json:"otherTaxesRate"`
+	OtherTaxesAmount *string   `json:"otherTaxesAmount"`
+	CreatedAt        time.Time `json:"createdAt"`
 }
 
 // ComprobanteAttachment is a supporting file attached to an issued comprobante

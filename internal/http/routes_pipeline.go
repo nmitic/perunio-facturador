@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -184,6 +185,14 @@ func buildIssueRequestFromDoc(
 	req.Anexo1UnidadTransporte = doc.Anexo1UnidadTransporte
 
 	req.Items = lineItemsFromDB(items)
+	// The document's otros tributos (9999) are the Σ of its lines' (3299), so a
+	// draft saved before that rule cannot carry a stale total.
+	var otros float64
+	for _, li := range req.Items {
+		v, _ := strconv.ParseFloat(li.OtherTaxesAmount, 64)
+		otros += v
+	}
+	req.TotalOtherTaxes = strconv.FormatFloat(math.Round(otros*100)/100, 'f', 2, 64)
 	return req
 }
 
@@ -205,6 +214,8 @@ func lineItemsFromDB(items []model.IssuedDocumentItem) []model.LineItem {
 			ISCTierRange:           derefString(it.IscTierRange, ""),
 			EspecieVendida:         derefString(it.EspecieVendida, ""),
 			CantidadEspecie:        derefString(it.CantidadEspecie, ""),
+			OtherTaxesRate:         derefString(it.OtherTaxesRate, ""),
+			OtherTaxesAmount:       derefString(it.OtherTaxesAmount, ""),
 			DiscountAmount:         derefString(it.DiscountAmount, "0.00"),
 			LineTotal:              it.LineTotal,
 			PriceTypeCode:          derefString(it.PriceTypeCode, "01"),

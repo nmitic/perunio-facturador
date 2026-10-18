@@ -1,0 +1,19 @@
+case: otros-tributos-con-isc
+document: cpe
+why: >-
+  1000 + 2000 + 9999 on one line, a combination 3223 allows. The 9999 base is
+  the valor de venta, not the IGV base (which includes the ISC), and the line
+  cbc:TaxAmount is IGV + ISC + otros (3292).
+sources:
+  - "resources/reglas/reglas-validacion-cpe-2026-08-26.xlsx › Factura2_0"
+assert:
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxableAmount"
+    equals: "100.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cac:TaxSubtotal[cac:TaxCategory/cac:TaxScheme/cbc:ID='9999']/cbc:TaxAmount"
+    equals: "5.00"
+  - xpath: "/*/cac:InvoiceLine[cbc:ID='1']/cac:TaxTotal/cbc:TaxAmount"
+    equals: "46.60"
+    sunat: "3292"
+  - xpath: "/*/cac:TaxTotal/cbc:TaxAmount"
+    equals: "46.60"
+    sunat: "3294"

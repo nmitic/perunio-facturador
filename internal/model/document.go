@@ -347,6 +347,12 @@ type LineItem struct {
 	LineTotal              string `json:"lineTotal"`
 	PriceTypeCode          string `json:"priceTypeCode"` // "01" or "02"
 
+	// Otros tributos (Cat.05 9999) on this line: the rate as a percentage
+	// ("10.00") and its amount, rate × the line's valor de venta (3109). Empty
+	// when the line pays none. Only onerosa lines carry it.
+	OtherTaxesRate   string `json:"otherTaxesRate,omitempty"`
+	OtherTaxesAmount string `json:"otherTaxesAmount,omitempty"`
+
 	// Detracción de recursos hidrobiológicos (004 / 1002) only: the especie sold
 	// on this line (Cat.55 3003, an..150) and its cantidad in toneladas métricas
 	// (3006, decimal 12,2). Empty on every other line.

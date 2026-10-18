@@ -13,10 +13,13 @@ import (
 //
 // Gratuito lines are not part of subtotal. Their referential base goes to
 // TotalFree and, by type, to the TotalFree* fields; the gravadas' would-be IGV
-// to TotalFreeIGV.
+// to TotalFreeIGV. TotalOtherTaxes is the Σ of the lines' otros tributos (9999).
 func FillSummaryTotals(item *model.SummaryItem, subtotal string, lines []model.LineItem) {
-	var exo, inaf, exp, freeGrav, freeExo, freeInaf, freeIGV float64
+	var exo, inaf, exp, freeGrav, freeExo, freeInaf, freeIGV, otros float64
 	for _, li := range lines {
+		if hasOtrosTributos(li) {
+			otros += parseDecimal(li.OtherTaxesAmount)
+		}
 		code := li.TaxExemptionReasonCode
 		if sunat.Cat07Gratuito(code) {
 			base := gratuitoReferentialBase(li)
@@ -55,4 +58,7 @@ func FillSummaryTotals(item *model.SummaryItem, subtotal string, lines []model.L
 	item.TotalFreeExonerated = formatDecimal(freeExo)
 	item.TotalFreeUnaffected = formatDecimal(freeInaf)
 	item.TotalFreeIGV = formatDecimal(freeIGV)
+	// "Total Otros tributos" (9999) is the Σ of the lines' own, like the
+	// document's (3299) — not a document total typed by the client.
+	item.TotalOtherTaxes = formatDecimal(otros)
 }

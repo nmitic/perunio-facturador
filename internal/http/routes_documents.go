@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -156,6 +157,10 @@ type createDocumentItemBody struct {
 	// validation.validateHidrobiologicos.
 	EspecieVendida  *string `json:"especieVendida,omitempty"`
 	CantidadEspecie *string `json:"cantidadEspecie,omitempty"`
+	// Otros tributos (Cat.05 9999): rate as a percentage ("10.00") and amount.
+	// The document's totalOtherTaxes is their Σ, never the client's figure.
+	OtherTaxesRate   *string `json:"otherTaxesRate,omitempty"`
+	OtherTaxesAmount *string `json:"otherTaxesAmount,omitempty"`
 }
 
 // detraccionBody is the detracción (SPOT) object on the create/update wire
@@ -438,6 +443,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 			PriceTypeCode:          it.PriceTypeCode,
 			EspecieVendida:         it.EspecieVendida,
 			CantidadEspecie:        it.CantidadEspecie,
+			OtherTaxesRate:         it.OtherTaxesRate,
+			OtherTaxesAmount:       it.OtherTaxesAmount,
 		})
 	}
 	in := db.CreateDocumentInput{
@@ -455,7 +462,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		Subtotal:                b.Subtotal,
 		TotalIgv:                b.TotalIgv,
 		TotalIsc:                b.TotalIsc,
-		TotalOtherTaxes:         b.TotalOtherTaxes,
+		TotalOtherTaxes:         sumOtherTaxes(b.Items),
 		TotalDiscount:           b.TotalDiscount,
 		GlobalDiscount:          b.GlobalDiscount,
 		BillingPeriodMonths:     b.BillingPeriodMonths,
@@ -582,7 +589,6 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 		Subtotal:                b.Subtotal,
 		TotalIgv:                b.TotalIgv,
 		TotalIsc:                b.TotalIsc,
-		TotalOtherTaxes:         b.TotalOtherTaxes,
 		TotalDiscount:           b.TotalDiscount,
 		GlobalDiscount:          b.GlobalDiscount,
 		BillingPeriodMonths:     b.BillingPeriodMonths,
@@ -603,6 +609,10 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 	if b.Anticipos != nil {
 		in.AnticiposIsSet = true
 		in.Anticipos = toModelAnticipos(*b.Anticipos)
+	}
+	if b.Items != nil {
+		// Σ of the lines' otros tributos (9999), never the client's figure.
+		in.TotalOtherTaxes = sumOtherTaxes(b.Items)
 	}
 	if b.Hidrobiologicos != nil {
 		in.HidrobiologicosIsSet = true
@@ -644,6 +654,8 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 				PriceTypeCode:          it.PriceTypeCode,
 				EspecieVendida:         it.EspecieVendida,
 				CantidadEspecie:        it.CantidadEspecie,
+				OtherTaxesRate:         it.OtherTaxesRate,
+				OtherTaxesAmount:       it.OtherTaxesAmount,
 			})
 		}
 		in.Items = items
@@ -922,4 +934,19 @@ func (s *Server) clearDocumentPaymentHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeSuccess(w, map[string]string{"message": "Pago eliminado"})
+}
+
+// sumOtherTaxes is a document's total otros tributos (Cat.05 9999): the Σ of its
+// lines' amounts, which is what SUNAT checks the document subtotal against
+// (3299). The body's own totalOtherTaxes is ignored.
+func sumOtherTaxes(items []createDocumentItemBody) *string {
+	var total float64
+	for _, it := range items {
+		if it.OtherTaxesAmount != nil {
+			v, _ := strconv.ParseFloat(*it.OtherTaxesAmount, 64)
+			total += v
+		}
+	}
+	out := strconv.FormatFloat(math.Round(total*100)/100, 'f', 2, 64)
+	return &out
 }

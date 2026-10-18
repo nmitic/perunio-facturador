@@ -557,6 +557,7 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       especie_vendida, cantidad_especie,
+			       other_taxes_rate, other_taxes_amount,
 			       created_at
 			FROM issued_document_items
 			WHERE document_id = ANY($1)
@@ -573,7 +574,8 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
-				&it.EspecieVendida, &it.CantidadEspecie, &it.CreatedAt); err != nil {
+				&it.EspecieVendida, &it.CantidadEspecie,
+				&it.OtherTaxesRate, &it.OtherTaxesAmount, &it.CreatedAt); err != nil {
 				return err
 			}
 			out[it.DocumentID] = append(out[it.DocumentID], it)
@@ -593,6 +595,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       especie_vendida, cantidad_especie,
+			       other_taxes_rate, other_taxes_amount,
 			       created_at
 			FROM issued_document_items
 			WHERE document_id = $1
@@ -609,7 +612,8 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
-				&it.EspecieVendida, &it.CantidadEspecie, &it.CreatedAt); err != nil {
+				&it.EspecieVendida, &it.CantidadEspecie,
+				&it.OtherTaxesRate, &it.OtherTaxesAmount, &it.CreatedAt); err != nil {
 				return err
 			}
 			out = append(out, it)

@@ -1103,3 +1103,44 @@ func TestValidateNotaIGVRate(t *testing.T) {
 		is.True(t, hasErrorField(validation.Validate(req), "items[1].igvAmount"), "3103: the nota must carry the factura's 18%")
 	})
 }
+
+func TestValidateOtrosTributos(t *testing.T) {
+	withOtros := func() model.IssueRequest {
+		req := newValidInvoice()
+		req.Items[0].OtherTaxesRate = "10.00"
+		req.Items[0].OtherTaxesAmount = "100.00"
+		req.TotalOtherTaxes = "100.00"
+		req.TotalAmount = "1280.00"
+		req.TaxInclusiveAmount = "1280.00"
+		return req
+	}
+
+	t.Run("10% of the valor de venta passes", func(t *testing.T) {
+		is.Equal(t, 0, len(validation.Validate(withOtros())))
+	})
+
+	t.Run("an amount that is not rate × base is refused", func(t *testing.T) {
+		req := withOtros()
+		req.Items[0].OtherTaxesAmount = "118.00" // computed on the IGV-inclusive value
+		is.True(t, hasErrorField(validation.Validate(req), "items[1].otherTaxesAmount"), "3109")
+	})
+
+	t.Run("a missing rate is refused", func(t *testing.T) {
+		req := withOtros()
+		req.Items[0].OtherTaxesRate = ""
+		is.True(t, hasErrorField(validation.Validate(req), "items[1].otherTaxesRate"), "2992/3102")
+	})
+
+	t.Run("an exportación is refused", func(t *testing.T) {
+		req := withOtros()
+		req.OperationType = sunat.Cat51ExportacionBienes
+		is.True(t, hasErrorField(validation.Validate(req), "items[1].otherTaxesAmount"), "3107")
+	})
+
+	t.Run("a gratuito line is refused", func(t *testing.T) {
+		req := withOtros()
+		req.Items[0].TaxExemptionReasonCode = "11"
+		req.Items[0].PriceTypeCode = "02"
+		is.True(t, hasErrorField(validation.Validate(req), "items[1].otherTaxesAmount"), "only onerosa lines carry 9999")
+	})
+}

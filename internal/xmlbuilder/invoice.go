@@ -248,6 +248,10 @@ type docTaxBuckets struct {
 	// gratGravBase is the part of gratBase from gravado gratuitos (11-16), the
 	// base their would-be IGV (gratIGV) was computed on.
 	gratGravBase float64
+	// otrosBase / otrosAmount are the Σ of the otros tributos (9999) line
+	// subtotals: the document 9999 subtotal must equal them (3297 / 3299).
+	otrosBase   float64
+	otrosAmount float64
 	// iscBase / iscAmount are the Σ of the ISC line subtotals (onerosa lines
 	// only): the document ISC subtotal must equal them (3296 / 3298).
 	iscBase   float64
@@ -277,6 +281,10 @@ func sumLineBuckets(items []model.LineItem) docTaxBuckets {
 		if isc != 0 {
 			b.iscBase += base
 			b.iscAmount += isc
+		}
+		if hasOtrosTributos(li) {
+			b.otrosBase += base
+			b.otrosAmount += parseDecimal(li.OtherTaxesAmount)
 		}
 		switch taxCode {
 		case "1000":
@@ -526,8 +534,9 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 	// across all subtotals (IGV + IVAP). Gratuita IGV is informativo and lives
 	// inside its own subtotal; including it in the top-level TaxAmount also
 	// matches the value emitted for documents without gratuito lines.
-	// ISC is a tributo the customer pays, so it is part of the total too (3294).
-	totalTax := buckets.regularIGV + buckets.ivapIGV + buckets.iscAmount
+	// ISC and otros tributos are tributos the customer pays, so they are part
+	// of the total too (3294).
+	totalTax := buckets.regularIGV + buckets.ivapIGV + buckets.iscAmount + buckets.otrosAmount
 	tt := taxTotal{
 		TaxAmount: newCurrencyAmount(formatDecimal(totalTax), cur),
 	}
@@ -602,12 +611,14 @@ func buildDocumentTaxTotal(req model.IssueRequest) taxTotal {
 		})
 	}
 
-	// Other taxes subtotal (if present)
-	if !isZeroAmount(req.TotalOtherTaxes) {
+	// Otros tributos subtotal: the Σ of the 9999 lines' bases and amounts, not
+	// the whole valor de venta — a line without otros tributos carries none
+	// (3297 / 3299). At most one per document.
+	if buckets.otrosBase > 0 || buckets.otrosAmount > 0 {
 		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
-			TaxableAmount: newCurrencyAmount(req.Subtotal, cur),
-			TaxAmount:     newCurrencyAmount(req.TotalOtherTaxes, cur),
-			TaxCategory:   newTaxCategory("S", "", sunat.Cat05Otros),
+			TaxableAmount: newCurrencyAmount(formatDecimal(buckets.otrosBase), cur),
+			TaxAmount:     newCurrencyAmount(formatDecimal(buckets.otrosAmount), cur),
+			TaxCategory:   newTaxCategory(sunat.Cat05TaxCategoryId(sunat.Cat05Otros), "", sunat.Cat05Otros),
 		})
 	}
 
@@ -1020,7 +1031,11 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 	lineTax := taxAmount
 	hasISC := !isZeroAmount(li.ISCAmount) && !sunat.Cat07Gratuito(li.TaxExemptionReasonCode)
 	if hasISC {
-		lineTax = formatDecimal(parseDecimal(taxAmount) + parseDecimal(li.ISCAmount))
+		lineTax = formatDecimal(parseDecimal(lineTax) + parseDecimal(li.ISCAmount))
+	}
+	hasOtros := hasOtrosTributos(li)
+	if hasOtros {
+		lineTax = formatDecimal(parseDecimal(lineTax) + parseDecimal(li.OtherTaxesAmount))
 	}
 
 	lineCat := newLineTaxCategory(li.TaxExemptionReasonCode, taxCode)
@@ -1058,7 +1073,24 @@ func buildLineTaxTotal(li model.LineItem, cur string) taxTotal {
 		})
 	}
 
+	// Otros tributos (9999): its own subtotal on the line's valor de venta, at
+	// the line's rate (2992, 3109), with no afectación code (3050).
+	if hasOtros {
+		tt.TaxSubtotal = append(tt.TaxSubtotal, taxSubtotal{
+			TaxableAmount: newCurrencyAmount(li.LineTotal, cur),
+			TaxAmount:     newCurrencyAmount(li.OtherTaxesAmount, cur),
+			TaxCategory: newTaxCategory(sunat.Cat05TaxCategoryId(sunat.Cat05Otros),
+				formatDecimal(parseDecimal(li.OtherTaxesRate)), sunat.Cat05Otros),
+		})
+	}
+
 	return tt
+}
+
+// hasOtrosTributos reports whether an onerosa line pays otros tributos (9999).
+// Gratuito lines never do: validation refuses it.
+func hasOtrosTributos(li model.LineItem) bool {
+	return !isZeroAmount(li.OtherTaxesAmount) && !sunat.Cat07Gratuito(li.TaxExemptionReasonCode)
 }
 
 // iscPercent is the ISC rate the line was taxed at, ISC ÷ valor de venta, as a
