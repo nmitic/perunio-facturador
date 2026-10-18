@@ -1068,3 +1068,38 @@ func TestValidateIGVReducido(t *testing.T) {
 		is.True(t, hasErrorField(errs, "anticipos[0].baseAmount"), "an 18% anticipo does not match a 10.5% issuer")
 	})
 }
+
+// A nota mirrors the rate of the comprobante it corrects: the pipeline sets
+// IGVReducido from that comprobante's lines (model.IsIGVReducidoRate), so a
+// nota at 18 % for an 18 % factura passes even if the company now applies
+// 10.5 %, and the reverse.
+func TestValidateNotaIGVRate(t *testing.T) {
+	nota := func(req model.IssueRequest) model.IssueRequest {
+		req.DocType = sunat.Cat01NotaCredito
+		req.Series = "FC01"
+		req.ReferenceDocType = sunat.Cat01Factura
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 7
+		req.ReasonCode = "01"
+		req.ReasonDescription = "Anulación de la operación"
+		return req
+	}
+
+	t.Run("an 18% nota for an 18% factura", func(t *testing.T) {
+		req := nota(newValidInvoice())
+		req.IGVReducido = model.IsIGVReducidoRate(180, 1000)
+		is.True(t, !hasErrorField(validation.Validate(req), "items[1].igvAmount"), "the factura's rate, not the company's")
+	})
+
+	t.Run("a 10.5% nota for a 10.5% factura", func(t *testing.T) {
+		req := nota(newReducidoInvoice())
+		req.IGVReducido = model.IsIGVReducidoRate(105, 1000)
+		is.True(t, !hasErrorField(validation.Validate(req), "items[1].igvAmount"), "the factura's rate")
+	})
+
+	t.Run("a 10.5% nota for an 18% factura is refused", func(t *testing.T) {
+		req := nota(newReducidoInvoice())
+		req.IGVReducido = model.IsIGVReducidoRate(180, 1000)
+		is.True(t, hasErrorField(validation.Validate(req), "items[1].igvAmount"), "3103: the nota must carry the factura's 18%")
+	})
+}

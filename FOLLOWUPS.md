@@ -96,26 +96,3 @@ modelled on 2026-10-17.)
   the comprobante's own. R.S. 183-2004 art. 20 governs only the deposit (SBS
   promedio ponderado venta, earlier of the IGV obligation and the deposit
   date), and no article says how the umbral converts (re-read 2026-10-17).
-
-## FU-12 — A nota at a different IGV rate than its comprobante
-
-**Status:** found while building FU-2; not handled.
-
-**Today** the IGV rate of every comprobante is the company's current setting
-(`companies.igv_reducido`), in the form and in `igvRateFraction`
-(`internal/validation/rules.go`). A nota de crédito or débito is computed and
-validated at that rate too. If the company switched between 18 % and 10.5 %
-after issuing the factura or boleta, its nota is computed at the new rate and
-refused (3103), although it has to mirror the rate the comprobante was taxed
-at.
-
-Also: the disminución (motivo 09) guard in `use-nota-form.ts` (`makeNotaSchema`)
-derives a line's base with `computeLine` without the company rate, so for a
-10.5 % issuer with "precio incluye IGV" it slightly underestimates the credited
-base.
-
-**Fix** Take a nota's rate from the referenced comprobante's own lines (IGV ÷
-base of its gravado lines), in the nota form (prefill), in
-`buildBoletaAnulacionRequest`, and in the facturador (`buildIssueRequestFromDoc`
-can read the referenced document), instead of the company setting. Spec/validation
-cases: a nota at 18 % for a 10.5 % company's older factura, and the reverse.

@@ -618,3 +618,40 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 	})
 	return out, err
 }
+
+// ReferencedIGVAmounts returns the Σ IGV and the Σ IGV base (valor de venta +
+// ISC) of the gravado onerosa lines of the company's comprobante doc_type /
+// series / correlative — the comprobante a nota corrects. found is false when
+// Perunio has no such comprobante, or it has no gravado onerosa line, so the
+// caller falls back to the company's own rate.
+func (p *Pool) ReferencedIGVAmounts(ctx context.Context, companyID, docType, series string, correlative int) (igv, base float64, found bool, err error) {
+	err = p.WithTenant(ctx, func(tx pgx.Tx) error {
+		var n int
+		if err := tx.QueryRow(ctx, `
+			SELECT COUNT(*),
+			       COALESCE(SUM(i.igv_amount), 0)::float8,
+			       COALESCE(SUM(i.line_total + COALESCE(i.isc_amount, 0)), 0)::float8
+			FROM issued_document_items i
+			JOIN issued_documents d ON d.id = i.document_id
+			WHERE d.company_id = $1 AND d.doc_type = $2 AND d.series = $3 AND d.correlative = $4
+			  AND i.tax_exemption_reason_code = ANY($5)
+		`, companyID, docType, series, correlative, igvOnerosaCodes()).Scan(&n, &igv, &base); err != nil {
+			return err
+		}
+		found = n > 0 && base > 0
+		return nil
+	})
+	return igv, base, found, err
+}
+
+// igvOnerosaCodes is every Cat.07 código of a gravado onerosa line (tributo
+// IGV, not gratuito): the lines whose IGV ÷ base is the comprobante's rate.
+func igvOnerosaCodes() []string {
+	var out []string
+	for _, code := range sunat.Cat07Codes {
+		if sunat.Cat07TaxSchemeCode(code) == sunat.Cat05IGV && !sunat.Cat07Gratuito(code) {
+			out = append(out, code)
+		}
+	}
+	return out
+}

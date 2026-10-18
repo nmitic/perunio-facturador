@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	sunat "github.com/nmitic/perunio-sunat-catalogs/sunat"
 	"github.com/perunio/perunio-facturador/internal/auth"
 	"github.com/perunio/perunio-facturador/internal/cdr"
 	facturadorCrypto "github.com/perunio/perunio-facturador/internal/crypto"
@@ -240,6 +241,20 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	issueReq := buildIssueRequestFromDoc(doc, items, deps.company.RUC, deps.company.CompanyName, address, deps.company.CuentaDetraccion)
 	issueReq.Environment = env
 	issueReq.IGVReducido = deps.company.IgvReducido
+	// A nota mirrors the comprobante it corrects, so it is taxed at THAT
+	// comprobante's rate — read from its own gravado lines — not at the
+	// company's current one, which may have changed since. A comprobante
+	// Perunio did not issue falls back to the company's.
+	if (doc.DocType == sunat.Cat01NotaCredito || doc.DocType == sunat.Cat01NotaDebito) && doc.ReferenceDocType != nil && doc.ReferenceDocSeries != nil && doc.ReferenceDocCorrelative != nil {
+		igv, base, found, err := s.pool.ReferencedIGVAmounts(ctx, companyID, *doc.ReferenceDocType, *doc.ReferenceDocSeries, *doc.ReferenceDocCorrelative)
+		if err != nil {
+			s.log.Error("get referenced igv rate", "error", err, "docId", docID)
+			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		}
+		if found {
+			issueReq.IGVReducido = model.IsIGVReducidoRate(igv, base)
+		}
+	}
 
 	// The SPOT umbral is measured against the whole operación: a comprobante
 	// of a venta con anticipos is judged by the deal's monto acordado.

@@ -234,6 +234,17 @@ func (r IssueRequest) NetoPendientePago() float64 {
 	return 0
 }
 
+// IsIGVReducidoRate reports whether igv ÷ base is the IGV reducido (10.5 %)
+// rather than the general 18 % — whichever is nearer. A nota reads the rate of
+// the comprobante it corrects this way, from that comprobante's own lines.
+func IsIGVReducidoRate(igv, base float64) bool {
+	if base <= 0 {
+		return false
+	}
+	pct := igv / base * 100
+	return math.Abs(pct-10.5) < math.Abs(pct-18)
+}
+
 // Anticipo is one prior advance-payment comprobante applied to (deducted
 // from) a factura de regularización. DocID is its SERIE-CORRELATIVO
 // ("F001-00000042") and DocTypeCode the Cat.12 related-document type
