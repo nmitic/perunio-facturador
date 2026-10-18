@@ -471,7 +471,7 @@ via the section and the pre-emit question.
 - `perunio-facturador`:
   - `go test ./internal/validation -run 'TestValidateDetraccion|TestValidateTransporteCarga'` (this also runs `TestValidateDetraccionCatalogo`)
   - `go test ./internal/xmlbuilder -run 'TestSpec/(invoice/39|boleta/0[46])'`
-- `perunio-frontend`: `npm run check:resolve-detraccion` (table test of `resolveDetraccion`).
+- `perunio-frontend`: `npx vitest run src/lib/facturador-utils.detraccion.test.ts` (table test of `resolveDetraccion`).
 
 A case that resolves a detracción in the frontend table must pass the Go
 validator, and vice versa.
