@@ -138,13 +138,21 @@ var (
 )
 
 type createDocumentItemBody struct {
-	LineNumber             *int    `json:"lineNumber,omitempty"`
-	ProductoID             *string `json:"productoId,omitempty"`
-	Description            string  `json:"description"`
-	Quantity               string  `json:"quantity"`
-	UnitCode               string  `json:"unitCode"`
-	UnitPrice              string  `json:"unitPrice"`
-	UnitPriceWithTax       *string `json:"unitPriceWithTax,omitempty"`
+	LineNumber       *int    `json:"lineNumber,omitempty"`
+	ProductoID       *string `json:"productoId,omitempty"`
+	Description      string  `json:"description"`
+	Quantity         string  `json:"quantity"`
+	UnitCode         string  `json:"unitCode"`
+	UnitPrice        string  `json:"unitPrice"`
+	UnitPriceWithTax *string `json:"unitPriceWithTax,omitempty"`
+	// The price exactly as the user typed it, and whether it was con IGV.
+	// UnitPrice is the valor unitario rounded to 2 decimals, which cannot give
+	// back a con-IGV price's IGV (S/ 100.00 con IGV → 84.75 → IGV 15.26); a nota
+	// or a repetir re-enters these instead, so it recomputes the same amounts.
+	// Sent together or not at all: clients from before they were stored send
+	// neither (see validateEntry).
+	EnteredUnitPrice       *string `json:"enteredUnitPrice,omitempty"`
+	PriceIncludesTax       *bool   `json:"priceIncludesTax,omitempty"`
 	TaxExemptionReasonCode *string `json:"taxExemptionReasonCode,omitempty"`
 	IgvAmount              string  `json:"igvAmount"`
 	IscAmount              *string `json:"iscAmount,omitempty"`
@@ -398,6 +406,9 @@ func (b *createDocumentBody) validate() string {
 		if !decimalRegex.MatchString(it.UnitPrice) {
 			return "item unitPrice inválido"
 		}
+		if msg := it.validateEntry(); msg != "" {
+			return msg
+		}
 		if !decimalRegex.MatchString(it.IgvAmount) {
 			return "item igvAmount inválido"
 		}
@@ -405,6 +416,18 @@ func (b *createDocumentBody) validate() string {
 			return "item lineTotal inválido"
 		}
 		_ = i
+	}
+	return ""
+}
+
+// validateEntry checks the price as entered: a decimal, sent with its con/sin
+// IGV flag, since one without the other cannot be re-entered.
+func (it createDocumentItemBody) validateEntry() string {
+	if (it.EnteredUnitPrice == nil) != (it.PriceIncludesTax == nil) {
+		return "item enteredUnitPrice y priceIncludesTax se envían juntos"
+	}
+	if it.EnteredUnitPrice != nil && !decimalRegex.MatchString(*it.EnteredUnitPrice) {
+		return "item enteredUnitPrice inválido"
 	}
 	return ""
 }
@@ -434,6 +457,8 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 			UnitCode:               it.UnitCode,
 			UnitPrice:              it.UnitPrice,
 			UnitPriceWithTax:       it.UnitPriceWithTax,
+			EnteredUnitPrice:       it.EnteredUnitPrice,
+			PriceIncludesTax:       it.PriceIncludesTax,
 			TaxExemptionReasonCode: it.TaxExemptionReasonCode,
 			IgvAmount:              it.IgvAmount,
 			IscAmount:              it.IscAmount,
@@ -646,6 +671,8 @@ func (b updateDocumentBody) toInput() db.UpdateDocumentInput {
 				UnitCode:               it.UnitCode,
 				UnitPrice:              it.UnitPrice,
 				UnitPriceWithTax:       it.UnitPriceWithTax,
+				EnteredUnitPrice:       it.EnteredUnitPrice,
+				PriceIncludesTax:       it.PriceIncludesTax,
 				TaxExemptionReasonCode: it.TaxExemptionReasonCode,
 				IgvAmount:              it.IgvAmount,
 				IscAmount:              it.IscAmount,
@@ -692,6 +719,12 @@ func (s *Server) updateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	if body.Detraccion != nil && body.DetraccionNoSujeta != nil && *body.DetraccionNoSujeta {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "detraccion y detraccionNoSujeta se excluyen")
 		return
+	}
+	for _, it := range body.Items {
+		if msg := it.validateEntry(); msg != "" {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", msg)
+			return
+		}
 	}
 
 	doc, err := s.pool.UpdateDraftDocument(r.Context(), docID, body.toInput())

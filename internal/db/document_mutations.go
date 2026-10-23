@@ -88,13 +88,17 @@ type CreateDocumentInput struct {
 
 // CreateDocumentItemInput is one line of a new document.
 type CreateDocumentItemInput struct {
-	LineNumber             int
-	ProductoID             *string // catálogo producto link; nil for manual lines
-	Description            string
-	Quantity               string
-	UnitCode               string
-	UnitPrice              string
-	UnitPriceWithTax       *string
+	LineNumber       int
+	ProductoID       *string // catálogo producto link; nil for manual lines
+	Description      string
+	Quantity         string
+	UnitCode         string
+	UnitPrice        string
+	UnitPriceWithTax *string
+	// The price as the user typed it and whether it was con IGV; nil from
+	// clients that predate them. See createDocumentItemBody.
+	EnteredUnitPrice       *string
+	PriceIncludesTax       *bool
 	TaxExemptionReasonCode *string
 	IgvAmount              string
 	IscAmount              *string
@@ -577,11 +581,11 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 	const insertSQL = `
 		INSERT INTO issued_document_items (
 			document_id, line_number, producto_id, description, quantity, unit_code,
-			unit_price, unit_price_with_tax, tax_exemption_reason_code,
+			unit_price, unit_price_with_tax, entered_unit_price, price_includes_tax, tax_exemption_reason_code,
 			igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			especie_vendida, cantidad_especie,
 			other_taxes_rate, other_taxes_amount
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`
 
 	batch := &pgx.Batch{}
 	for i, it := range items {
@@ -591,7 +595,7 @@ func insertDocumentItems(ctx context.Context, tx pgx.Tx, docID string, items []C
 		}
 		batch.Queue(insertSQL,
 			docID, line, it.ProductoID, it.Description, it.Quantity, it.UnitCode,
-			it.UnitPrice, it.UnitPriceWithTax, it.TaxExemptionReasonCode,
+			it.UnitPrice, it.UnitPriceWithTax, it.EnteredUnitPrice, it.PriceIncludesTax, it.TaxExemptionReasonCode,
 			it.IgvAmount, it.IscAmount, it.IscTierRange, it.DiscountAmount, it.LineTotal, it.PriceTypeCode,
 			it.EspecieVendida, it.CantidadEspecie,
 			it.OtherTaxesRate, it.OtherTaxesAmount,

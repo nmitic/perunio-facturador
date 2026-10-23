@@ -554,7 +554,7 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
-			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
+			       unit_price, unit_price_with_tax, entered_unit_price::text, price_includes_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       especie_vendida, cantidad_especie,
 			       other_taxes_rate, other_taxes_amount,
@@ -572,6 +572,7 @@ func (p *Pool) GetIssuedDocumentItemsForDocuments(ctx context.Context, docIDs []
 			var it model.IssuedDocumentItem
 			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
+				&it.EnteredUnitPrice, &it.PriceIncludesTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
 				&it.EspecieVendida, &it.CantidadEspecie,
@@ -592,7 +593,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, document_id, line_number, producto_id, description, quantity, unit_code,
-			       unit_price, unit_price_with_tax, tax_exemption_reason_code,
+			       unit_price, unit_price_with_tax, entered_unit_price::text, price_includes_tax, tax_exemption_reason_code,
 			       igv_amount, isc_amount, isc_tier_range, discount_amount, line_total, price_type_code,
 			       especie_vendida, cantidad_especie,
 			       other_taxes_rate, other_taxes_amount,
@@ -610,6 +611,7 @@ func (p *Pool) GetIssuedDocumentItems(ctx context.Context, docID string) ([]mode
 			var it model.IssuedDocumentItem
 			if err := rows.Scan(&it.ID, &it.DocumentID, &it.LineNumber, &it.ProductoID, &it.Description,
 				&it.Quantity, &it.UnitCode, &it.UnitPrice, &it.UnitPriceWithTax,
+				&it.EnteredUnitPrice, &it.PriceIncludesTax,
 				&it.TaxExemptionReasonCode, &it.IgvAmount, &it.IscAmount, &it.IscTierRange,
 				&it.DiscountAmount, &it.LineTotal, &it.PriceTypeCode,
 				&it.EspecieVendida, &it.CantidadEspecie,
@@ -646,6 +648,33 @@ func (p *Pool) ReferencedIGVAmounts(ctx context.Context, companyID, docType, ser
 		return nil
 	})
 	return igv, base, found, err
+}
+
+// ReferencedTotal returns the importe total (cbc:PayableAmount) and currency of
+// the comprobante a nota modifies, in the nota's environment: beta and producción
+// keep separate correlatives, so the same series and number can exist in both.
+// Only a comprobante SUNAT accepted counts. found is false when Perunio did not
+// issue it there.
+func (p *Pool) ReferencedTotal(ctx context.Context, companyID, environment, docType, series string, correlative int) (total model.ReferencedTotal, found bool, err error) {
+	err = p.WithTenant(ctx, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `
+			SELECT total_amount::text, currency_code
+			FROM issued_documents
+			WHERE company_id = $1 AND sunat_environment = $2
+			  AND doc_type = $3 AND series = $4 AND correlative = $5
+			  AND status IN ('accepted', 'accepted_with_observations')
+			LIMIT 1
+		`, companyID, environment, docType, series, correlative).Scan(&total.Amount, &total.CurrencyCode)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		return nil
+	})
+	return total, found, err
 }
 
 // igvOnerosaCodes is every Cat.07 código of a gravado onerosa line (tributo

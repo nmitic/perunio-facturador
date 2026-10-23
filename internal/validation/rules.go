@@ -907,7 +907,57 @@ func validateCreditNote(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "reference document is required for NC", Field: "referenceDocSeries"})
 	}
 
+	if e := validateCreditNoteTotal(req); e != nil {
+		errs = append(errs, *e)
+	}
+
 	return errs
+}
+
+// validateCreditNoteTotal is SUNAT 3286: a nota de crédito's importe total
+// (cbc:PayableAmount) may not exceed the comprobante it modifies. On a factura
+// with no tolerance; on a boleta up to 1 over, and only when the nota is in the
+// boleta's currency. Motivo 10 (otros conceptos) is exempt. Checked only when
+// Perunio issued the comprobante (ReferencedTotal), the only case whose total is
+// known here. (SUNAT's OBSERV 4028 on a boleta, without the tolerance, only
+// observes, so it does not refuse here.)
+func validateCreditNoteTotal(req model.IssueRequest) *model.ValidationError {
+	ref := req.ReferencedTotal
+	if ref == nil || req.ReasonCode == sunat.Cat09OtrosConceptos {
+		return nil
+	}
+	tolerance := int64(0)
+	switch req.ReferenceDocType {
+	case sunat.Cat01Factura:
+	case sunat.Cat01Boleta:
+		if req.CurrencyCode != ref.CurrencyCode {
+			return nil
+		}
+		tolerance = 100
+	default:
+		return nil
+	}
+	nota, errNota := cents(req.TotalAmount)
+	referenced, errRef := cents(ref.Amount)
+	if errNota != nil || errRef != nil || nota <= referenced+tolerance {
+		return nil
+	}
+	return &model.ValidationError{
+		Code: 3286,
+		Message: fmt.Sprintf("El total de la nota de crédito (%s %s) supera el del comprobante que modifica (%s %s)",
+			req.CurrencyCode, req.TotalAmount, ref.CurrencyCode, ref.Amount),
+		Field: "totalAmount",
+	}
+}
+
+// cents parses a decimal amount ("100.01") into whole céntimos, so totals
+// compare exactly rather than as floats.
+func cents(amount string) (int64, error) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(amount), 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(math.Round(f * 100)), nil
 }
 
 // validatePaymentTerms enforces SUNAT rules around forma de pago.

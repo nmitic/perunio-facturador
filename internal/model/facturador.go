@@ -243,15 +243,20 @@ type IssuedDocument struct {
 
 // IssuedDocumentItem is one line of an issued document.
 type IssuedDocumentItem struct {
-	ID                     string  `json:"id"`
-	DocumentID             string  `json:"documentId"`
-	LineNumber             int     `json:"lineNumber"`
-	ProductoID             *string `json:"productoId"`
-	Description            string  `json:"description"`
-	Quantity               string  `json:"quantity"`
-	UnitCode               string  `json:"unitCode"`
-	UnitPrice              string  `json:"unitPrice"`
-	UnitPriceWithTax       *string `json:"unitPriceWithTax"`
+	ID               string  `json:"id"`
+	DocumentID       string  `json:"documentId"`
+	LineNumber       int     `json:"lineNumber"`
+	ProductoID       *string `json:"productoId"`
+	Description      string  `json:"description"`
+	Quantity         string  `json:"quantity"`
+	UnitCode         string  `json:"unitCode"`
+	UnitPrice        string  `json:"unitPrice"`
+	UnitPriceWithTax *string `json:"unitPriceWithTax"`
+	// The price exactly as the user typed it, and whether it was con IGV: what a
+	// nota or a repetir re-enters, since UnitPrice is rounded. Nil on lines
+	// issued before they were stored.
+	EnteredUnitPrice       *string `json:"enteredUnitPrice"`
+	PriceIncludesTax       *bool   `json:"priceIncludesTax"`
 	TaxExemptionReasonCode *string `json:"taxExemptionReasonCode"`
 	IgvAmount              string  `json:"igvAmount"`
 	IscAmount              *string `json:"iscAmount"`

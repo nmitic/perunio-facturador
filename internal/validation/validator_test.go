@@ -1144,3 +1144,58 @@ func TestValidateOtrosTributos(t *testing.T) {
 		is.True(t, hasErrorField(validation.Validate(req), "items[1].otherTaxesAmount"), "only onerosa lines carry 9999")
 	})
 }
+
+func TestValidateCreditNoteTotal(t *testing.T) {
+	// A nota de crédito for S/ 100.01 (motivo 01) against a comprobante of the
+	// given type, total and currency; ref nil = a comprobante Perunio did not issue.
+	nota := func(refType string, ref *model.ReferencedTotal) model.IssueRequest {
+		req := newValidInvoice()
+		req.DocType = sunat.Cat01NotaCredito
+		req.Series = "FC01"
+		req.ReferenceDocType = refType
+		req.ReferenceDocSeries = "F001"
+		req.ReferenceDocCorrelative = 32
+		req.ReasonCode = sunat.Cat09Anulacion
+		req.ReasonDescription = "Anulación de la operación"
+		req.Subtotal = "84.75"
+		req.TotalIGV = "15.26"
+		req.TotalAmount = "100.01"
+		req.TaxInclusiveAmount = "100.01"
+		req.Items = []model.LineItem{{
+			LineNumber: 1, Description: "Soporte Premium", Quantity: "1",
+			UnitCode: "ZZ", UnitPrice: "84.75", UnitPriceWithTax: "100.01",
+			TaxExemptionReasonCode: "10", IGVAmount: "15.26",
+			LineTotal: "84.75", PriceTypeCode: "01",
+		}}
+		req.ReferencedTotal = ref
+		return req
+	}
+	pen := func(amount string) *model.ReferencedTotal {
+		return &model.ReferencedTotal{Amount: amount, CurrencyCode: "PEN"}
+	}
+
+	cases := []struct {
+		name    string
+		req     model.IssueRequest
+		refused bool
+	}{
+		// F001-00000032 in production: SUNAT rejected FC01-00000002 with 3286.
+		{"a nota a céntimo over its factura", nota(sunat.Cat01Factura, pen("100.00")), true},
+		{"a nota equal to its factura", nota(sunat.Cat01Factura, pen("100.01")), false},
+		{"a nota under its factura", nota(sunat.Cat01Factura, pen("500.00")), false},
+		{"a nota over its boleta, within SUNAT's +1", nota(sunat.Cat01Boleta, pen("99.50")), false},
+		{"a nota over its boleta by more than 1", nota(sunat.Cat01Boleta, pen("99.00")), true},
+		{"a nota over a boleta in another currency", nota(sunat.Cat01Boleta, &model.ReferencedTotal{Amount: "10.00", CurrencyCode: "USD"}), false},
+		{"a comprobante Perunio did not issue", nota(sunat.Cat01Factura, nil), false},
+		{"motivo 10, which SUNAT exempts", func() model.IssueRequest {
+			req := nota(sunat.Cat01Factura, pen("100.00"))
+			req.ReasonCode = sunat.Cat09OtrosConceptos
+			return req
+		}(), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			is.Equal(t, c.refused, hasErrorCode(validation.Validate(c.req), 3286))
+		})
+	}
+}

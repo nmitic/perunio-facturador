@@ -126,6 +126,12 @@ type IssueRequest struct {
 	ReasonCode              string `json:"reasonCode"`
 	ReasonDescription       string `json:"reasonDescription"`
 
+	// ReferencedTotal is the importe total of the comprobante a nota de crédito
+	// modifies, for SUNAT 3286. The pipeline fills it from that comprobante's
+	// row, never from the client; nil when Perunio did not issue it (its total
+	// is then unknown) or for any other document.
+	ReferencedTotal *ReferencedTotal `json:"-"`
+
 	// Items
 	Items []LineItem `json:"items"`
 
@@ -358,6 +364,12 @@ type LineItem struct {
 	// (3006, decimal 12,2). Empty on every other line.
 	EspecieVendida  string `json:"especieVendida,omitempty"`
 	CantidadEspecie string `json:"cantidadEspecie,omitempty"`
+}
+
+// ReferencedTotal is the importe total of a comprobante a nota modifies.
+type ReferencedTotal struct {
+	Amount       string // its cbc:PayableAmount
+	CurrencyCode string // ISO 4217
 }
 
 // IssueResponse is returned to the backend after processing.

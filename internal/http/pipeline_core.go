@@ -255,6 +255,18 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 			issueReq.IGVReducido = model.IsIGVReducidoRate(igv, base)
 		}
 	}
+	// A nota de crédito may not credit more than the comprobante it modifies
+	// (SUNAT 3286): caught here, with the amounts, instead of as SUNAT's rejection.
+	if doc.DocType == sunat.Cat01NotaCredito && doc.ReferenceDocType != nil && doc.ReferenceDocSeries != nil && doc.ReferenceDocCorrelative != nil {
+		total, found, err := s.pool.ReferencedTotal(ctx, companyID, env, *doc.ReferenceDocType, *doc.ReferenceDocSeries, *doc.ReferenceDocCorrelative)
+		if err != nil {
+			s.log.Error("get referenced total", "error", err, "docId", docID)
+			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		}
+		if found {
+			issueReq.ReferencedTotal = &total
+		}
+	}
 
 	// The SPOT umbral is measured against the whole operación: a comprobante
 	// of a venta con anticipos is judged by the deal's monto acordado.
