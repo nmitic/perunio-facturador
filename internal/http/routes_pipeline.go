@@ -89,8 +89,8 @@ type pipelineDeps struct {
 // writes the error response itself and reports success as a bool, which is the
 // shape the summary/void/GRE handlers expect.
 //
-// The context-only core lives in pipeline_core.go so the background scheduler can
-// share it.
+// The context-only core lives in pipeline_core.go, shared with the document
+// issue handler.
 func (s *Server) loadPipelineDeps(w http.ResponseWriter, r *http.Request, companyID string) (*pipelineDeps, bool) {
 	deps, pErr := s.resolvePipelineDeps(r.Context(), companyID)
 	if pErr != nil {
@@ -254,9 +254,8 @@ func parseCDRNotes(notes []string) []model.Observation {
 // issued_documents row loaded from the DB. This replaces the legacy stateless
 // POST /api/v1/documents/issue endpoint.
 //
-// The pipeline itself lives in runIssuePipeline (pipeline_core.go) so the
-// background scheduler emits through exactly the same code path; this handler is
-// only param parsing and the HTTP projection of the result.
+// The pipeline itself lives in runIssuePipeline (pipeline_core.go); this handler
+// is only param parsing and the HTTP projection of the result.
 func (s *Server) issueDocumentPipelineHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	docID := chi.URLParam(r, "docId")

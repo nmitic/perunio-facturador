@@ -75,6 +75,16 @@ internal/
   http/                      # Chi router, JWT middleware, route handlers
 ```
 
+## No unattended emission
+
+Every comprobante reaches SUNAT because a user asked for it. The service has no
+background workers: `perunio-backend` materializes due recurrente/programado
+periods (`comprobante_schedule_occurrences`) and notifies the user, who emits
+them through `POST /documents` with `scheduleOccurrenceId`. Do not add a ticker,
+goroutine or other non-request caller of `createDocumentDraft` /
+`runIssuePipeline` — `internal/http/no_background_emission_test.go` fails if one
+appears.
+
 ## API Endpoints
 
 All under `/api/facturador/*`, JWT-authenticated via the `auth_token` cookie (HS256, same secret as `perunio-backend`, sourced from AWS Secrets Manager). RLS isolation is enforced in `db.WithTenant` by setting `app.current_tenant_id` on the transaction.
@@ -99,7 +109,7 @@ for the guard (raise-only, past `MAX(correlative)` across `issued_documents` +
 
 ### Documents
 - `GET /documents/{companyId}` — paginated, filterable
-- `POST /documents/{companyId}` — create draft (quota check + atomic correlative)
+- `POST /documents/{companyId}` — create draft (quota check + atomic correlative); optional `scheduleOccurrenceId` settles a recurrente/programado period in the same transaction
 - `GET /documents/{companyId}/{docId}` — with line items
 - `PUT /documents/{companyId}/{docId}` — update draft
 - `DELETE /documents/{companyId}/{docId}` — delete draft
@@ -161,11 +171,6 @@ Despatch doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). 
 ```
 PORT=8080                        # HTTP port
 DATABASE_URL=                    # Shared PostgreSQL (required)
-
-# Comprobante scheduler (recurrentes / programados). Off unless explicitly enabled,
-# so local dev and one-off runs never emit to SUNAT unattended.
-SCHEDULER_ENABLED=false          # "true" starts the ticker
-DATABASE_ADMIN_URL=              # perunio_admin (BYPASSRLS); REQUIRED when SCHEDULER_ENABLED=true
 
 # AWS Secrets Manager (source of truth for JWT + encryption keys)
 AWS_SECRET_NAME=                 # Empty -> falls back to JWT_SECRET / ENCRYPTION_KEY env vars (dev)

@@ -84,10 +84,10 @@ type VentaAnticipo struct {
 	FinalDocumentCode *string `json:"finalDocumentCode"`
 }
 
-// ScheduleOrigin identifies which kind of schedule emitted a comprobante.
+// ScheduleOrigin identifies which kind of schedule a comprobante was emitted for.
 //
-// Single source of the vocabulary: the scheduler uses it to say which table a due
-// run came from, and the historial uses it to report a comprobante's provenance.
+// Single source of the vocabulary: the db layer derives it from the occurrence a
+// draft settles, and the historial uses it to report a comprobante's provenance.
 // Lives in model so both the db and http layers can name it without an import
 // cycle — db imports model, never the reverse.
 type ScheduleOrigin string

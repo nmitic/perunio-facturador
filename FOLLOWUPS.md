@@ -8,6 +8,17 @@ and where the code is, so it can be picked up later without re-investigating.
 When you pick one up: add spec cases first (`internal/xmlbuilder/spec/`, see its
 README), then fix, then delete the entry here.
 
+## FU-9 — Document quota is check-then-insert
+
+`createDocumentDraft` (`internal/http/pipeline_core.go`) reads the quota with
+`CheckDocumentQuota`, inserts the draft in a separate transaction, then calls
+`IncrementDocumentUsage` best-effort (a failure is only logged). Two concurrent
+creates at `limit - 1` both pass the check, and a failed increment under-counts
+usage for good. Fix by reserving quota inside the `CreateDocumentWithItems`
+transaction (conditional `UPDATE … SET used = used + 1 WHERE used < limit
+RETURNING`, refusing when no row comes back). Found while auditing the scheduled
+emission path (2026-10-28).
+
 ## FU-8 — Detracción rules to re-verify
 
 Items from `DETRACCIONES.md` › Open questions that no SUNAT source settles yet.

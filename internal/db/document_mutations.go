@@ -22,10 +22,11 @@ import (
 type CreateDocumentInput struct {
 	SeriesID string
 
-	// Origin is the comprobante's provenance, stamped on the row at creation. Empty
-	// means a manual (hand-issued) emission; the scheduler sets it to the kind of
-	// schedule ("recurrente"/"programado") that produced the document.
-	Origin string
+	// ScheduleOccurrenceID is the recurrente/programado period this comprobante
+	// settles; nil for an ordinary emission. When set, the occurrence is locked and
+	// resolved in the same transaction as the insert, and the row's origin is
+	// derived from it — origin is never taken from the caller.
+	ScheduleOccurrenceID *string
 
 	IssueDate string
 	IssueTime *string
@@ -178,13 +179,26 @@ type UpdateDocumentInput struct {
 // given series and inserts the document with its line items. Mirrors
 // FacturadorService.createDocumentWithItems in the Node.js backend.
 func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in CreateDocumentInput) (*model.IssuedDocument, error) {
-	tenantID, ok := auth.TenantIDFromContext(ctx)
+	user, ok := auth.UserFromContext(ctx)
 	if !ok {
 		return nil, ErrTenantContextMissing
 	}
+	tenantID := user.TenantID
 
 	var doc model.IssuedDocument
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		// Settling a scheduled period: lock it first, so a refused emission fails
+		// before the correlative bump and two concurrent emissions of one period
+		// serialize here.
+		origin := model.ScheduleOriginManual
+		if in.ScheduleOccurrenceID != nil {
+			var err error
+			origin, err = lockOccurrenceForEmission(ctx, tx, *in.ScheduleOccurrenceID, companyID)
+			if err != nil {
+				return err
+			}
+		}
+
 		// 0. Resolve the company's current SUNAT environment. The document is
 		// stamped with it and draws its correlative from that environment's
 		// counter, so beta (sandbox) and production keep independent sequences.
@@ -300,7 +314,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 				$31,
 				$32, $33, $34, $35,
 				$36,
-				COALESCE(NULLIF($37, ''), 'manual')::issued_document_origin,
+				$37::issued_document_origin,
 				$38,
 				$39,
 				$40,
@@ -323,7 +337,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 			in.GlobalDiscount,
 			in.DetraccionCodigo, in.DetraccionPorcentaje, in.DetraccionMonto, in.DetraccionCuentaBN,
 			environment,
-			in.Origin,
+			string(origin),
 			in.ExchangeRate,
 			in.BillingPeriodMonths,
 			anticiposJSON,
@@ -344,6 +358,13 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		// 3. Insert items (non-empty per request validation).
 		if err := insertDocumentItems(ctx, tx, doc.ID, in.Items); err != nil {
 			return err
+		}
+
+		// 4. Resolve the scheduled period with this comprobante.
+		if in.ScheduleOccurrenceID != nil {
+			if err := markOccurrenceEmitted(ctx, tx, *in.ScheduleOccurrenceID, doc.ID, user.UserID); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -417,6 +438,9 @@ func (p *Pool) DeleteDraftDocument(ctx context.Context, docID string) error {
 		}
 		if status != "draft" {
 			return ErrNotDraft
+		}
+		if err := reopenOccurrenceOfDraft(ctx, tx, docID); err != nil {
+			return err
 		}
 		_, err := tx.Exec(ctx, `DELETE FROM issued_documents WHERE id = $1`, docID)
 		return err

@@ -300,7 +300,11 @@ type createDocumentBody struct {
 	Anticipos           []anticipoBody       `json:"anticipos,omitempty"`
 	// VentaAnticipoID links this comprobante to a venta con anticipos (the deal),
 	// set on both its advances and its factura final. Omitted for ordinary docs.
-	VentaAnticipoID         *string                  `json:"ventaAnticipoId,omitempty"`
+	VentaAnticipoID *string `json:"ventaAnticipoId,omitempty"`
+	// ScheduleOccurrenceID is the recurrente/programado period the user is
+	// emitting from the agenda. Omitted for ordinary docs. The occurrence is
+	// resolved in the draft's own transaction (see db.CreateDocumentWithItems).
+	ScheduleOccurrenceID    *string                  `json:"scheduleOccurrenceId,omitempty"`
 	ReferenceDocType        *string                  `json:"referenceDocType,omitempty"`
 	ReferenceDocSeries      *string                  `json:"referenceDocSeries,omitempty"`
 	ReferenceDocCorrelative *int                     `json:"referenceDocCorrelative,omitempty"`
@@ -337,6 +341,9 @@ func (d *detraccionBody) validate() string {
 func (b *createDocumentBody) validate() string {
 	if !docUUIDRegex.MatchString(b.SeriesID) {
 		return "seriesId inválido"
+	}
+	if b.ScheduleOccurrenceID != nil && !docUUIDRegex.MatchString(*b.ScheduleOccurrenceID) {
+		return "scheduleOccurrenceId inválido"
 	}
 	if !dateRegex.MatchString(b.IssueDate) {
 		return "issueDate inválido"
@@ -500,6 +507,7 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 		TransporteCarga:         b.TransporteCarga.toModel(),
 		Hidrobiologicos:         b.Hidrobiologicos,
 		VentaAnticipoID:         nilIfEmpty(b.VentaAnticipoID),
+		ScheduleOccurrenceID:    b.ScheduleOccurrenceID,
 		ReferenceDocType:        b.ReferenceDocType,
 		ReferenceDocSeries:      b.ReferenceDocSeries,
 		ReferenceDocCorrelative: b.ReferenceDocCorrelative,
@@ -522,8 +530,9 @@ func (b createDocumentBody) toInput() db.CreateDocumentInput {
 // createDocumentHandler inserts a draft issued_document after checking the
 // tenant's monthly quota, then atomically bumps the issued-document counter.
 //
-// The quota check and insert live in createDocumentDraft (pipeline_core.go) so the
-// background scheduler creates drafts through the same path.
+// The quota check and insert live in createDocumentDraft (pipeline_core.go). With
+// scheduleOccurrenceId set, the draft also settles that scheduled period — this
+// handler is how a recurrente/programado gets emitted, always by the user.
 func (s *Server) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 

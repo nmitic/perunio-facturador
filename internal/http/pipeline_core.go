@@ -23,21 +23,13 @@ import (
 	"github.com/perunio/perunio-facturador/internal/zipper"
 )
 
-// pipelineError is a failure from a pipeline core function. It carries both the
-// HTTP projection (status/code/message, for handlers) and the classification the
-// scheduler needs to decide whether retrying can possibly help.
-//
-// The core functions never touch http.ResponseWriter — that is what lets the
-// background scheduler reuse the exact same emission path as the HTTP handlers.
+// pipelineError is a failure from a pipeline core function, carrying its HTTP
+// projection (status/code/message). The core functions never touch
+// http.ResponseWriter, so every handler maps failures through one envelope.
 type pipelineError struct {
 	status  int
 	code    string
 	message string
-	// retryable marks failures that a later attempt might survive: network
-	// blips, SUNAT 5xx, transient DB errors. A SUNAT rejection or a validation
-	// failure is never retryable — the outcome is deterministic, and for a
-	// rejection the correlative has already been consumed.
-	retryable bool
 	// validationErrors is populated only for VALIDATION_ERROR, whose response
 	// shape differs from the standard error envelope.
 	validationErrors []model.ValidationError
@@ -49,10 +41,6 @@ func (e *pipelineError) Error() string {
 
 func newPipelineError(status int, code, message string) *pipelineError {
 	return &pipelineError{status: status, code: code, message: message}
-}
-
-func newRetryablePipelineError(status int, code, message string) *pipelineError {
-	return &pipelineError{status: status, code: code, message: message, retryable: true}
 }
 
 // writePipelineError projects a pipelineError onto the HTTP response, preserving
@@ -71,8 +59,7 @@ func writePipelineError(w http.ResponseWriter, e *pipelineError) {
 }
 
 // resolvePipelineDeps performs the three lookups every pipeline entry point needs:
-//  1. Tenant ID from the context (set by the JWT middleware, or synthesized by the
-//     scheduler for background runs)
+//  1. Tenant ID from the context (set by the JWT middleware)
 //  2. Company row + decrypted SUNAT SOL password
 //  3. Active certificate (PFX fetched from R2, password decrypted, PKCS#12 parsed)
 func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pipelineDeps, *pipelineError) {
@@ -84,7 +71,7 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	company, err := s.pool.GetCompany(ctx, companyID)
 	if err != nil {
 		s.log.Error("get company", "error", err, "companyId", companyID)
-		return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 	if company == nil {
 		return nil, newPipelineError(http.StatusNotFound, "COMPANY_NOT_FOUND", "Empresa no encontrada")
@@ -93,7 +80,7 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	// emisor-electrónico profile). We do NOT fall back to the download credential
 	// (companies.username/password): that user often lacks the emission profile, which is
 	// exactly what SUNAT rejects with fault 0111. The UI gates on this too; this is the
-	// server-side enforcement covering every emit path (comprobantes, GRE, scheduler).
+	// server-side enforcement covering every emit path (comprobantes, GRE).
 	if company.EmissionUsername == nil || *company.EmissionUsername == "" ||
 		company.EmissionPassword == nil || *company.EmissionPassword == "" {
 		return nil, newPipelineError(http.StatusBadRequest, "EMISSION_CREDENTIALS_MISSING",
@@ -111,7 +98,7 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	activeCert, err := s.pool.GetActiveCertificateForSigning(ctx, companyID)
 	if err != nil {
 		s.log.Error("get active certificate", "error", err, "companyId", companyID)
-		return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 	if activeCert == nil {
 		return nil, newPipelineError(http.StatusBadRequest, "CERTIFICATE_MISSING",
@@ -143,11 +130,33 @@ func (s *Server) resolvePipelineDeps(ctx context.Context, companyID string) (*pi
 	}, nil
 }
 
+// createDocumentError maps a business error from db.CreateDocumentWithItems to
+// its HTTP envelope. Returns nil for an unexpected error, which the caller logs
+// and reports as a 500.
+func createDocumentError(err error) *pipelineError {
+	switch {
+	case errors.Is(err, db.ErrSeriesInactive):
+		return newPipelineError(http.StatusBadRequest, "SERIES_NOT_FOUND", "Serie no encontrada o inactiva")
+	case errors.Is(err, db.ErrDuplicate):
+		return newPipelineError(http.StatusConflict, "DOCUMENT_DUPLICATE", "Documento duplicado")
+	case errors.Is(err, db.ErrOccurrenceNotFound):
+		return newPipelineError(http.StatusNotFound, "OCCURRENCE_NOT_FOUND", "Comprobante programado no encontrado")
+	case errors.Is(err, db.ErrOccurrenceEmitted):
+		return newPipelineError(http.StatusConflict, "OCCURRENCE_ALREADY_EMITTED",
+			"Este comprobante programado ya fue emitido")
+	case errors.Is(err, db.ErrOccurrenceOmitted):
+		return newPipelineError(http.StatusConflict, "OCCURRENCE_OMITTED",
+			"Este comprobante programado fue omitido")
+	case errors.Is(err, db.ErrOccurrencePendingDocument):
+		return newPipelineError(http.StatusConflict, "OCCURRENCE_HAS_PENDING_DOCUMENT",
+			"Este comprobante programado ya tiene un comprobante pendiente de envío; reintenta su emisión")
+	default:
+		return nil
+	}
+}
+
 // createDocumentDraft inserts a draft issued_document after checking the tenant's
 // monthly quota, then bumps the issued-document counter.
-//
-// Shared by the HTTP create handler and the scheduler, so a scheduled comprobante
-// gets the same quota enforcement and correlative reservation as a manual one.
 func (s *Server) createDocumentDraft(ctx context.Context, companyID string, in db.CreateDocumentInput) (*model.IssuedDocument, *pipelineError) {
 	tenantID, ok := auth.TenantIDFromContext(ctx)
 	if !ok {
@@ -157,7 +166,7 @@ func (s *Server) createDocumentDraft(ctx context.Context, companyID string, in d
 	quota, err := s.pool.CheckDocumentQuota(ctx, tenantID, 1)
 	if err != nil {
 		s.log.Error("check document quota", "error", err, "tenantId", tenantID)
-		return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 	if !quota.Allowed {
 		limitStr := "ilimitado"
@@ -170,15 +179,11 @@ func (s *Server) createDocumentDraft(ctx context.Context, companyID string, in d
 
 	doc, err := s.pool.CreateDocumentWithItems(ctx, companyID, in)
 	if err != nil {
-		switch {
-		case errors.Is(err, db.ErrSeriesInactive):
-			return nil, newPipelineError(http.StatusBadRequest, "SERIES_NOT_FOUND", "Serie no encontrada o inactiva")
-		case errors.Is(err, db.ErrDuplicate):
-			return nil, newPipelineError(http.StatusConflict, "DOCUMENT_DUPLICATE", "Documento duplicado")
-		default:
-			s.log.Error("create document", "error", err, "companyId", companyID)
-			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		if pErr := createDocumentError(err); pErr != nil {
+			return nil, pErr
 		}
+		s.log.Error("create document", "error", err, "companyId", companyID)
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 
 	if err := s.pool.IncrementDocumentUsage(ctx, 1); err != nil {
@@ -203,7 +208,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	doc, err := s.pool.GetIssuedDocument(ctx, companyID, docID)
 	if err != nil {
 		s.log.Error("get document for issue", "error", err, "docId", docID)
-		return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 	if doc == nil {
 		return nil, newPipelineError(http.StatusNotFound, "NOT_FOUND", "Documento no encontrado")
@@ -216,7 +221,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	items, err := s.pool.GetIssuedDocumentItems(ctx, docID)
 	if err != nil {
 		s.log.Error("get document items for issue", "error", err, "docId", docID)
-		return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 	}
 	if len(items) == 0 {
 		return nil, newPipelineError(http.StatusBadRequest, "NO_ITEMS", "El documento no tiene líneas")
@@ -249,7 +254,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		igv, base, found, err := s.pool.ReferencedIGVAmounts(ctx, companyID, *doc.ReferenceDocType, *doc.ReferenceDocSeries, *doc.ReferenceDocCorrelative)
 		if err != nil {
 			s.log.Error("get referenced igv rate", "error", err, "docId", docID)
-			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+			return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		}
 		if found {
 			issueReq.IGVReducido = model.IsIGVReducidoRate(igv, base)
@@ -261,7 +266,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		total, found, err := s.pool.ReferencedTotal(ctx, companyID, env, *doc.ReferenceDocType, *doc.ReferenceDocSeries, *doc.ReferenceDocCorrelative)
 		if err != nil {
 			s.log.Error("get referenced total", "error", err, "docId", docID)
-			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+			return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		}
 		if found {
 			issueReq.ReferencedTotal = &total
@@ -274,7 +279,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		venta, err := s.pool.GetVentaAnticipo(ctx, companyID, *doc.VentaAnticipoID)
 		if err != nil {
 			s.log.Error("get venta for issue", "error", err, "docId", docID)
-			return nil, newRetryablePipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+			return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		}
 		if venta != nil {
 			issueReq.MontoOperacion = venta.MontoAcordado
@@ -330,7 +335,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		}
 		// The transport failed, so SUNAT never returned a verdict — a later
 		// attempt can still succeed.
-		return nil, newRetryablePipelineError(http.StatusBadGateway, "SUNAT_ERROR", err.Error())
+		return nil, newPipelineError(http.StatusBadGateway, "SUNAT_ERROR", err.Error())
 	}
 
 	parsedCDR, err := cdr.Parse(sendResult.ApplicationResponse)

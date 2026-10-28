@@ -31,22 +31,21 @@ type Deps struct {
 	Secrets *awssecrets.Service
 	Pool    *db.Pool
 	R2      *r2.Client
-	// AdminPool connects as perunio_admin (BYPASSRLS) and is used only by the
-	// comprobante scheduler, which enumerates due schedules across every tenant.
-	// Nil when the scheduler is disabled.
-	AdminPool *db.Pool
 }
 
-// Server is the HTTP server for the facturador service. It also hosts the
-// comprobante scheduler (see StartScheduler), which shares the emission pipeline
-// with the HTTP handlers.
+// Server is the HTTP server for the facturador service.
+//
+// It has no background workers: every SUNAT emission starts from an
+// authenticated request. Scheduled comprobantes (recurrentes/programados) are
+// never emitted unattended — perunio-backend materializes due periods and
+// notifies the user, who emits them through POST /documents with a
+// scheduleOccurrenceId. no_background_emission_test.go guards this.
 type Server struct {
 	mux       *chi.Mux
 	cfg       config.Config
 	log       *slog.Logger
 	secrets   *awssecrets.Service
 	pool      *db.Pool
-	adminPool *db.Pool
 	r2        *r2.Client
 	greClient *greclient.Client
 	authMW    *auth.Middleware
@@ -61,13 +60,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // NewServer creates a new HTTP server with routes configured.
 func NewServer(deps Deps) *Server {
 	s := &Server{
-		mux:       chi.NewRouter(),
-		cfg:       deps.Config,
-		log:       deps.Log,
-		secrets:   deps.Secrets,
-		pool:      deps.Pool,
-		adminPool: deps.AdminPool,
-		r2:        deps.R2,
+		mux:     chi.NewRouter(),
+		cfg:     deps.Config,
+		log:     deps.Log,
+		secrets: deps.Secrets,
+		pool:    deps.Pool,
+		r2:      deps.R2,
 		greClient: greclient.NewClient(
 			deps.Config.SunatGRESecurityURL,
 			deps.Config.SunatGREBetaURL,
