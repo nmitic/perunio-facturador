@@ -140,10 +140,9 @@ const issuedDocumentColumns = `
 	pdf_branding_id,
 	qr_data,
 	sent_at, accepted_at, created_at, updated_at,
-	-- Provenance: which kind of schedule emitted this comprobante. Stamped once at
-	-- draft creation on the row (issued_documents.origin), not derived — so it
-	-- survives deletion of the schedule that produced it, which cascade-deletes the
-	-- comprobante_schedule_runs rows the old lookup depended on.
+	-- Provenance: which kind of schedule's period this comprobante settled. Stamped
+	-- once at draft creation on the row (issued_documents.origin), not derived — so
+	-- it survives deletion of the schedule, which cascade-deletes its occurrences.
 	--
 	-- 'manual' collapses to NULL on the wire so the historial reports a hand-issued
 	-- comprobante as a nil ScheduleOrigin and the UI renders no badge.

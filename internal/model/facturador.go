@@ -229,10 +229,10 @@ type IssuedDocument struct {
 
 	QrData *string `json:"qrData"`
 
-	// ScheduleOrigin says which kind of schedule emitted this comprobante; nil when
-	// a user issued it by hand. Derived from comprobante_schedule_runs at read time
-	// — there is no column on issued_documents, so it can't drift from the run
-	// history that is the actual record of what emitted what.
+	// ScheduleOrigin says which kind of schedule's period this comprobante settled;
+	// nil when it was issued on its own. Read from issued_documents.origin, which
+	// the draft insert derives from the occurrence (see lockOccurrenceForEmission),
+	// so it survives deletion of the schedule.
 	ScheduleOrigin *ScheduleOrigin `json:"scheduleOrigin"`
 
 	SentAt     *time.Time `json:"sentAt"`
