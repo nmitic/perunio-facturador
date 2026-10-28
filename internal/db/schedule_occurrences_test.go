@@ -19,11 +19,13 @@ func TestCheckOccurrenceEmittable(t *testing.T) {
 	}{
 		{"open period", OccurrenceAbierta, nil, nil},
 		{"rejected comprobante is re-emitted as a new one", OccurrenceEmitida, s("rejected"), nil},
+		{"voided comprobante is re-emitted as a new one", OccurrenceEmitida, s("voided"), nil},
 		{"accepted comprobante settles the period", OccurrenceEmitida, s("accepted"), ErrOccurrenceEmitted},
 		{"accepted with observations settles the period", OccurrenceEmitida, s("accepted_with_observations"), ErrOccurrenceEmitted},
+		// Every other facturador_doc_status value: no verdict yet.
 		{"draft must be retried, not duplicated", OccurrenceEmitida, s("draft"), ErrOccurrencePendingDocument},
-		{"failed issue must be retried, not duplicated", OccurrenceEmitida, s("error"), ErrOccurrencePendingDocument},
-		{"sent and awaiting a verdict", OccurrenceEmitida, s("sent"), ErrOccurrencePendingDocument},
+		{"pending must be retried, not duplicated", OccurrenceEmitida, s("pending"), ErrOccurrencePendingDocument},
+		{"sending and awaiting a verdict", OccurrenceEmitida, s("sending"), ErrOccurrencePendingDocument},
 		{"omitted by the user", OccurrenceOmitida, nil, ErrOccurrenceOmitted},
 		{"omitted after a rejection", OccurrenceOmitida, s("rejected"), ErrOccurrenceOmitted},
 	}

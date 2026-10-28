@@ -41,9 +41,13 @@ var (
 // an occurrence, given its resolution and the status of the comprobante already
 // linked to it (nil when none).
 //
-// Only two cases allow it: an open period, and a period whose comprobante SUNAT
-// rejected — the rejection consumed its correlative, so re-emitting means a new
-// document, and the occurrence is relinked to it.
+// It is allowed for an open period, and for a period whose comprobante no longer
+// stands: SUNAT rejected it, or it was voided (comunicación de baja). Either way
+// its correlative is spent, so re-emitting means a new document, and the
+// occurrence is relinked to it.
+//
+// perunio-backend's EMITTABLE_STATES (src/services/agenda/occurrence-state.ts)
+// answers the same question for the agenda; the two must agree.
 func checkOccurrenceEmittable(resolution OccurrenceResolution, linkedDocStatus *string) error {
 	switch resolution {
 	case OccurrenceAbierta:
@@ -56,7 +60,7 @@ func checkOccurrenceEmittable(resolution OccurrenceResolution, linkedDocStatus *
 			return fmt.Errorf("emitida occurrence without a document")
 		}
 		switch *linkedDocStatus {
-		case "rejected":
+		case "rejected", "voided":
 			return nil
 		case "accepted", "accepted_with_observations":
 			return ErrOccurrenceEmitted
