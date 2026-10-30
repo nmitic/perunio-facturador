@@ -419,8 +419,12 @@ type InstallmentRow struct {
 // GetInstallmentsReport rolls up cuotas + recorded payments per credit document.
 // `statusFilter` optionally narrows to "paid"|"partial"|"pending"; "overdue"
 // narrows to documents with any past-due balance. Empty = all.
-func (p *Pool) GetInstallmentsReport(ctx context.Context, companyID, statusFilter string, f ReportFilter) ([]InstallmentRow, error) {
-	sqlStr := fmt.Sprintf(`
+// cuotasCTE is `WITH cuotas AS (…)`: one row per cuota of the credit documents
+// matching `scope` (a WHERE fragment over alias `d`), with what was paid on it.
+// The installments report and the dashboard both read cuotas through it, so
+// they cannot disagree about a balance.
+func cuotasCTE(scope string) string {
+	return fmt.Sprintf(`
 		WITH cuotas AS (
 			-- monto/fechaVencimiento are extracted as text and cast explicitly:
 			-- the cuotas jsonb stores monto as a JSON *string* ("123.45"), so a
@@ -438,19 +442,29 @@ func (p *Pool) GetInstallmentsReport(ctx context.Context, companyID, statusFilte
 			WHERE d.forma_pago = 'credito' AND d.cuotas IS NOT NULL AND %s
 			GROUP BY d.id, d.doc_type, d.series, d.correlative, d.customer_name,
 			         d.currency_code, d.total_amount, c.numero, c.monto, c."fechaVencimiento"
-		)
+		)`, scope)
+}
+
+// A cuota still owed (half-céntimo tolerance), and one owed past its due date.
+const (
+	cuotaOpen    = `monto - pagado > 0.005`
+	cuotaOverdue = `monto - pagado > 0.005 AND vence < current_date`
+)
+
+func (p *Pool) GetInstallmentsReport(ctx context.Context, companyID, statusFilter string, f ReportFilter) ([]InstallmentRow, error) {
+	sqlStr := cuotasCTE(moneyScope("d")) + fmt.Sprintf(`
 		SELECT document_id, doc_type, series, correlative, customer_name, currency_code,
 		       total_amount::numeric(14,2)::text,
 		       COUNT(*)::int AS num_cuotas,
 		       COALESCE(SUM(pagado),0)::numeric(14,2)::text AS paid,
 		       COALESCE(SUM(monto - pagado),0)::numeric(14,2)::text AS balance,
-		       to_char(MIN(vence) FILTER (WHERE monto - pagado > 0.005), 'YYYY-MM-DD') AS next_due,
+		       to_char(MIN(vence) FILTER (WHERE %[1]s), 'YYYY-MM-DD') AS next_due,
 		       (COALESCE(SUM(monto - pagado),0) <= 0.005) AS fully_paid,
 		       (COALESCE(SUM(pagado),0) > 0.005) AS any_paid,
-		       BOOL_OR(monto - pagado > 0.005 AND vence < current_date) AS overdue
+		       BOOL_OR(%[2]s) AS overdue
 		FROM cuotas
 		GROUP BY document_id, doc_type, series, correlative, customer_name, currency_code, total_amount
-		ORDER BY overdue DESC, next_due NULLS LAST`, moneyScope("d"))
+		ORDER BY overdue DESC, next_due NULLS LAST`, cuotaOpen, cuotaOverdue)
 
 	rowsOut := []InstallmentRow{}
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
@@ -667,6 +681,128 @@ func (p *Pool) GetSunatSubmissions(ctx context.Context, companyID string, f Repo
 				return err
 			}
 			out = append(out, s)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+// DashboardVentas is one currency's accepted sales in the dashboard's month.
+type DashboardVentas struct {
+	Currency     string `json:"currency"`
+	Revenue      string `json:"revenue"` // net of notas de crédito
+	Facturas     int    `json:"facturas"`
+	Boletas      int    `json:"boletas"`
+	NotasCredito int    `json:"notasCredito"`
+	NotasDebito  int    `json:"notasDebito"`
+}
+
+// DashboardSunat counts the month's documents SUNAT has not accepted: rejected,
+// or sent and still without an answer (pending/sending). Drafts are not counted —
+// they never left Perunio.
+type DashboardSunat struct {
+	Rechazados   int `json:"rechazados"`
+	SinRespuesta int `json:"sinRespuesta"`
+}
+
+// DashboardCuotas is one currency's open credit, over every issue date.
+type DashboardCuotas struct {
+	Currency           string `json:"currency"`
+	DocumentosVencidos int    `json:"documentosVencidos"` // documents with at least one overdue cuota
+	SaldoVencido       string `json:"saldoVencido"`
+	SaldoPendiente     string `json:"saldoPendiente"` // overdue included
+}
+
+// DashboardSummary is the facturación home page's numbers in one round trip.
+type DashboardSummary struct {
+	From   string            `json:"from"`
+	To     string            `json:"to"`
+	Ventas []DashboardVentas `json:"ventas"`
+	Sunat  DashboardSunat    `json:"sunat"`
+	Cuotas []DashboardCuotas `json:"cuotas"`
+}
+
+// GetDashboardSummary reads the facturación dashboard: the month's sales per
+// currency and SUNAT failures between from and to, plus the open cuotas of every
+// accepted credit document regardless of its date — a cuota from last year that
+// is still unpaid is exactly what the dashboard must not hide.
+//
+// The ventas use the money reports' scope and sign convention, the cuotas the
+// installments report's CTE, so the dashboard always agrees with the reports.
+func (p *Pool) GetDashboardSummary(ctx context.Context, companyID, from, to string) (DashboardSummary, error) {
+	out := DashboardSummary{From: from, To: to, Ventas: []DashboardVentas{}, Cuotas: []DashboardCuotas{}}
+
+	ventasSQL := fmt.Sprintf(`
+		SELECT currency_code,
+		       COALESCE(SUM(%[1]s),0)::numeric(14,2)::text AS revenue,
+		       COUNT(*) FILTER (WHERE doc_type = '01')::int,
+		       COUNT(*) FILTER (WHERE doc_type = '03')::int,
+		       COUNT(*) FILTER (WHERE doc_type = '07')::int,
+		       COUNT(*) FILTER (WHERE doc_type = '08')::int
+		FROM issued_documents
+		WHERE %[2]s AND status IN %[3]s AND issue_date BETWEEN $2 AND $3
+		GROUP BY currency_code
+		ORDER BY currency_code`,
+		signedAmount("", "total_amount"), docScope(""), acceptedStatuses)
+
+	sunatSQL := fmt.Sprintf(`
+		SELECT COUNT(*) FILTER (WHERE status = 'rejected')::int,
+		       COUNT(*) FILTER (WHERE status IN ('pending','sending'))::int
+		FROM issued_documents
+		WHERE %s AND issue_date BETWEEN $2 AND $3`, docScope(""))
+
+	cuotasSQL := cuotasCTE(fmt.Sprintf("%s AND d.status IN %s", docScope("d"), acceptedStatuses)) + fmt.Sprintf(`,
+		por_documento AS (
+			SELECT document_id, currency_code,
+			       SUM(monto - pagado) FILTER (WHERE %[1]s) AS pendiente,
+			       SUM(monto - pagado) FILTER (WHERE %[2]s) AS vencido
+			FROM cuotas
+			GROUP BY document_id, currency_code
+		)
+		SELECT currency_code,
+		       COUNT(*) FILTER (WHERE vencido IS NOT NULL)::int,
+		       COALESCE(SUM(vencido),0)::numeric(14,2)::text,
+		       COALESCE(SUM(pendiente),0)::numeric(14,2)::text
+		FROM por_documento
+		WHERE pendiente IS NOT NULL
+		GROUP BY currency_code
+		ORDER BY currency_code`, cuotaOpen, cuotaOverdue)
+
+	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, ventasSQL, companyID, from, to)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var v DashboardVentas
+			if err := rows.Scan(&v.Currency, &v.Revenue, &v.Facturas, &v.Boletas, &v.NotasCredito, &v.NotasDebito); err != nil {
+				rows.Close()
+				return err
+			}
+			out.Ventas = append(out.Ventas, v)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		if err := tx.QueryRow(ctx, sunatSQL, companyID, from, to).Scan(&out.Sunat.Rechazados, &out.Sunat.SinRespuesta); err != nil {
+			return err
+		}
+
+		rows, err = tx.Query(ctx, cuotasSQL, companyID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var c DashboardCuotas
+			if err := rows.Scan(&c.Currency, &c.DocumentosVencidos, &c.SaldoVencido, &c.SaldoPendiente); err != nil {
+				return err
+			}
+			out.Cuotas = append(out.Cuotas, c)
 		}
 		return rows.Err()
 	})

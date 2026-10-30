@@ -157,6 +157,7 @@ Shared query params (`parseReportFilter`): `from`, `to` (YYYY-MM-DD, default cur
 | `GET /reports/{companyId}/tax/notes` | Notas de crédito/débito grouped by reason code. `?docType=07\|08`. |
 | `GET /reports/{companyId}/installments` | Per-credit-document cuotas rollup (paid/balance/next due/status). `?status=paid\|partial\|pending\|overdue`. |
 | `GET /reports/{companyId}/sunat/submissions` | Document counts by SUNAT status (all statuses, currency-agnostic). |
+| `GET /reports/{companyId}/dashboard` | The facturación home page in one call. Takes no params; the month is Peru's current one. `{from, to, ventas: [{currency, revenue, facturas, boletas, notasCredito, notasDebito}], sunat: {rechazados, sinRespuesta}, cuotas: [{currency, documentosVencidos, saldoVencido, saldoPendiente}]}`. Ventas and sunat cover the month; cuotas cover every accepted credit document, whatever its date, through the same cuota CTE as `installments`. |
 
 ---
 

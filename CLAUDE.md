@@ -133,6 +133,7 @@ Read-only GROUP BY reports. Reuse the historial's company+environment scope (`do
 - `GET /reports/{companyId}/tax/notes` — notas grouped by reason code (`?docType=07|08`)
 - `GET /reports/{companyId}/installments` — cuotas rollup per credit document (`?status=paid|partial|pending|overdue`)
 - `GET /reports/{companyId}/sunat/submissions` — document counts by SUNAT status
+- `GET /reports/{companyId}/dashboard` — the facturación home page: the Peru month's ventas per currency and SUNAT rejections, plus open/overdue cuotas over all dates
 
 ### Summaries
 - `GET /summaries/{companyId}`

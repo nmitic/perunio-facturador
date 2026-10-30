@@ -206,3 +206,23 @@ func (s *Server) sunatSubmissionsHandler(w http.ResponseWriter, r *http.Request)
 	}
 	writeSuccess(w, res)
 }
+
+// dashboardHandler serves the facturación home page's numbers. It takes no
+// filter: the month is always Peru's current one, so the dashboard reads the same
+// at 23:00 in Lima as the UTC-defaulted reports do in the afternoon.
+func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	now, err := peruNow()
+	if err != nil {
+		s.reportError(w, "dashboard", err)
+		return
+	}
+	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+	to := now.Format("2006-01-02")
+	res, err := s.pool.GetDashboardSummary(r.Context(), companyID, from, to)
+	if err != nil {
+		s.reportError(w, "dashboard", err)
+		return
+	}
+	writeSuccess(w, res)
+}

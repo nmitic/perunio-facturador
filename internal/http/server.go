@@ -148,6 +148,7 @@ func NewServer(deps Deps) *Server {
 		r.Get("/reports/{companyId}/installments", s.installmentsReportHandler)
 		r.Get("/reports/{companyId}/anticipos", s.anticiposReportHandler)
 		r.Get("/reports/{companyId}/sunat/submissions", s.sunatSubmissionsHandler)
+		r.Get("/reports/{companyId}/dashboard", s.dashboardHandler)
 
 		// Summaries.
 		r.Get("/summaries/{companyId}", s.listSummariesHandler)
