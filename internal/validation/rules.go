@@ -474,6 +474,9 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 		default:
 			errs = append(errs, model.ValidationError{Code: 2800, Message: "docTypeCode de anticipo debe ser 02 (factura) o 03 (boleta)", Field: field + ".docTypeCode"})
 		}
+		if e := anticipoSourceError(req, a, field); e != nil {
+			errs = append(errs, *e)
+		}
 		total, _ := strconv.ParseFloat(a.TotalAmount, 64)
 		base, _ := strconv.ParseFloat(a.BaseAmount, 64)
 		if total <= 0 {
@@ -501,6 +504,43 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la suma de anticipos no puede exceder el total del comprobante", Field: "anticipos"})
 	}
 	return errs
+}
+
+// anticipoSourceError checks an applied anticipo against the comprobante
+// Perunio issued for it (a.Source, loaded by the pipeline). SUNAT checks none
+// of this: it does not track which anticipos a regularización has consumed, so
+// each refusal here stops a comprobante SUNAT would accept but that misstates
+// the sale.
+//
+//   - Deducted twice: the second regularización under-bills the customer and
+//     under-declares the IGV on what is left to collect.
+//   - Not accepted: the anticipo is not at SUNAT (draft, rejected, still
+//     waiting) or no longer stands (voided), so there is nothing to deduct.
+//   - Over its importe: deducting more than the anticipo collected. Compared
+//     only in the anticipo's own currency, the one its importe is stated in.
+//
+// An anticipo Perunio did not issue (typed by hand) has no Source and passes:
+// there is nothing to check it against.
+func anticipoSourceError(req model.IssueRequest, a model.Anticipo, field string) *model.ValidationError {
+	src := a.Source
+	if src == nil {
+		return nil
+	}
+	if src.AppliedBy != "" {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s ya fue aplicado en %s", a.DocID, src.AppliedBy), Field: field + ".docId"}
+	}
+	if src.Status != "accepted" && src.Status != "accepted_with_observations" {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s no está aceptado por SUNAT (estado: %s)", a.DocID, src.Status), Field: field + ".docId"}
+	}
+	if src.CurrencyCode != req.CurrencyCode {
+		return nil
+	}
+	applied, errApplied := cents(a.TotalAmount)
+	importe, errImporte := cents(src.TotalAmount)
+	if errApplied == nil && errImporte == nil && applied > importe {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el monto aplicado del anticipo %s (%s) supera su importe (%s)", a.DocID, a.TotalAmount, src.TotalAmount), Field: field + ".totalAmount"}
+	}
+	return nil
 }
 
 // validateDetraccion guards the detracción (SPOT). It is nil for the vast

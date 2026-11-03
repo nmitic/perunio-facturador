@@ -571,10 +571,11 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		args = append(args, customerDoc)
 		customerCond = fmt.Sprintf(" AND d.customer_doc_number = $%d", len(args))
 	}
-	// The applying regularización: any accepted doc in the same company +
-	// environment whose anticipos array references this row. sourceDocumentId is
-	// the robust link (historial picks); the docId string match covers manual
-	// entries. Newest first so a re-emission after a voided attempt wins.
+	// The applying regularización: any doc in the same company + environment
+	// that still deducts its anticipos (deductsAnticipos) and whose anticipos
+	// array references this row (anticipoRefersTo). Newest first so a
+	// re-emission after an annulled attempt wins. The issue pipeline refuses a
+	// second deduction with the same two conditions (AnticipoSource).
 	sqlStr := fmt.Sprintf(`
 		SELECT d.id, d.doc_type, d.series, d.correlative,
 		       to_char(d.issue_date, 'YYYY-MM-DD'),
@@ -600,15 +601,14 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 			CROSS JOIN LATERAL jsonb_array_elements(r.anticipos) AS a
 			WHERE r.company_id = d.company_id
 			  AND r.sunat_environment = d.sunat_environment
-			  AND r.status IN %s
-			  AND (a->>'sourceDocumentId' = d.id::text
-			       OR a->>'docId' = d.series || '-' || lpad(d.correlative::text, 8, '0'))
+			  AND %s
+			  AND %s
 			ORDER BY r.issue_date DESC, r.created_at DESC
 			LIMIT 1
 		) app ON true
 		WHERE %s AND d.operation_type = '0104'%s
 		ORDER BY (app.id IS NOT NULL), d.issue_date DESC, d.created_at DESC`,
-		acceptedStatuses, acceptedStatuses, moneyScope("d"), customerCond)
+		acceptedStatuses, deductsAnticipos("r"), anticipoRefersTo("a", "d"), moneyScope("d"), customerCond)
 
 	out := []AnticipoReportRow{}
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {

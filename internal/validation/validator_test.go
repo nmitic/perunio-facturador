@@ -882,6 +882,70 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, hasErrorField(errs, "anticipos"), "1416 anticipado cannot come off a 1180 sale")
 	})
 
+	// Source is what the pipeline loads from the historial for an anticipo
+	// Perunio issued: the 118.00 PEN factura de anticipo F001-00000042.
+	newSource := func() *model.AnticipoSource {
+		return &model.AnticipoSource{Status: "accepted", TotalAmount: "118.00", CurrencyCode: "PEN"}
+	}
+
+	t.Run("an accepted anticipo not yet applied passes", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].docId"), "a pending anticipo may be deducted")
+		is.True(t, !hasErrorField(errs, "anticipos[0].totalAmount"), "deducting its whole importe is fine")
+	})
+
+	t.Run("an anticipo already deducted by another comprobante is rejected", func(t *testing.T) {
+		// SUNAT would accept it: it does not track which anticipos were consumed.
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.AppliedBy = "F001-00000050"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].docId"), "an anticipo can be deducted once")
+	})
+
+	t.Run("an anticipo SUNAT has not accepted is rejected", func(t *testing.T) {
+		for _, status := range []string{"draft", "sent", "rejected", "error", "voided"} {
+			req := newRegularizacion()
+			req.Anticipos[0].Source = newSource()
+			req.Anticipos[0].Source.Status = status
+			errs := validation.Validate(req)
+			is.True(t, hasErrorField(errs, "anticipos[0].docId"), "should reject an anticipo in status "+status)
+		}
+	})
+
+	t.Run("an anticipo accepted with observations passes", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.Status = "accepted_with_observations"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].docId"), "observations do not void a comprobante")
+	})
+
+	t.Run("deducting more than the anticipo collected is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.TotalAmount = "100.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].totalAmount"), "118.00 cannot come off a 100.00 anticipo")
+	})
+
+	t.Run("an anticipo in another currency is not compared by amount", func(t *testing.T) {
+		// Its importe is stated in USD; 118.00 PEN says nothing against 100.00 USD.
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.TotalAmount = "100.00"
+		req.Anticipos[0].Source.CurrencyCode = "USD"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].totalAmount"), "amounts in different currencies are not comparable")
+	})
+
+	t.Run("an anticipo Perunio did not issue is not checked against the historial", func(t *testing.T) {
+		errs := validation.Validate(newRegularizacion())
+		is.True(t, !hasErrorField(errs, "anticipos[0].docId"), "a typed-in anticipo has no Source")
+	})
+
 	t.Run("anticipos exactly at the total, after a descuento global, pass", func(t *testing.T) {
 		req := newRegularizacion()
 		// 1000 − 100 discount = 900 base, IGV 162 → the sale totals 1062, all

@@ -269,6 +269,23 @@ type Anticipo struct {
 	TotalAmount      string  `json:"totalAmount"`
 	BaseAmount       string  `json:"baseAmount"`
 	SourceDocumentID *string `json:"sourceDocumentId,omitempty"`
+
+	// Source is the anticipo comprobante as Perunio recorded it. The pipeline
+	// loads it from issued_documents, never from the client, and it is never
+	// stored. Nil when Perunio did not issue the anticipo (typed by hand).
+	Source *AnticipoSource `json:"-"`
+}
+
+// AnticipoSource is the issued comprobante an applied Anticipo points at, for
+// the checks only the historial can answer: is it accepted, is the deducted
+// monto within its importe, and has another comprobante already deducted it.
+type AnticipoSource struct {
+	Status       string // issued_documents.status
+	TotalAmount  string // its cbc:PayableAmount
+	CurrencyCode string // ISO 4217
+	// AppliedBy is the SERIE-CORRELATIVO of another comprobante that still
+	// deducts this anticipo; empty when none does.
+	AppliedBy string
 }
 
 // CuotaCredito is one installment in a credit-sale invoice.

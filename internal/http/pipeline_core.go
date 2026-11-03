@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -283,6 +284,23 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		}
 		if venta != nil {
 			issueReq.MontoOperacion = venta.MontoAcordado
+		}
+	}
+
+	// An anticipo can be deducted once. SUNAT does not track which anticipos a
+	// regularización has consumed, so a second deduction would be accepted and
+	// under-bill the sale: load what the historial knows about each one, for
+	// validateAnticipos to refuse it. Cloned so the stored document's slice is
+	// left untouched.
+	issueReq.Anticipos = slices.Clone(issueReq.Anticipos)
+	for i, a := range issueReq.Anticipos {
+		src, found, err := s.pool.AnticipoSource(ctx, companyID, env, docID, a)
+		if err != nil {
+			s.log.Error("get anticipo source", "error", err, "docId", docID, "anticipo", a.DocID)
+			return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		}
+		if found {
+			issueReq.Anticipos[i].Source = &src
 		}
 	}
 
