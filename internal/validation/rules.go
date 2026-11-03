@@ -541,6 +541,10 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 //     waiting) or no longer stands (voided), so there is nothing to deduct.
 //   - Another customer: an anticipo is deducted by the sale it was paid for,
 //     to the same adquirente (model.SameAdquirente).
+//   - Another IGV rate: the anticipo was taxed at 10.5 % and the sale at 18 %
+//     (or the reverse) — the IGV reducido started or ended in between. Its
+//     base cannot be deducted at this comprobante's rate, and one comprobante
+//     carries one rate (3462).
 //   - Over its importe: deducting more than the anticipo collected. Compared
 //     only in the anticipo's own currency, the one its importe is stated in.
 //
@@ -568,6 +572,11 @@ func anticipoSourceError(req model.IssueRequest, a model.Anticipo, field string)
 	}
 	if !model.SameAdquirente(src.CustomerDocNumber, req.CustomerDocNumber) {
 		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s fue emitido a otro cliente (%s): solo se descuentan anticipos del mismo adquirente", a.DocID, src.CustomerDocNumber), Field: field + ".docId"}
+	}
+	total, _ := strconv.ParseFloat(src.TotalAmount, 64)
+	base, _ := strconv.ParseFloat(src.Subtotal, 64)
+	if base > 0 && total > base && model.IsIGVReducidoRate(total-base, base) != req.IGVReducido {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s se emitió con otra tasa de IGV que este comprobante, y un comprobante no admite dos tasas (3462): consulte con su contador", a.DocID), Field: field + ".docId"}
 	}
 	if src.CurrencyCode != req.CurrencyCode {
 		return nil

@@ -915,8 +915,26 @@ func TestValidateAnticipos(t *testing.T) {
 	// Perunio issued: the 118.00 PEN factura de anticipo F001-00000042, issued
 	// to the same customer as the regularización.
 	newSource := func() *model.AnticipoSource {
-		return &model.AnticipoSource{Status: "accepted", TotalAmount: "118.00", CurrencyCode: "PEN", CustomerDocNumber: "20601327318"}
+		return &model.AnticipoSource{Status: "accepted", TotalAmount: "118.00", Subtotal: "100.00", CurrencyCode: "PEN", CustomerDocNumber: "20601327318"}
 	}
+
+	t.Run("an anticipo taxed at another IGV rate is rejected", func(t *testing.T) {
+		// Paid while the IGV reducido applied (10.5 %), deducted by an 18 % sale.
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.TotalAmount, req.Anticipos[0].Source.Subtotal = "110.50", "100.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].docId"), "one comprobante carries one IGV rate (3462)")
+	})
+
+	t.Run("an anticipo at the IGV reducido passes on a sale at the IGV reducido", func(t *testing.T) {
+		req := newRegularizacion()
+		req.IGVReducido = true
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.TotalAmount, req.Anticipos[0].Source.Subtotal = "110.50", "100.00"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].docId"), "same rate on both")
+	})
 
 	t.Run("an anticipo issued to another customer is rejected", func(t *testing.T) {
 		req := newRegularizacion()
@@ -999,7 +1017,7 @@ func TestValidateAnticipos(t *testing.T) {
 	t.Run("deducting more than the anticipo collected is rejected", func(t *testing.T) {
 		req := newRegularizacion()
 		req.Anticipos[0].Source = newSource()
-		req.Anticipos[0].Source.TotalAmount = "100.00"
+		req.Anticipos[0].Source.TotalAmount, req.Anticipos[0].Source.Subtotal = "100.00", "84.75"
 		errs := validation.Validate(req)
 		is.True(t, hasErrorField(errs, "anticipos[0].totalAmount"), "118.00 cannot come off a 100.00 anticipo")
 	})

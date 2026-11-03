@@ -289,6 +289,7 @@ type Anticipo struct {
 type AnticipoSource struct {
 	Status            string // issued_documents.status
 	TotalAmount       string // its cbc:PayableAmount
+	Subtotal          string // its base imponible, which with TotalAmount gives its IGV rate
 	CurrencyCode      string // ISO 4217
 	CustomerDocNumber string // the adquirente it was issued to
 	// AppliedBy is the SERIE-CORRELATIVO of another comprobante that still

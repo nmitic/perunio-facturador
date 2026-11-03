@@ -552,7 +552,8 @@ type AnticipoReportRow struct {
 	CustomerName      string  `json:"customerName"`
 	Currency          string  `json:"currency"`
 	TotalAmount       string  `json:"totalAmount"`
-	Status            string  `json:"status"` // see AnticipoReportRow
+	Subtotal          string  `json:"subtotal"` // base imponible; with TotalAmount, its IGV rate
+	Status            string  `json:"status"`   // see AnticipoReportRow
 	AppliedByID       *string `json:"appliedById"`
 	AppliedByCode     *string `json:"appliedByCode"` // "F001-00000050"
 	AppliedByDate     *string `json:"appliedByDate"` // YYYY-MM-DD
@@ -591,7 +592,7 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		SELECT d.id, d.doc_type, d.series, d.correlative,
 		       to_char(d.issue_date, 'YYYY-MM-DD'),
 		       d.customer_doc_number, d.customer_name, d.currency_code,
-		       d.total_amount::numeric(14,2)::text,
+		       d.total_amount::numeric(14,2)::text, d.subtotal::numeric(14,2)::text,
 		       app.id, app.code, app.issue_date,
 		       d.venta_anticipo_id, va.nombre, va.monto_acordado::numeric(14,2)::text,
 		       fin.regularizado,
@@ -636,7 +637,7 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 			var destino model.CancelacionDestino
 			if err := rows.Scan(&r.DocumentID, &r.DocType, &r.Series, &r.Correlative,
 				&r.IssueDate, &r.CustomerDocNumber, &r.CustomerName, &r.Currency,
-				&r.TotalAmount, &r.AppliedByID, &r.AppliedByCode, &r.AppliedByDate,
+				&r.TotalAmount, &r.Subtotal, &r.AppliedByID, &r.AppliedByCode, &r.AppliedByDate,
 				&r.VentaAnticipoID, &r.VentaNombre, &r.VentaAcordado, &r.VentaRegularizado,
 				&reversed, &destino); err != nil {
 				return err
