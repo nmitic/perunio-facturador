@@ -17,6 +17,7 @@ func Validate(req model.IssueRequest) []model.ValidationError {
 	errs = append(errs, validateOtrosTributos(req)...)
 	errs = append(errs, validateGlobalDiscount(req)...)
 	errs = append(errs, validateAnticipos(req)...)
+	errs = append(errs, validateVentaCustomer(req)...)
 	errs = append(errs, validateDetraccion(req)...)
 
 	if req.DocType == sunat.Cat01Factura || req.DocType == sunat.Cat01Boleta {

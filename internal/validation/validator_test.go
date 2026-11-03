@@ -912,10 +912,28 @@ func TestValidateAnticipos(t *testing.T) {
 	})
 
 	// Source is what the pipeline loads from the historial for an anticipo
-	// Perunio issued: the 118.00 PEN factura de anticipo F001-00000042.
+	// Perunio issued: the 118.00 PEN factura de anticipo F001-00000042, issued
+	// to the same customer as the regularización.
 	newSource := func() *model.AnticipoSource {
-		return &model.AnticipoSource{Status: "accepted", TotalAmount: "118.00", CurrencyCode: "PEN"}
+		return &model.AnticipoSource{Status: "accepted", TotalAmount: "118.00", CurrencyCode: "PEN", CustomerDocNumber: "20601327318"}
 	}
+
+	t.Run("an anticipo issued to another customer is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.CustomerDocNumber = "20100070970"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].docId"), "only the adquirente's own anticipos come off its sale")
+	})
+
+	t.Run("a boleta de anticipo to a DNI applies to a factura to that person's RUC 10", func(t *testing.T) {
+		req := newRegularizacion()
+		req.CustomerDocNumber = "10456789012"
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.CustomerDocNumber = "45678901"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "anticipos[0].docId"), "the RUC 10 embeds the DNI: same persona natural")
+	})
 
 	t.Run("an accepted anticipo not yet applied passes", func(t *testing.T) {
 		req := newRegularizacion()
@@ -988,6 +1006,27 @@ func TestValidateAnticipos(t *testing.T) {
 		}
 		errs := validation.Validate(req)
 		is.True(t, !hasErrorField(errs, "anticipos"), "anticipos may cover the sale exactly")
+	})
+}
+
+func TestValidateVentaCustomer(t *testing.T) {
+	t.Run("a comprobante outside a venta is not checked", func(t *testing.T) {
+		errs := validation.Validate(newValidInvoice())
+		is.True(t, !hasErrorField(errs, "customerDocNumber"), "no venta, no venta customer")
+	})
+
+	t.Run("a comprobante of a venta to the venta's customer passes", func(t *testing.T) {
+		req := newValidInvoice()
+		req.VentaCustomerDocNumber = "20601327318"
+		errs := validation.Validate(req)
+		is.True(t, !hasErrorField(errs, "customerDocNumber"), "same customer as the venta")
+	})
+
+	t.Run("a comprobante of a venta to another customer is rejected", func(t *testing.T) {
+		req := newValidInvoice()
+		req.VentaCustomerDocNumber = "20100070970"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "customerDocNumber"), "a venta documents one customer's sale")
 	})
 }
 

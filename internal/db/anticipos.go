@@ -78,7 +78,7 @@ func (p *Pool) AnticipoSource(ctx context.Context, companyID, environment, exclu
 
 	err = p.WithTenant(ctx, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `
-			SELECT d.status, d.total_amount::numeric(14,2)::text, d.currency_code,
+			SELECT d.status, d.total_amount::numeric(14,2)::text, d.currency_code, d.customer_doc_number,
 			       COALESCE((
 			           SELECT r.series || '-' || lpad(r.correlative::text, 8, '0')
 			           FROM issued_documents r
@@ -98,7 +98,7 @@ func (p *Pool) AnticipoSource(ctx context.Context, companyID, environment, exclu
 			ORDER BY (d.id::text = $3) DESC
 			LIMIT 1`,
 			companyID, environment, sourceID, docType, series, correlative, excludeDocID,
-		).Scan(&src.Status, &src.TotalAmount, &src.CurrencyCode, &src.AppliedBy)
+		).Scan(&src.Status, &src.TotalAmount, &src.CurrencyCode, &src.CustomerDocNumber, &src.AppliedBy)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}

@@ -536,6 +536,8 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 //     under-declares the IGV on what is left to collect.
 //   - Not accepted: the anticipo is not at SUNAT (draft, rejected, still
 //     waiting) or no longer stands (voided), so there is nothing to deduct.
+//   - Another customer: an anticipo is deducted by the sale it was paid for,
+//     to the same adquirente (model.SameAdquirente).
 //   - Over its importe: deducting more than the anticipo collected. Compared
 //     only in the anticipo's own currency, the one its importe is stated in.
 //
@@ -552,6 +554,9 @@ func anticipoSourceError(req model.IssueRequest, a model.Anticipo, field string)
 	if src.Status != "accepted" && src.Status != "accepted_with_observations" {
 		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s no está aceptado por SUNAT (estado: %s)", a.DocID, src.Status), Field: field + ".docId"}
 	}
+	if !model.SameAdquirente(src.CustomerDocNumber, req.CustomerDocNumber) {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s fue emitido a otro cliente (%s): solo se descuentan anticipos del mismo adquirente", a.DocID, src.CustomerDocNumber), Field: field + ".docId"}
+	}
 	if src.CurrencyCode != req.CurrencyCode {
 		return nil
 	}
@@ -561,6 +566,18 @@ func anticipoSourceError(req model.IssueRequest, a model.Anticipo, field string)
 		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el monto aplicado del anticipo %s (%s) supera su importe (%s)", a.DocID, a.TotalAmount, src.TotalAmount), Field: field + ".totalAmount"}
 	}
 	return nil
+}
+
+// validateVentaCustomer keeps a venta con anticipos to one customer: every
+// comprobante linked to it documents the same sale, so the anticipos and the
+// factura final must all go to the venta's adquirente. Otherwise the venta's
+// cobrado/saldo mixes two customers' money and the factura final deducts
+// anticipos another buyer paid. VentaCustomerDocNumber is empty outside a venta.
+func validateVentaCustomer(req model.IssueRequest) []model.ValidationError {
+	if req.VentaCustomerDocNumber == "" || model.SameAdquirente(req.VentaCustomerDocNumber, req.CustomerDocNumber) {
+		return nil
+	}
+	return []model.ValidationError{{Code: 2800, Message: fmt.Sprintf("el comprobante es de una venta con anticipos del cliente %s y no puede emitirse a otro", req.VentaCustomerDocNumber), Field: "customerDocNumber"}}
 }
 
 // validateDetraccion guards the detracción (SPOT). It is nil for the vast

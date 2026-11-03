@@ -284,6 +284,7 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		}
 		if venta != nil {
 			issueReq.MontoOperacion = venta.MontoAcordado
+			issueReq.VentaCustomerDocNumber = venta.CustomerDocNumber
 		}
 	}
 

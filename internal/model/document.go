@@ -3,6 +3,7 @@ package model
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/nmitic/perunio-sunat-catalogs/sunat"
 )
@@ -85,6 +86,12 @@ type IssueRequest struct {
 	// greater of this and TaxInclusiveAmount. The pipeline fills it from the
 	// venta row — never from the client.
 	MontoOperacion string `json:"-"`
+
+	// VentaCustomerDocNumber is the adquirente of the venta con anticipos this
+	// comprobante belongs to; empty otherwise. Every comprobante of a venta
+	// documents the same sale, so it must go to that customer. The pipeline
+	// fills it from the venta row — never from the client.
+	VentaCustomerDocNumber string `json:"-"`
 
 	// IGVReducido: the issuer applies the IGV reducido of 10.5 % (Ley 31556,
 	// MYPE restaurantes, hoteles y alojamientos turísticos in padrón 01), so
@@ -280,12 +287,32 @@ type Anticipo struct {
 // the checks only the historial can answer: is it accepted, is the deducted
 // monto within its importe, and has another comprobante already deducted it.
 type AnticipoSource struct {
-	Status       string // issued_documents.status
-	TotalAmount  string // its cbc:PayableAmount
-	CurrencyCode string // ISO 4217
+	Status            string // issued_documents.status
+	TotalAmount       string // its cbc:PayableAmount
+	CurrencyCode      string // ISO 4217
+	CustomerDocNumber string // the adquirente it was issued to
 	// AppliedBy is the SERIE-CORRELATIVO of another comprobante that still
 	// deducts this anticipo; empty when none does.
 	AppliedBy string
+}
+
+// SameAdquirente reports whether two identity documents name the same buyer:
+// the same number, or a DNI and the RUC 10 of that same persona natural con
+// negocio, which embeds it ("10" + the 8-digit DNI + a check digit). A boleta
+// de anticipo to someone's DNI and the factura final to their RUC 10 are one
+// adquirente.
+func SameAdquirente(a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	dniInRUC := func(ruc, dni string) bool {
+		return len(ruc) == 11 && strings.HasPrefix(ruc, "10") && len(dni) == 8 && ruc[2:10] == dni
+	}
+	return dniInRUC(a, b) || dniInRUC(b, a)
 }
 
 // CuotaCredito is one installment in a credit-sale invoice.
