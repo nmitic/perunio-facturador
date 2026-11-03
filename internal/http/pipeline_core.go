@@ -282,6 +282,12 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 			s.log.Error("get venta for issue", "error", err, "docId", docID)
 			return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		}
+		// A cancelled venta takes no more comprobantes: its anticipos' money
+		// has been settled one way or another (CancelVentaAnticipo).
+		if venta != nil && venta.Cancelada {
+			return nil, newPipelineError(http.StatusConflict, "VENTA_CANCELADA",
+				"La venta con anticipos "+venta.Nombre+" está cancelada. Reábrela para emitir comprobantes en ella.")
+		}
 		if venta != nil {
 			issueReq.MontoOperacion = venta.MontoAcordado
 			issueReq.VentaCustomerDocNumber = venta.CustomerDocNumber

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/perunio/perunio-facturador/internal/db"
+	"github.com/perunio/perunio-facturador/internal/model"
 )
 
 // parseReportFilter reads the shared date-range + currency query params. Missing
@@ -179,9 +180,9 @@ func (s *Server) anticiposReportHandler(w http.ResponseWriter, r *http.Request) 
 	q := r.URL.Query()
 	status := q.Get("status")
 	switch status {
-	case "", "pendiente", "aplicado":
+	case "", "pendiente", "aplicado", "anulado", string(model.CancelacionDevuelto), string(model.CancelacionRetenido):
 	default:
-		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "status debe ser pendiente|aplicado")
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "status debe ser pendiente|aplicado|anulado|devuelto|retenido")
 		return
 	}
 	res, err := s.pool.GetAnticiposReport(r.Context(), companyID, status, q.Get("customerDoc"), filter)

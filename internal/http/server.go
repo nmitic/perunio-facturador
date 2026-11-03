@@ -111,6 +111,8 @@ func NewServer(deps Deps) *Server {
 		r.Get("/ventas-anticipo/{companyId}/{ventaId}", s.getVentaAnticipoHandler)
 		r.Put("/ventas-anticipo/{companyId}/{ventaId}", s.updateVentaAnticipoHandler)
 		r.Delete("/ventas-anticipo/{companyId}/{ventaId}", s.deleteVentaAnticipoHandler)
+		r.Post("/ventas-anticipo/{companyId}/{ventaId}/cancelar", s.cancelVentaAnticipoHandler)
+		r.Post("/ventas-anticipo/{companyId}/{ventaId}/reabrir", s.reopenVentaAnticipoHandler)
 		r.Get("/ventas-anticipo/{companyId}/{ventaId}/documents", s.listVentaAnticipoDocumentsHandler)
 
 		// Documents.

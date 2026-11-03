@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/perunio/perunio-facturador/internal/model"
 )
 
 // ReportFilter is the common date-range + currency filter every money report
@@ -527,10 +529,19 @@ func (p *Pool) GetInstallmentsReport(ctx context.Context, companyID, statusFilte
 // ─── Anticipos ──────────────────────────────────────────────────────────────
 
 // AnticipoReportRow is one accepted anticipo comprobante (operation_type 0104)
-// with its derived applied state. Status is "aplicado" when an accepted
-// document carries this anticipo in its `anticipos` jsonb — matched by
-// sourceDocumentId (historial picks) or by docId string (manual entries) — and
-// "pendiente" otherwise. The AppliedBy* fields describe that regularización.
+// with its derived state, by precedence:
+//
+//   - "aplicado": an accepted document carries this anticipo in its
+//     `anticipos` jsonb — matched by sourceDocumentId (historial picks) or by
+//     docId string (manual entries). The AppliedBy* fields describe that
+//     regularización.
+//   - "anulado": an accepted full-reversal nota de crédito undid it.
+//   - "devuelto" / "retenido": its venta was cancelled and the money returned
+//     to the customer or retained as a penalty (model.CancelacionDestino).
+//   - "pendiente": still to be deducted.
+//
+// Only "pendiente" may be deducted; the issue pipeline refuses the rest
+// (AnticipoSource).
 type AnticipoReportRow struct {
 	DocumentID        string  `json:"documentId"`
 	DocType           string  `json:"docType"`
@@ -541,7 +552,7 @@ type AnticipoReportRow struct {
 	CustomerName      string  `json:"customerName"`
 	Currency          string  `json:"currency"`
 	TotalAmount       string  `json:"totalAmount"`
-	Status            string  `json:"status"` // "pendiente" | "aplicado"
+	Status            string  `json:"status"` // see AnticipoReportRow
 	AppliedByID       *string `json:"appliedById"`
 	AppliedByCode     *string `json:"appliedByCode"` // "F001-00000050"
 	AppliedByDate     *string `json:"appliedByDate"` // YYYY-MM-DD
@@ -560,8 +571,8 @@ type AnticipoReportRow struct {
 }
 
 // GetAnticiposReport lists the accepted anticipo comprobantes in the period
-// with their applied state. `statusFilter` optionally narrows to
-// "pendiente"|"aplicado"; `customerDoc` optionally narrows to one customer's
+// with their derived state. `statusFilter` optionally narrows to one status;
+// `customerDoc` optionally narrows to one customer's
 // anticipos (used by the emission form to suggest pending anticipos). Empty =
 // all.
 func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, customerDoc string, f ReportFilter) ([]AnticipoReportRow, error) {
@@ -583,7 +594,9 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		       d.total_amount::numeric(14,2)::text,
 		       app.id, app.code, app.issue_date,
 		       d.venta_anticipo_id, va.nombre, va.monto_acordado::numeric(14,2)::text,
-		       fin.regularizado
+		       fin.regularizado,
+		       %s,
+		       CASE WHEN va.cancelada THEN COALESCE(va.cancelacion ->> d.id::text, '') ELSE '' END
 		FROM issued_documents d
 		LEFT JOIN ventas_anticipo va ON va.id = d.venta_anticipo_id
 		LEFT JOIN LATERAL (
@@ -591,7 +604,7 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 			FROM issued_documents f
 			WHERE f.venta_anticipo_id = va.id
 			  AND f.operation_type IS DISTINCT FROM '0104'
-			  AND f.status IN %s
+			  AND %s
 		) fin ON va.id IS NOT NULL
 		LEFT JOIN LATERAL (
 			SELECT r.id,
@@ -608,7 +621,7 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		) app ON true
 		WHERE %s AND d.operation_type = '0104'%s
 		ORDER BY (app.id IS NOT NULL), d.issue_date DESC, d.created_at DESC`,
-		acceptedStatuses, deductsAnticipos("r"), anticipoRefersTo("a", "d"), moneyScope("d"), customerCond)
+		reversedByNota("d"), standsAccepted("f"), deductsAnticipos("r"), anticipoRefersTo("a", "d"), moneyScope("d"), customerCond)
 
 	out := []AnticipoReportRow{}
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
@@ -619,17 +632,16 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		defer rows.Close()
 		for rows.Next() {
 			var r AnticipoReportRow
+			var reversed bool
+			var destino model.CancelacionDestino
 			if err := rows.Scan(&r.DocumentID, &r.DocType, &r.Series, &r.Correlative,
 				&r.IssueDate, &r.CustomerDocNumber, &r.CustomerName, &r.Currency,
 				&r.TotalAmount, &r.AppliedByID, &r.AppliedByCode, &r.AppliedByDate,
-				&r.VentaAnticipoID, &r.VentaNombre, &r.VentaAcordado, &r.VentaRegularizado); err != nil {
+				&r.VentaAnticipoID, &r.VentaNombre, &r.VentaAcordado, &r.VentaRegularizado,
+				&reversed, &destino); err != nil {
 				return err
 			}
-			if r.AppliedByID != nil {
-				r.Status = "aplicado"
-			} else {
-				r.Status = "pendiente"
-			}
+			r.Status = anticipoReportStatus(r.AppliedByID != nil, reversed, destino)
 			out = append(out, r)
 		}
 		return rows.Err()
@@ -647,6 +659,21 @@ func (p *Pool) GetAnticiposReport(ctx context.Context, companyID, statusFilter, 
 		}
 	}
 	return filtered, nil
+}
+
+// anticipoReportStatus resolves an anticipo's report status; see
+// AnticipoReportRow for the precedence.
+func anticipoReportStatus(applied, reversed bool, destino model.CancelacionDestino) string {
+	switch {
+	case applied:
+		return "aplicado"
+	case reversed:
+		return "anulado"
+	case destino.Withdrawn():
+		return string(destino)
+	default:
+		return "pendiente"
+	}
 }
 
 // ─── SUNAT submissions ──────────────────────────────────────────────────────

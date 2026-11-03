@@ -17,4 +17,12 @@ var (
 	ErrVoidWindowExpired  = errors.New("document past the 7-day void window")
 	ErrVoidMixedDates     = errors.New("documents in one comunicación de baja must share their issue date")
 	ErrVentaHasDocuments  = errors.New("venta con anticipos has associated documents")
+	// ErrVentaNoAbierta: only an abierta venta can be cancelled.
+	ErrVentaNoAbierta = errors.New("venta con anticipos is not abierta")
+	// ErrCancelacionIncompleta: a cancellation must give a valid destino for
+	// every anticipo in force, and for nothing else.
+	ErrCancelacionIncompleta = errors.New("cancelacion must cover exactly the anticipos in force")
+	// ErrVentaHasNotas: a nota de crédito already reverses one of the venta's
+	// anticipos, so the cancellation cannot be undone.
+	ErrVentaHasNotas = errors.New("venta con anticipos has notas de crédito")
 )

@@ -294,6 +294,12 @@ type AnticipoSource struct {
 	// AppliedBy is the SERIE-CORRELATIVO of another comprobante that still
 	// deducts this anticipo; empty when none does.
 	AppliedBy string
+	// Reversed is set when an accepted nota de crédito has undone the anticipo
+	// in full (Cat.09 full-reversal motivos): there is nothing left to deduct.
+	Reversed bool
+	// Cancelacion is what became of the anticipo's money when its venta con
+	// anticipos was cancelled; empty while the venta is not cancelled.
+	Cancelacion CancelacionDestino
 }
 
 // SameAdquirente reports whether two identity documents name the same buyer:

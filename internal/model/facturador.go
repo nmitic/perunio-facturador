@@ -34,6 +34,48 @@ const (
 	VentaCancelada VentaAnticipoEstado = "cancelada"
 )
 
+// CancelacionDestino is what became of one anticipo's money when its venta was
+// cancelled. Cancelling a venta does not undo anything at SUNAT, so the user
+// answers it per anticipo.
+type CancelacionDestino string
+
+const (
+	// CancelacionDevuelto: the money went back to the customer. The anticipo
+	// needs a nota de crédito (motivo 06) to reverse its IGV, and can no longer
+	// be deducted.
+	CancelacionDevuelto CancelacionDestino = "devuelto"
+	// CancelacionOtraCompra: the customer keeps it as credit for another
+	// purchase. The anticipo stays pendiente, deductible by any comprobante to
+	// the same adquirente.
+	CancelacionOtraCompra CancelacionDestino = "otra_compra"
+	// CancelacionRetenido: the seller keeps it as a penalty. Whether that needs
+	// a nota de crédito depends on the contract, so the contador decides; the
+	// anticipo can no longer be deducted.
+	CancelacionRetenido CancelacionDestino = "retenido"
+)
+
+// Valid reports whether d is one of the three destinos.
+func (d CancelacionDestino) Valid() bool {
+	return d == CancelacionDevuelto || d == CancelacionOtraCompra || d == CancelacionRetenido
+}
+
+// Withdrawn reports whether the anticipo left the sale for good — returned or
+// retained — so no comprobante may deduct it any more.
+func (d CancelacionDestino) Withdrawn() bool {
+	return d == CancelacionDevuelto || d == CancelacionRetenido
+}
+
+// VentaNotaCredito is a nota de crédito issued against one of a venta's
+// anticipos, whatever its status, so the venta can track the refunds its
+// cancellation calls for.
+type VentaNotaCredito struct {
+	AnticipoID string `json:"anticipoId"`
+	ID         string `json:"id"`
+	Code       string `json:"code"` // "FC01-00000003"
+	Status     string `json:"status"`
+	ReasonCode string `json:"reasonCode"` // Cat.09
+}
+
 // VentaAnticipo is one sale collected through advance payments: the agreed total
 // plus the comprobantes that chip away at it.
 //
@@ -59,14 +101,19 @@ type VentaAnticipo struct {
 	MontoAcordado string         `json:"montoAcordado"`
 	FormData      map[string]any `json:"formData"`
 
-	Cancelada bool      `json:"cancelada"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Cancelada bool `json:"cancelada"`
+	// Cancelacion maps each accepted anticipo (issued_documents id) to what
+	// became of its money; nil while the venta is not cancelled.
+	Cancelacion map[string]CancelacionDestino `json:"cancelacion"`
+	CreatedAt   time.Time                     `json:"createdAt"`
+	UpdatedAt   time.Time                     `json:"updatedAt"`
 
 	// Derived from the issued_documents pointing here — never stored, so voiding
 	// a comprobante self-heals the numbers. Cobrado covers every accepted
 	// comprobante of the deal, the factura final included: its total is the
-	// saldo, so a regularizada venta reads cobrado = acordado, saldo 0.
+	// saldo, so a regularizada venta reads cobrado = acordado, saldo 0. A
+	// comprobante an accepted full-reversal nota de crédito has undone counts
+	// for nothing, here and in the estado.
 	// AnticipoCount, in contrast, counts only the anticipos (0104).
 	Cobrado string              `json:"cobrado"`
 	Saldo   string              `json:"saldo"`
@@ -82,6 +129,12 @@ type VentaAnticipo struct {
 	// this venta; both nil while it is still abierta.
 	FinalDocumentID   *string `json:"finalDocumentId"`
 	FinalDocumentCode *string `json:"finalDocumentCode"`
+	// NotasCredito are the notas de crédito issued against the venta's
+	// anticipos, in any status. NotasPendientes counts the anticipos the
+	// cancellation marked devuelto that no accepted full-reversal nota has
+	// undone yet.
+	NotasCredito    []VentaNotaCredito `json:"notasCredito"`
+	NotasPendientes int                `json:"notasPendientes"`
 }
 
 // ScheduleOrigin identifies which kind of schedule a comprobante was emitted for.

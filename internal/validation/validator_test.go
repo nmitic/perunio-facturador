@@ -952,6 +952,32 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, hasErrorField(errs, "anticipos[0].docId"), "an anticipo can be deducted once")
 	})
 
+	t.Run("an anticipo undone by a nota de crédito is rejected", func(t *testing.T) {
+		req := newRegularizacion()
+		req.Anticipos[0].Source = newSource()
+		req.Anticipos[0].Source.Reversed = true
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos[0].docId"), "a reversed anticipo has nothing left to deduct")
+	})
+
+	t.Run("an anticipo of a cancelled venta is deducted only when the customer kept it on account", func(t *testing.T) {
+		tests := []struct {
+			destino  model.CancelacionDestino
+			expected bool
+		}{
+			{destino: model.CancelacionDevuelto, expected: true},
+			{destino: model.CancelacionRetenido, expected: true},
+			{destino: model.CancelacionOtraCompra, expected: false},
+		}
+		for _, test := range tests {
+			req := newRegularizacion()
+			req.Anticipos[0].Source = newSource()
+			req.Anticipos[0].Source.Cancelacion = test.destino
+			errs := validation.Validate(req)
+			is.Equal(t, test.expected, hasErrorField(errs, "anticipos[0].docId"), "destino "+string(test.destino))
+		}
+	})
+
 	t.Run("an anticipo SUNAT has not accepted is rejected", func(t *testing.T) {
 		for _, status := range []string{"draft", "sent", "rejected", "error", "voided"} {
 			req := newRegularizacion()

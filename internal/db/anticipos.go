@@ -13,33 +13,50 @@ import (
 	"github.com/perunio/perunio-facturador/internal/model"
 )
 
-// deductsAnticipos is the condition under which comprobante `r` still deducts
-// the anticipos listed in its `anticipos` array: SUNAT accepted it, and no
-// accepted nota de crédito has annulled it since (motivo 01 anulación de la
-// operación, 02 anulación por error en el RUC).
+// reversedByNota is the condition under which comprobante `d` has been undone
+// in full by an accepted nota de crédito: one whose motivo reverses the whole
+// comprobante (Cat.09 full-reversal — 01 anulación de la operación, 02
+// anulación por error en el RUC, 06 devolución total).
 //
 // The nota has to be looked up because annulling a FACTURA by nota de crédito
 // leaves it 'accepted' — only a boleta is flipped to 'voided' that way (see
-// ApplyIssueResult), and a Comunicación de Baja voids either. Without it, an
-// anticipo whose factura final was annulled would read "aplicado" forever and
-// could never be deducted by the corrected one.
-//
-// The anticipos report and the issue pipeline share it, so "aplicado" on screen
-// and "ya fue aplicado" on emission can never disagree.
-func deductsAnticipos(r string) string {
-	return fmt.Sprintf(`%[1]s.status IN %[2]s
-		AND NOT EXISTS (
+// ApplyIssueResult), and a Comunicación de Baja voids either.
+func reversedByNota(d string) string {
+	return fmt.Sprintf(`EXISTS (
 			SELECT 1 FROM issued_documents nc
 			WHERE nc.company_id = %[1]s.company_id
 			  AND nc.sunat_environment = %[1]s.sunat_environment
 			  AND nc.doc_type = '%[3]s'
 			  AND nc.status IN %[2]s
-			  AND nc.credit_debit_reason_code IN ('%[4]s', '%[5]s')
+			  AND nc.credit_debit_reason_code IN %[4]s
 			  AND nc.reference_doc_type = %[1]s.doc_type::text
 			  AND nc.reference_doc_series = %[1]s.series
 			  AND nc.reference_doc_correlative = %[1]s.correlative
 		)`,
-		r, acceptedStatuses, sunat.Cat01NotaCredito, sunat.Cat09Anulacion, sunat.Cat09AnulacionErrorRUC)
+		d, acceptedStatuses, sunat.Cat01NotaCredito, sqlStringList(sunat.Cat09FullReversalCodes))
+}
+
+// standsAccepted is the condition under which comprobante `d` is in force:
+// SUNAT accepted it and no nota de crédito has undone it since.
+func standsAccepted(d string) string {
+	return fmt.Sprintf("%[1]s.status IN %[2]s AND NOT %[3]s", d, acceptedStatuses, reversedByNota(d))
+}
+
+// deductsAnticipos is the condition under which comprobante `r` still deducts
+// the anticipos listed in its `anticipos` array: it stands accepted. Without
+// the nota check, an anticipo whose factura final was annulled would read
+// "aplicado" forever and could never be deducted by the corrected one.
+//
+// The anticipos report and the issue pipeline share it, so "aplicado" on screen
+// and "ya fue aplicado" on emission can never disagree.
+func deductsAnticipos(r string) string {
+	return standsAccepted(r)
+}
+
+// sqlStringList renders codes as a SQL list literal, ('01', '02'). Only for
+// catálogo constants, never for user input.
+func sqlStringList(codes []string) string {
+	return "('" + strings.Join(codes, "', '") + "')"
 }
 
 // anticipoRefersTo is the condition under which element `a` of a comprobante's
@@ -62,6 +79,10 @@ func anticipoRefersTo(a, d string) string {
 //
 // found is false when Perunio did not issue the anticipo (one emitted elsewhere
 // and typed by hand): there is then nothing to check it against.
+//
+// Reversed and Cancelacion say whether the anticipo's money has left the sale:
+// a nota de crédito undid it, or its venta was cancelled and the user recorded
+// the money as returned or retained.
 func (p *Pool) AnticipoSource(ctx context.Context, companyID, environment, excludeDocID string, a model.Anticipo) (src model.AnticipoSource, found bool, err error) {
 	series, correlative, ok := splitDocID(a.DocID)
 	if !ok && a.SourceDocumentID == nil {
@@ -90,6 +111,12 @@ func (p *Pool) AnticipoSource(ctx context.Context, companyID, environment, exclu
 			             AND `+anticipoRefersTo("a", "d")+`
 			           ORDER BY r.issue_date DESC, r.created_at DESC
 			           LIMIT 1
+			       ), ''),
+			       `+reversedByNota("d")+`,
+			       COALESCE((
+			           SELECT va.cancelacion ->> d.id::text
+			           FROM ventas_anticipo va
+			           WHERE va.id = d.venta_anticipo_id AND va.cancelada
 			       ), '')
 			FROM issued_documents d
 			WHERE d.company_id = $1 AND d.sunat_environment = $2
@@ -98,7 +125,8 @@ func (p *Pool) AnticipoSource(ctx context.Context, companyID, environment, exclu
 			ORDER BY (d.id::text = $3) DESC
 			LIMIT 1`,
 			companyID, environment, sourceID, docType, series, correlative, excludeDocID,
-		).Scan(&src.Status, &src.TotalAmount, &src.CurrencyCode, &src.CustomerDocNumber, &src.AppliedBy)
+		).Scan(&src.Status, &src.TotalAmount, &src.CurrencyCode, &src.CustomerDocNumber, &src.AppliedBy,
+			&src.Reversed, &src.Cancelacion)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}

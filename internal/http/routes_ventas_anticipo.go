@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -145,12 +146,10 @@ type updateVentaAnticipoRequest struct {
 	Descripcion   *string        `json:"descripcion,omitempty"`
 	MontoAcordado *string        `json:"montoAcordado,omitempty"`
 	FormData      map[string]any `json:"formData,omitempty"`
-	Cancelada     *bool          `json:"cancelada,omitempty"`
 }
 
-// updateVentaAnticipoHandler patches a venta — including the cancelada switch,
-// which is how a deal is retired once comprobantes exist (it can no longer be
-// deleted at that point).
+// updateVentaAnticipoHandler patches a venta's nombre, descripción, monto
+// acordado or productos. Cancelling has its own endpoints.
 func (s *Server) updateVentaAnticipoHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
 	ventaID := chi.URLParam(r, "ventaId")
@@ -174,7 +173,6 @@ func (s *Server) updateVentaAnticipoHandler(w http.ResponseWriter, r *http.Reque
 		Descripcion:   req.Descripcion,
 		MontoAcordado: req.MontoAcordado,
 		FormData:      req.FormData,
-		Cancelada:     req.Cancelada,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -186,6 +184,67 @@ func (s *Server) updateVentaAnticipoHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeSuccess(w, updated)
+}
+
+type cancelVentaAnticipoRequest struct {
+	Cancelacion map[string]model.CancelacionDestino `json:"cancelacion"`
+}
+
+// cancelVentaAnticipoHandler cancels an abierta venta. It is how a deal is
+// retired once comprobantes exist (it can no longer be deleted then), and it
+// records what became of each anticipo's money: cancelling does not undo the
+// anticipos at SUNAT, so a refund still needs its nota de crédito.
+func (s *Server) cancelVentaAnticipoHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	ventaID := chi.URLParam(r, "ventaId")
+
+	var req cancelVentaAnticipoRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Datos inválidos")
+		return
+	}
+
+	venta, err := s.pool.CancelVentaAnticipo(r.Context(), companyID, ventaID, req.Cancelacion)
+	var enEspera *db.AnticiposEnEsperaError
+	switch {
+	case err == nil:
+		writeSuccess(w, venta)
+	case errors.Is(err, db.ErrNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Venta con anticipos no encontrada")
+	case errors.Is(err, db.ErrVentaNoAbierta):
+		writeError(w, http.StatusConflict, "VENTA_NO_ABIERTA",
+			"Solo se puede cancelar una venta abierta. Si ya tiene comprobante final, anúlalo antes con una nota de crédito.")
+	case errors.As(err, &enEspera):
+		writeError(w, http.StatusConflict, "ANTICIPOS_EN_ESPERA",
+			"Espera la respuesta de SUNAT para "+strings.Join(enEspera.Codes, ", ")+" antes de cancelar la venta.")
+	case errors.Is(err, db.ErrCancelacionIncompleta):
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"Indica qué pasó con el dinero de cada anticipo aceptado de la venta.")
+	default:
+		s.log.Error("cancel venta anticipo", "error", err, "companyId", companyID, "ventaId", ventaID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+	}
+}
+
+// reopenVentaAnticipoHandler undoes a cancellation while no nota de crédito
+// has been issued against the venta's anticipos.
+func (s *Server) reopenVentaAnticipoHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	ventaID := chi.URLParam(r, "ventaId")
+
+	venta, err := s.pool.ReopenVentaAnticipo(r.Context(), companyID, ventaID)
+	switch {
+	case err == nil:
+		writeSuccess(w, venta)
+	case errors.Is(err, db.ErrNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Venta con anticipos no encontrada")
+	case errors.Is(err, db.ErrVentaHasNotas):
+		writeError(w, http.StatusConflict, "VENTA_HAS_NOTAS",
+			"Ya emitiste una nota de crédito para un anticipo de esta venta, así que no se puede reabrir. Crea una venta nueva.")
+	default:
+		s.log.Error("reopen venta anticipo", "error", err, "companyId", companyID, "ventaId", ventaID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+	}
 }
 
 // deleteVentaAnticipoHandler removes a venta that has no comprobantes yet.

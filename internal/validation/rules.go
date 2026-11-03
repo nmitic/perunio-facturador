@@ -534,6 +534,9 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 //
 //   - Deducted twice: the second regularización under-bills the customer and
 //     under-declares the IGV on what is left to collect.
+//   - Reversed or withdrawn: a nota de crédito undid it, or its venta was
+//     cancelled with the money returned or retained. Only money the customer
+//     still has on account (CancelacionOtraCompra) may be deducted.
 //   - Not accepted: the anticipo is not at SUNAT (draft, rejected, still
 //     waiting) or no longer stands (voided), so there is nothing to deduct.
 //   - Another customer: an anticipo is deducted by the sale it was paid for,
@@ -550,6 +553,15 @@ func anticipoSourceError(req model.IssueRequest, a model.Anticipo, field string)
 	}
 	if src.AppliedBy != "" {
 		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s ya fue aplicado en %s", a.DocID, src.AppliedBy), Field: field + ".docId"}
+	}
+	if src.Reversed {
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s fue anulado con una nota de crédito", a.DocID), Field: field + ".docId"}
+	}
+	switch src.Cancelacion {
+	case model.CancelacionDevuelto:
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s se devolvió al cliente al cancelar su venta", a.DocID), Field: field + ".docId"}
+	case model.CancelacionRetenido:
+		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s quedó retenido como penalidad al cancelar su venta", a.DocID), Field: field + ".docId"}
 	}
 	if src.Status != "accepted" && src.Status != "accepted_with_observations" {
 		return &model.ValidationError{Code: 2800, Message: fmt.Sprintf("el anticipo %s no está aceptado por SUNAT (estado: %s)", a.DocID, src.Status), Field: field + ".docId"}
