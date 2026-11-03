@@ -97,8 +97,10 @@ type VentaAnticipo struct {
 
 	CurrencyCode string `json:"currencyCode"`
 	// MontoAcordado is the line total of FormData, denormalised at save time so
-	// listing deals stays a single query.
-	MontoAcordado string         `json:"montoAcordado"`
+	// listing deals stays a single query. Nil while the price is por definir:
+	// the venta then tracks what was invoiced, and the factura final's own
+	// lines are the sale.
+	MontoAcordado *string        `json:"montoAcordado"`
 	FormData      map[string]any `json:"formData"`
 
 	Cancelada bool `json:"cancelada"`
@@ -115,9 +117,10 @@ type VentaAnticipo struct {
 	// comprobante an accepted full-reversal nota de crédito has undone counts
 	// for nothing, here and in the estado.
 	// AnticipoCount, in contrast, counts only the anticipos (0104).
-	Cobrado string              `json:"cobrado"`
-	Saldo   string              `json:"saldo"`
-	Estado  VentaAnticipoEstado `json:"estado"`
+	Cobrado string `json:"cobrado"`
+	// Saldo is MontoAcordado − Cobrado; nil while the monto is por definir.
+	Saldo  *string             `json:"saldo"`
+	Estado VentaAnticipoEstado `json:"estado"`
 	// DetraccionDeclarada is the SPOT total across the deal's accepted
 	// comprobantes. Each one declares detracción on its own importe (the
 	// anticipo on what it collected, the factura final on the saldo), so a

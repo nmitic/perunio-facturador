@@ -289,7 +289,11 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 				"La venta con anticipos "+venta.Nombre+" está cancelada. Reábrela para emitir comprobantes en ella.")
 		}
 		if venta != nil {
-			issueReq.MontoOperacion = venta.MontoAcordado
+			// Empty while the monto is por definir: the umbral then falls on
+			// the comprobante's own importe, as for an anticipo outside a venta.
+			if venta.MontoAcordado != nil {
+				issueReq.MontoOperacion = *venta.MontoAcordado
+			}
 			issueReq.VentaCustomerDocNumber = venta.CustomerDocNumber
 		}
 	}

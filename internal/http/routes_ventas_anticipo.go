@@ -82,13 +82,14 @@ type ventaAnticipoRequest struct {
 	CustomerDocNumber string         `json:"customerDocNumber"`
 	CustomerName      string         `json:"customerName"`
 	CurrencyCode      string         `json:"currencyCode"`
-	MontoAcordado     string         `json:"montoAcordado"`
+	MontoAcordado     *string        `json:"montoAcordado"`
 	FormData          map[string]any `json:"formData"`
 }
 
-// validate guards the fields the deal is useless without. The monto acordado is
-// the whole point of the record — without it there is no saldo to report — so an
-// absent or zero amount is rejected rather than defaulted.
+// validate guards the fields the deal is useless without. The monto acordado
+// may be absent — the price is often unknown when the first anticipo arrives
+// (custom work, obra por administración) — but when given it must be a
+// positive amount: a zero would read as "nothing left to collect".
 func (b ventaAnticipoRequest) validate() string {
 	switch {
 	case b.Nombre == "":
@@ -97,12 +98,17 @@ func (b ventaAnticipoRequest) validate() string {
 		return "El nombre es demasiado largo"
 	case b.CustomerDocNumber == "" || b.CustomerName == "":
 		return "Seleccione el cliente de la venta"
-	case !decimalRegex.MatchString(b.MontoAcordado) || b.MontoAcordado == "0":
+	case b.MontoAcordado != nil && !validMonto(*b.MontoAcordado):
 		return "El monto acordado debe ser mayor a 0"
 	case len(b.FormData) == 0:
-		return "La venta necesita los productos que la componen"
+		return "Faltan los datos de la venta"
 	}
 	return ""
+}
+
+// validMonto reports whether s is a positive decimal amount.
+func validMonto(s string) bool {
+	return decimalRegex.MatchString(s) && strings.Trim(strings.ReplaceAll(s, ".", ""), "0") != ""
 }
 
 // createVentaAnticipoHandler inserts a new venta con anticipos.
@@ -142,10 +148,12 @@ func (s *Server) createVentaAnticipoHandler(w http.ResponseWriter, r *http.Reque
 }
 
 type updateVentaAnticipoRequest struct {
-	Nombre        *string        `json:"nombre,omitempty"`
-	Descripcion   *string        `json:"descripcion,omitempty"`
-	MontoAcordado *string        `json:"montoAcordado,omitempty"`
-	FormData      map[string]any `json:"formData,omitempty"`
+	Nombre        *string `json:"nombre,omitempty"`
+	Descripcion   *string `json:"descripcion,omitempty"`
+	MontoAcordado *string `json:"montoAcordado,omitempty"`
+	// MontoPorDefinir sets the monto acordado back to unknown.
+	MontoPorDefinir bool           `json:"montoPorDefinir,omitempty"`
+	FormData        map[string]any `json:"formData,omitempty"`
 }
 
 // updateVentaAnticipoHandler patches a venta's nombre, descripción, monto
@@ -163,16 +171,21 @@ func (s *Server) updateVentaAnticipoHandler(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Nombre inválido")
 		return
 	}
-	if req.MontoAcordado != nil && (!decimalRegex.MatchString(*req.MontoAcordado) || *req.MontoAcordado == "0") {
+	if req.MontoAcordado != nil && !validMonto(*req.MontoAcordado) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "El monto acordado debe ser mayor a 0")
+		return
+	}
+	if req.MontoAcordado != nil && req.MontoPorDefinir {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Indique un monto acordado o déjelo por definir, no ambos")
 		return
 	}
 
 	updated, err := s.pool.UpdateVentaAnticipo(r.Context(), companyID, ventaID, db.UpdateVentaAnticipoInput{
-		Nombre:        req.Nombre,
-		Descripcion:   req.Descripcion,
-		MontoAcordado: req.MontoAcordado,
-		FormData:      req.FormData,
+		Nombre:          req.Nombre,
+		Descripcion:     req.Descripcion,
+		MontoAcordado:   req.MontoAcordado,
+		MontoPorDefinir: req.MontoPorDefinir,
+		FormData:        req.FormData,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {

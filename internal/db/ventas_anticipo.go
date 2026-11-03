@@ -21,7 +21,7 @@ type CreateVentaAnticipoInput struct {
 	CustomerDocNumber string
 	CustomerName      string
 	CurrencyCode      string
-	MontoAcordado     string
+	MontoAcordado     *string // nil: por definir
 	FormData          map[string]any
 }
 
@@ -31,7 +31,9 @@ type UpdateVentaAnticipoInput struct {
 	Nombre        *string
 	Descripcion   *string
 	MontoAcordado *string
-	FormData      map[string]any
+	// MontoPorDefinir clears the monto acordado: the price is no longer known.
+	MontoPorDefinir bool
+	FormData        map[string]any
 }
 
 // VentaAnticipoFilter narrows a ventas listing. Zero values mean "no filter".
@@ -110,7 +112,8 @@ var ventaAnticipoDerived = fmt.Sprintf(`
 
 // ventaAnticipoDerivedColumns is the derived block every venta query selects.
 // The saldo is computed in SQL so Postgres' exact numeric arithmetic does the
-// money subtraction rather than float64 in Go.
+// money subtraction rather than float64 in Go. NULL while the monto acordado
+// is por definir.
 const ventaAnticipoDerivedColumns = `agg.cobrado,
 	(v.monto_acordado - agg.cobrado) AS saldo,
 	agg.detraccion_declarada,
@@ -267,7 +270,7 @@ func (p *Pool) UpdateVentaAnticipo(ctx context.Context, companyID, ventaID strin
 				UPDATE ventas_anticipo
 				SET nombre         = COALESCE($3, nombre),
 				    descripcion    = COALESCE($4, descripcion),
-				    monto_acordado = COALESCE($5, monto_acordado),
+				    monto_acordado = CASE WHEN $7 THEN NULL ELSE COALESCE($5, monto_acordado) END,
 				    form_data      = COALESCE($6, form_data),
 				    updated_at     = now()
 				WHERE company_id = $1 AND id = $2
@@ -275,7 +278,7 @@ func (p *Pool) UpdateVentaAnticipo(ctx context.Context, companyID, ventaID strin
 			)
 			SELECT `+ventaAnticipoColumns+`, `+ventaAnticipoDerivedColumns+`
 			FROM upd v`+ventaAnticipoDerived,
-			companyID, ventaID, in.Nombre, in.Descripcion, in.MontoAcordado, in.FormData)
+			companyID, ventaID, in.Nombre, in.Descripcion, in.MontoAcordado, in.FormData, in.MontoPorDefinir)
 		if err := scanVentaAnticipo(row, &v); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrNotFound
