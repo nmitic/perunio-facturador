@@ -503,6 +503,26 @@ func validateAnticipos(req model.IssueRequest) []model.ValidationError {
 	if totalSum > taxInclusive+0.01 {
 		errs = append(errs, model.ValidationError{Code: 2800, Message: "la suma de anticipos no puede exceder el total del comprobante", Field: "anticipos"})
 	}
+
+	// Each anticipo is gravado (Cat.53 04 reduces the IGV base by its base), so
+	// together they can only come off the gravado onerosa base, after the
+	// descuento global. An exonerado, inafecto or export sale has no IGV base to
+	// reduce; its anticipos would be Cat.53 05/06, which Perunio does not emit.
+	var baseSum, gravado float64
+	for _, a := range req.Anticipos {
+		b, _ := strconv.ParseFloat(a.BaseAmount, 64)
+		baseSum += b
+	}
+	for _, li := range req.Items {
+		if !sunat.Cat07Gratuito(li.TaxExemptionReasonCode) && sunat.Cat07TaxSchemeCode(li.TaxExemptionReasonCode) == sunat.Cat05IGV {
+			v, _ := strconv.ParseFloat(li.LineTotal, 64)
+			gravado += v
+		}
+	}
+	gd, _ := strconv.ParseFloat(req.GlobalDiscount, 64)
+	if baseSum > gravado-gd+0.01 {
+		errs = append(errs, model.ValidationError{Code: 2800, Message: fmt.Sprintf("los anticipos (base %.2f) superan la base gravada con IGV del comprobante (%.2f): Perunio solo aplica anticipos gravados", baseSum, gravado-gd), Field: "anticipos"})
+	}
 	return errs
 }
 

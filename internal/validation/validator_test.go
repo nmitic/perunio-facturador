@@ -882,6 +882,35 @@ func TestValidateAnticipos(t *testing.T) {
 		is.True(t, hasErrorField(errs, "anticipos"), "1416 anticipado cannot come off a 1180 sale")
 	})
 
+	t.Run("anticipos on an exonerado sale are rejected", func(t *testing.T) {
+		// No IGV base to reduce: a gravado anticipo cannot come off it, and an
+		// exonerado one (Cat.53 05) is not emitted by Perunio.
+		req := newRegularizacion()
+		req.Items[0].TaxExemptionReasonCode = "20"
+		req.Items[0].IGVAmount = "0.00"
+		req.TotalIGV = "0.00"
+		req.TaxInclusiveAmount = "1000.00"
+		req.TotalAmount = "882.00"
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos"), "a gravado anticipo needs a gravado base")
+	})
+
+	t.Run("anticipos larger than the gravado part of a mixed sale are rejected", func(t *testing.T) {
+		// 500 gravado + 500 exonerado: the 600 anticipo base fits the 1090 total
+		// but not the 500 it can actually reduce.
+		req := newRegularizacion()
+		req.Items = append(req.Items, req.Items[0])
+		req.Items[0].Quantity, req.Items[0].LineTotal, req.Items[0].IGVAmount = "1", "500.00", "90.00"
+		req.Items[0].UnitPrice = "500.00"
+		req.Items[1].LineNumber = 2
+		req.Items[1].Quantity, req.Items[1].LineTotal, req.Items[1].IGVAmount = "1", "500.00", "0.00"
+		req.Items[1].UnitPrice = "500.00"
+		req.Items[1].TaxExemptionReasonCode = "20"
+		req.Anticipos = []model.Anticipo{{DocID: "F001-00000042", DocTypeCode: "02", TotalAmount: "708.00", BaseAmount: "600.00"}}
+		errs := validation.Validate(req)
+		is.True(t, hasErrorField(errs, "anticipos"), "only the gravado base can absorb a gravado anticipo")
+	})
+
 	// Source is what the pipeline loads from the historial for an anticipo
 	// Perunio issued: the 118.00 PEN factura de anticipo F001-00000042.
 	newSource := func() *model.AnticipoSource {
