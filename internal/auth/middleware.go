@@ -11,7 +11,7 @@ import (
 // userStore is the dependency the middleware needs from the db package.
 // Defined as an interface here so the auth package stays import-free of db.
 type userStore interface {
-	GetUserByID(ctx context.Context, userID string) (*UserRecord, error)
+	GetUserByID(ctx context.Context, userID, tenantID string) (*UserRecord, error)
 	IsSessionAlive(ctx context.Context, sid, tenantID string) (bool, error)
 }
 
@@ -20,6 +20,10 @@ type UserRecord struct {
 	ID           string
 	IsActive     bool
 	TokenVersion *time.Time
+	// Suspended is true when an admin suspended this user, or the owner of the
+	// tenant the token is scoped to (team members follow their owner). Mirrors
+	// resolveSuspension in perunio-backend/src/auth/jwt.ts.
+	Suspended bool
 }
 
 // Middleware authenticates requests by verifying the JWT in the auth_token
@@ -94,7 +98,7 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		// User must still exist and be active.
-		user, err := m.users.GetUserByID(r.Context(), payload.UserID)
+		user, err := m.users.GetUserByID(r.Context(), payload.UserID, payload.TenantID)
 		if err != nil {
 			writeAuthError(w, http.StatusInternalServerError, "Verificación de sesión fallida", "AUTH_FAILED")
 			return
@@ -114,6 +118,14 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				writeAuthError(w, http.StatusUnauthorized, "Token invalidado por cambio de contraseña", "TOKEN_INVALIDATED")
 				return
 			}
+		}
+
+		// Suspended accounts keep their session (no cookie is cleared): the app
+		// shows a blocking dialog from perunio-backend's /auth/me, and nothing here
+		// may be used meanwhile. Same 403 and code as perunio-backend's authenticate.
+		if user.Suspended {
+			writeAuthError(w, http.StatusForbidden, "Cuenta suspendida", "ACCOUNT_SUSPENDED")
+			return
 		}
 
 		ctx := WithUser(r.Context(), payload)

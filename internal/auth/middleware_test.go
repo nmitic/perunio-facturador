@@ -37,7 +37,7 @@ type fakeStore struct {
 	gotTenantID string
 }
 
-func (f *fakeStore) GetUserByID(_ context.Context, _ string) (*UserRecord, error) {
+func (f *fakeStore) GetUserByID(_ context.Context, _, _ string) (*UserRecord, error) {
 	return f.user, f.userErr
 }
 
@@ -270,5 +270,29 @@ func TestRevokedSessionSkipsTheUserLookup(t *testing.T) {
 	// If the user lookup ran, its error would have produced a 500 instead.
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 — the session must be checked before the user is read", rec.Code)
+	}
+}
+
+// A suspended account (or a member of a suspended owner, resolved by the store)
+// gets the same 403 ACCOUNT_SUSPENDED as perunio-backend, and keeps its cookies:
+// the session stays alive so the app can show the suspension dialog.
+func TestSuspendedUserIs403AndKeepsSession(t *testing.T) {
+	user := activeUser()
+	user.Suspended = true
+	store := &fakeStore{alive: true, user: user}
+	token := signToken(t, JWTPayload{SID: "session-1", UserID: "user-1", TenantID: "tenant-1"})
+
+	rec, reached := run(t, store, token)
+	if reached {
+		t.Fatal("a suspended account must not reach the handler")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	if code := errorCode(t, rec); code != "ACCOUNT_SUSPENDED" {
+		t.Fatalf("code = %q, want ACCOUNT_SUSPENDED", code)
+	}
+	if c := cookieByName(rec, "auth_token"); c != nil {
+		t.Fatal("suspension must not clear the auth cookie")
 	}
 }

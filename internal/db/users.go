@@ -12,13 +12,21 @@ import (
 // GetUserByID looks up a user by primary key. Used by the JWT middleware to
 // verify the user still exists and is active. Runs without an RLS context
 // because the users table is global (not tenant-scoped).
-func (p *Pool) GetUserByID(ctx context.Context, userID string) (*auth.UserRecord, error) {
+//
+// Suspended covers the user's own suspension and, for a team member whose token
+// is scoped to another tenant, that tenant owner's. tenants has no RLS either.
+func (p *Pool) GetUserByID(ctx context.Context, userID, tenantID string) (*auth.UserRecord, error) {
 	row := p.pool.QueryRow(ctx,
-		`SELECT id, is_active, token_version FROM users WHERE id = $1 LIMIT 1`,
-		userID,
+		`SELECT u.id, u.is_active, u.token_version,
+		        (u.suspended_at IS NOT NULL OR EXISTS (
+		            SELECT 1 FROM tenants t JOIN users o ON o.id = t.user_id
+		            WHERE t.id = NULLIF($2, '')::uuid AND o.suspended_at IS NOT NULL
+		        )) AS suspended
+		   FROM users u WHERE u.id = $1 LIMIT 1`,
+		userID, tenantID,
 	)
 	var u auth.UserRecord
-	if err := row.Scan(&u.ID, &u.IsActive, &u.TokenVersion); err != nil {
+	if err := row.Scan(&u.ID, &u.IsActive, &u.TokenVersion, &u.Suspended); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
