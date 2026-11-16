@@ -534,7 +534,7 @@ func (s *Server) updateDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Guía no encontrada")
 		case errors.Is(err, db.ErrNotDraft):
 			writeError(w, http.StatusBadRequest, "NOT_DRAFT",
-				"Solo guías en borrador pueden ser modificadas")
+				"Solo se puede modificar una guía en borrador o con error de envío")
 		default:
 			s.log.Error("update despatch", "error", err, "despatchId", despatchID)
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")

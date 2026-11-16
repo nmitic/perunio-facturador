@@ -153,7 +153,7 @@ Read-only GROUP BY reports. Reuse the historial's company+environment scope (`do
 - `GET /gre/{companyId}` — list despatches (paginated, filterable by docType/status)
 - `POST /gre/{companyId}` — create draft despatch (quota check + atomic correlative)
 - `GET /gre/{companyId}/{despatchId}` — with line items
-- `PUT /gre/{companyId}/{despatchId}` — update draft
+- `PUT /gre/{companyId}/{despatchId}` — update a draft, or one whose send failed (`error`), to resend it with the same número
 - `DELETE /gre/{companyId}/{despatchId}` — delete draft
 - `POST /gre/{companyId}/{despatchId}/issue` — validate → build XML → sign → zip → send via GRE OAuth2 REST, store ticket
 - `POST /gre/{companyId}/{despatchId}/poll` — poll SUNAT ticket, decode base64 CDR, persist outcome

@@ -477,8 +477,10 @@ type DespatchUpdateInput struct {
 	RelatedDocuments []model.RelatedDocument
 }
 
-// UpdateDraftDespatch patches a draft despatch and (optionally) replaces
-// its lines. Returns ErrNotFound / ErrNotDraft accordingly.
+// UpdateDraftDespatch patches a despatch SUNAT has not ruled on — a draft, or
+// one whose send failed ("error": no ticket was ever issued) — and
+// (optionally) replaces its lines. Fixing what made the send fail and sending
+// again keeps the same número. Returns ErrNotFound / ErrNotDraft accordingly.
 func (p *Pool) UpdateDraftDespatch(ctx context.Context, despatchID string, in DespatchUpdateInput) (*model.Despatch, error) {
 	var d model.Despatch
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
@@ -491,7 +493,7 @@ func (p *Pool) UpdateDraftDespatch(ctx context.Context, despatchID string, in De
 			}
 			return err
 		}
-		if status != "draft" {
+		if status != "draft" && status != "error" {
 			return ErrNotDraft
 		}
 
