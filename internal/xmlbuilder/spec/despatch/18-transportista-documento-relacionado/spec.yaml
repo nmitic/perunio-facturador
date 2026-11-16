@@ -17,5 +17,9 @@ assert:
   - xpath: "/*/cac:AdditionalDocumentReference/cbc:DocumentType"
     equals: "Guía de Remisión Remitente"
   - xpath: "/*/cac:AdditionalDocumentReference/cac:IssuerParty/cac:PartyIdentification/cbc:ID"
-    equals: "20601327318"
-    sunat: "3380"
+    equals: "20100113612"
+    sunat: "3380/3381"
+    why: >-
+      The remitente's guía is issued by the remitente (the DespatchParty).
+      This case cited the destinatario's RUC until the GRE test server
+      answered 3381 (2026-11-16).

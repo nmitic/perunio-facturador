@@ -90,7 +90,19 @@ func validateDespatchRecipient(d *model.Despatch) []model.ValidationError {
 func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 	var errs []model.ValidationError
 
-	if !sunat.Cat20Emit(d.TransferReason) {
+	// A GRE transportista states no motivo: the carrier moves someone else's
+	// goods, and the Transportista sheet and XSL have no HandlingCode rule.
+	// The remitente, which SUNAT requires there (3383), takes its place.
+	if d.DocType == sunat.GreDocTypeTransportista {
+		if d.CarrierRUC == nil || !rucRegex.MatchString(strings.TrimSpace(*d.CarrierRUC)) {
+			errs = append(errs, model.ValidationError{Code: 3383, Field: "carrierRuc",
+				Message: "una guía transportista indica el RUC del remitente (11 dígitos)"})
+		}
+		if d.TransferReason != "" && !sunat.Cat20Emit(d.TransferReason) {
+			errs = append(errs, model.ValidationError{Code: 2800, Field: "transferReason",
+				Message: fmt.Sprintf("motivo de traslado no válido: %q (catálogo 20)", d.TransferReason)})
+		}
+	} else if !sunat.Cat20Emit(d.TransferReason) {
 		errs = append(errs, model.ValidationError{
 			Code: 2800, Field: "transferReason",
 			Message: fmt.Sprintf("motivo de traslado no válido: %q (catálogo 20)", d.TransferReason),

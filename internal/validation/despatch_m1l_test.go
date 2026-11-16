@@ -63,3 +63,30 @@ func TestDespatchVehicleM1L(t *testing.T) {
 		is.EqualSlice(t, []string{"2811 vehicleM1l"}, errorFields(d, lines))
 	})
 }
+
+// A GRE transportista names its remitente (3383), needs no motivo, and cites
+// the remitente's guía as issued by that remitente (3381).
+func TestDespatchTransportista(t *testing.T) {
+	t.Run("without a motivo it passes", func(t *testing.T) {
+		d, lines := specGuia(t, "21-transportista-sin-motivo")
+		is.Equal(t, 0, len(errorFields(d, lines)))
+	})
+
+	t.Run("without a remitente it is refused", func(t *testing.T) {
+		d, lines := specGuia(t, "03-transportista")
+		d.CarrierRUC = nil
+		is.EqualSlice(t, []string{"3383 carrierRuc"}, errorFields(d, lines))
+	})
+
+	t.Run("the remitente's guía issued by someone else is refused", func(t *testing.T) {
+		d, lines := specGuia(t, "18-transportista-documento-relacionado")
+		d.RelatedDocuments[0].IssuerRUC = "20601327318"
+		is.EqualSlice(t, []string{"3381 relatedDocuments[0].issuerRuc"}, errorFields(d, lines))
+	})
+
+	t.Run("a remitente guía still needs its motivo", func(t *testing.T) {
+		d, lines := specGuia(t, "01-remitente-transporte-privado")
+		d.TransferReason = ""
+		is.EqualSlice(t, []string{"2800 transferReason"}, errorFields(d, lines))
+	})
+}

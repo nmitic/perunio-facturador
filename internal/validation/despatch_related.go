@@ -111,6 +111,13 @@ func validateRelatedDocuments(d *model.Despatch) []model.ValidationError {
 		case issuer != "" && !rucRegex.MatchString(issuer):
 			errs = append(errs, model.ValidationError{Code: 3382, Field: field + ".issuerRuc",
 				Message: "el emisor del documento relacionado se identifica con su RUC (11 dígitos)"})
+		case !remitente && doc.DocType == sunat.Cat61GuiaRemitente && issuer != "" &&
+			d.CarrierRUC != nil && issuer != strings.TrimSpace(*d.CarrierRUC):
+			// On a GRE transportista the remitente's guía is issued by the
+			// remitente (ValidaExprRegGreTransportista 3381). CarrierRUC holds
+			// the remitente on a 31.
+			errs = append(errs, model.ValidationError{Code: 3381, Field: field + ".issuerRuc",
+				Message: "la guía remitente relacionada la emite el remitente: su RUC debe ser el del remitente"})
 		}
 	}
 	if remitente {

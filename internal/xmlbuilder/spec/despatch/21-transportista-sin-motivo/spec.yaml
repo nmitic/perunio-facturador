@@ -1,0 +1,15 @@
+case: transportista-sin-motivo
+document: despatch
+why: >-
+  A GRE transportista moves someone else's goods and need not know why: the
+  Transportista sheet and its XSL have no rule on cbc:HandlingCode, so a 31
+  saved without a motivo carries none. The remitente (DespatchParty, 3383)
+  is what it must state instead.
+sources:
+  - "resources/xsl/gre/ValidaExprRegGreTransportista-2.0.1.xsl"
+assert:
+  - xpath: "/*/cac:Shipment/cbc:HandlingCode"
+    absent: true
+  - xpath: "/*/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty/cac:PartyIdentification/cbc:ID"
+    equals: "20100113612"
+    sunat: "3383"

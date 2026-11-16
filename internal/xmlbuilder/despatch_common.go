@@ -94,9 +94,11 @@ type deliveryCustomerParty struct {
 // shipment carries the transport metadata: weight, packages, mode,
 // origin/destination addresses, driver and vehicle.
 type shipment struct {
-	XMLName      xml.Name     `xml:"cac:Shipment"`
-	ID           string       `xml:"cbc:ID"`
-	HandlingCode handlingCode `xml:"cbc:HandlingCode"`
+	XMLName xml.Name `xml:"cac:Shipment"`
+	ID      string   `xml:"cbc:ID"`
+	// HandlingCode is the Cat.20 motivo; a GRE transportista may leave it out
+	// (its sheet and XSL have no rule for it).
+	HandlingCode *handlingCode `xml:"cbc:HandlingCode,omitempty"`
 	// HandlingInstructions is the description of the motivo de traslado,
 	// required for motivo 13 Otros (ERROR 3457). cbc:Information is reserved
 	// for motivos 08/09/19 (ERROR 3418 on any other) and is not emitted.
@@ -133,8 +135,11 @@ type handlingCode struct {
 	ListURI        string `xml:"listURI,attr,omitempty"`
 }
 
-func newHandlingCode(code string) handlingCode {
-	return handlingCode{
+func newHandlingCode(code string) *handlingCode {
+	if code == "" {
+		return nil
+	}
+	return &handlingCode{
 		Value:          code,
 		ListAgencyName: "PE:SUNAT",
 		ListName:       "Motivo de traslado",

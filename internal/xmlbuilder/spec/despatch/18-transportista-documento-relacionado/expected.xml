@@ -37,7 +37,7 @@
     <cbc:DocumentType>Guía de Remisión Remitente</cbc:DocumentType>
     <cac:IssuerParty>
       <cac:PartyIdentification>
-        <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20601327318</cbc:ID>
+        <cbc:ID schemeID="6" schemeName="Documento de Identidad" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20100113612</cbc:ID>
       </cac:PartyIdentification>
     </cac:IssuerParty>
   </cac:AdditionalDocumentReference>
