@@ -102,7 +102,7 @@ The core: draft → issue pipeline (validate → UBL XML → sign → ZIP → SO
 
 ### `POST /documents/{companyId}/{docId}/issue` — **run the SUNAT pipeline**
 **Purpose:** the heart of the service. Loads the draft + company SUNAT credentials + active certificate, then: pre-submission **validation** → build **UBL 2.1** XML → **XMLDSig RSA-SHA1** sign → **ZIP** → SOAP **sendBill** → parse **CDR** → generate **PDF** (QR) → upload all artifacts to R2 → persist status + CDR outcome.
-**Body (optional):** `{ environment?: "beta" | "production" }` — overrides the per-company default; falls back to `beta`.
+**Body (optional):** `{ environment?: "beta" | "production" }` — must match the document's own `sunatEnvironment`, else `400 ENVIRONMENT_MISMATCH`.
 **Response:** updated `IssuedDocument` (status + CDR summary). Notable errors: `400 ALREADY_ACCEPTED`, `400 NO_ITEMS`, `400` validation failures (with SUNAT codes), `400 SUNAT_CREDENTIALS_MISSING` / `400 CERTIFICATE_MISSING`, `502 SUNAT_ERROR`, plus `XML_BUILD_ERROR` / `SIGN_ERROR` / `ZIP_ERROR` / `CDR_PARSE_ERROR` / `R2_UPLOAD_ERROR`.
 
 ### `GET /documents/{companyId}/{docId}/files/{fileType}` — download artifact
@@ -210,7 +210,12 @@ Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed
 
 ## Pipeline note — the `{ environment }` body
 
-Every `issue` / `poll` endpoint accepts an **optional** `{ "environment": "beta" | "production" }` body. Resolution order (`resolvePipelineEnv`): explicit override → per-company default → `beta`. An empty/absent body is fine (it is not a validation error).
+Every `issue` / `poll` endpoint accepts an **optional** `{ "environment": "beta" | "production" }` body. An empty/absent body is fine (it is not a validation error).
+
+- **Documents and guías** carry their own environment, stamped when the draft was created (`sunat_environment`), and always go to it (`stampedPipelineEnv`). The body can only confirm it: a different value is `400 ENVIRONMENT_MISMATCH`.
+- **Summaries and voids** have no stamp. Resolution order (`resolvePipelineEnv`): explicit override → per-company default → `production`.
+
+**Guías in beta** go to a third-party GRE test server, not to SUNAT, which has no GRE sandbox. They use that server's shared test credentials (so `GRE_CREDENTIALS_MISSING` cannot happen in beta), number from the series' beta counter, and are listed only while the company is in beta. If the test server does not answer, the `502 SUNAT_ERROR` message says so.
 
 ## Cross-service summary
 

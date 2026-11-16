@@ -52,6 +52,25 @@ func (e *CorrelativeTooLowError) Error() string {
 
 func (e *CorrelativeTooLowError) Unwrap() error { return ErrCorrelativeTooLow }
 
+// companyEnvironment returns the company's current SUNAT environment
+// ("beta" or "production") and the document_series column that environment
+// numbers from. A draft, comprobante or guía, is stamped with the first and
+// draws its correlative from the second, so the sandbox and production keep
+// independent sequences. The column is one of two fixed identifiers, never
+// client input, so callers may interpolate it.
+func companyEnvironment(ctx context.Context, tx pgx.Tx, companyID string) (environment, correlativeCol string, err error) {
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(sunat_environment::text, 'production') FROM companies WHERE id = $1`,
+		companyID,
+	).Scan(&environment); err != nil {
+		return "", "", err
+	}
+	if environment == "beta" {
+		return "beta", "next_correlative_beta", nil
+	}
+	return "production", "next_correlative", nil
+}
+
 func scanSeries(row pgx.Row, s *model.Series) error {
 	return row.Scan(&s.ID, &s.TenantID, &s.CompanyID, &s.DocType, &s.Series,
 		&s.NextCorrelative, &s.Description, &s.IsActive, &s.CreatedAt, &s.UpdatedAt)
@@ -128,8 +147,8 @@ func (p *Pool) UpdateSeries(ctx context.Context, companyID, seriesID string, in 
 			// The floor is the largest number already spoken for: the counter
 			// itself, plus anything actually issued under this serie. Both
 			// tables are consulted because GRE despatches share
-			// document_series; that table has no environment column, and only
-			// production issued_documents draw from next_correlative.
+			// document_series, and in both only production rows draw from
+			// next_correlative (beta numbers from next_correlative_beta).
 			floor := current - 1
 			var issued int
 			if err := tx.QueryRow(ctx, `
@@ -137,7 +156,7 @@ func (p *Pool) UpdateSeries(ctx context.Context, companyID, seriesID string, in 
 					COALESCE((SELECT MAX(correlative) FROM issued_documents
 					          WHERE series_id = $1 AND sunat_environment = 'production'), 0),
 					COALESCE((SELECT MAX(correlative) FROM despatches
-					          WHERE series_id = $1), 0)
+					          WHERE series_id = $1 AND sunat_environment = 'production'), 0)
 				)`, seriesID).Scan(&issued); err != nil {
 				return err
 			}

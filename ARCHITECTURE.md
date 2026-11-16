@@ -26,7 +26,7 @@ graph TD
     R2[("Cloudflare R2<br/>certificates + documents")]
     ASM["AWS Secrets Manager<br/>JWT + encryption keys"]
     SUNAT_SOAP["SUNAT SOAP<br/>sendBill / sendSummary / getStatus"]
-    SUNAT_GRE["SUNAT GRE REST<br/>OAuth2 (api-cpe / api-seguridad)"]
+    SUNAT_GRE["SUNAT GRE REST<br/>OAuth2 (api-cpe / api-seguridad)<br/>beta: gre-test.nubefact.com"]
     SUNAT_SCRAPE["SUNAT portal<br/>(consultas / buzón / scraping)"]
     RESEND["Resend (email)"]
 

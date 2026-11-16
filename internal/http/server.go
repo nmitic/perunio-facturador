@@ -67,9 +67,14 @@ func NewServer(deps Deps) *Server {
 		pool:    deps.Pool,
 		r2:      deps.R2,
 		greClient: greclient.NewClient(
-			deps.Config.SunatGRESecurityURL,
-			deps.Config.SunatGREBetaURL,
-			deps.Config.SunatGREProductionURL,
+			greclient.Endpoints{
+				SecurityURL: deps.Config.SunatGREBetaSecurityURL,
+				CpeURL:      deps.Config.SunatGREBetaURL,
+			},
+			greclient.Endpoints{
+				SecurityURL: deps.Config.SunatGRESecurityURL,
+				CpeURL:      deps.Config.SunatGREProductionURL,
+			},
 			deps.Config.SunatTimeoutSeconds,
 		),
 		authMW:    auth.NewMiddleware(deps.Secrets.JWTSecret(), deps.Pool),

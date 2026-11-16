@@ -37,6 +37,12 @@ type Despatch struct {
 	Series      string `json:"series"`
 	Correlative int    `json:"correlative"`
 
+	// SunatEnvironment is "beta" or "production", stamped when the draft is
+	// created from the company's environment at that moment. It alone decides
+	// where the guía is sent: SUNAT has no GRE sandbox, so a beta guía goes to
+	// a test server and never to SUNAT.
+	SunatEnvironment string `json:"sunatEnvironment"`
+
 	IssueDate time.Time `json:"issueDate"`
 	IssueTime *string   `json:"issueTime"`
 

@@ -33,13 +33,35 @@ type greDeps struct {
 	greCredentials greclient.Credentials
 }
 
-// loadGREDeps wraps loadPipelineDeps with the extra lookups the GRE
-// pipeline needs: decrypted client_id + client_secret from the
-// companies row. Returns (nil, false) after writing the error.
-func (s *Server) loadGREDeps(w http.ResponseWriter, r *http.Request, companyID string) (*greDeps, bool) {
+// greBetaSOL is the usuario and clave SOL the beta test server expects from
+// every emisor ({RUC}MODDATOS / MODDATOS), the same pair SUNAT's own beta uses
+// for comprobantes.
+const greBetaSOL = "MODDATOS"
+
+// loadGREDeps wraps loadPipelineDeps with the OAuth2 credentials for the
+// guía's environment. Returns (nil, false) after writing the error.
+//
+// Production uses the company's own client_id + client_secret (decrypted from
+// the companies row) and its SOL emission user. Beta is a third-party test
+// server (SUNAT has no GRE sandbox), so it gets that server's shared test
+// credentials and the company's secrets are never sent to it. A company with
+// no GRE API credentials can therefore still try guías in beta.
+func (s *Server) loadGREDeps(w http.ResponseWriter, r *http.Request, companyID, env string) (*greDeps, bool) {
 	deps, ok := s.loadPipelineDeps(w, r, companyID)
 	if !ok {
 		return nil, false
+	}
+
+	if env != "production" {
+		return &greDeps{
+			pipelineDeps: deps,
+			greCredentials: greclient.Credentials{
+				ClientID:      s.cfg.SunatGREBetaClientID,
+				ClientSecret:  s.cfg.SunatGREBetaClientSecret,
+				SunatUsername: deps.company.RUC + greBetaSOL,
+				SunatPassword: greBetaSOL,
+			},
+		}, true
 	}
 
 	if deps.company.EncryptedClientID == nil || deps.company.EncryptedClientSecret == nil {
@@ -72,6 +94,17 @@ func (s *Server) loadGREDeps(w http.ResponseWriter, r *http.Request, companyID s
 			SunatPassword: deps.sunatPassword,
 		},
 	}, true
+}
+
+// greSendErrorMessage is what the user reads when a guía could not be sent or
+// polled. An answer from the server is shown as is. No answer at all in beta
+// is the test server being down, which must not read as a SUNAT outage.
+func greSendErrorMessage(env string, err error) string {
+	var apiErr *greclient.APIErrorResponse
+	if env != "production" && !errors.As(err, &apiErr) {
+		return "El servidor de pruebas de guías no responde. Intenta más tarde; las guías en producción no se ven afectadas."
+	}
+	return err.Error()
 }
 
 // ---------- list + get ----------
@@ -553,6 +586,11 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			"La guía ya fue aceptada por SUNAT")
 		return
 	}
+	env, pErr := stampedPipelineEnv(envOverride, d.SunatEnvironment)
+	if pErr != nil {
+		writePipelineError(w, pErr)
+		return
+	}
 
 	lines, err := s.pool.GetDespatchLines(r.Context(), despatchID)
 	if err != nil {
@@ -572,11 +610,10 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deps, ok := s.loadGREDeps(w, r, companyID)
+	deps, ok := s.loadGREDeps(w, r, companyID, env)
 	if !ok {
 		return
 	}
-	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	address := deps.company.FiscalAddress
 	if address == "" {
@@ -634,10 +671,10 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 
 	sendResp, err := s.greClient.Send(r.Context(), companyID, env, deps.greCredentials, filename, zipBytes)
 	if err != nil {
-		s.log.Error("gre send", "error", err, "despatchId", despatchID)
+		s.log.Error("gre send", "error", err, "despatchId", despatchID, "env", env)
 		// Persist R2 artifacts + error state.
 		errStatus := sunat.EstadoGuiaError
-		errMsg := err.Error()
+		errMsg := greSendErrorMessage(env, err)
 		_, _ = s.pool.ApplyDespatchResult(r.Context(), despatchID, db.DespatchIssueResult{
 			Status:                   errStatus,
 			SunatResponseDescription: &errMsg,
@@ -645,9 +682,10 @@ func (s *Server) issueDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			R2SignedXmlKey:           &signedKey,
 			R2ZipKey:                 &zipKey,
 		})
-		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
+		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", errMsg)
 		return
 	}
+	s.log.Info("gre send", "despatchId", despatchID, "env", env)
 
 	ticket := sendResp.NumTicket
 	updated, err := s.pool.ApplyDespatchResult(r.Context(), despatchID, db.DespatchIssueResult{
@@ -691,17 +729,23 @@ func (s *Server) pollDespatchHandler(w http.ResponseWriter, r *http.Request) {
 			"La guía aún no fue enviada a SUNAT")
 		return
 	}
+	// The ticket belongs to the server that issued it, which is the guía's
+	// own environment whatever the company is set to today.
+	env, pErr := stampedPipelineEnv(envOverride, d.SunatEnvironment)
+	if pErr != nil {
+		writePipelineError(w, pErr)
+		return
+	}
 
-	deps, ok := s.loadGREDeps(w, r, companyID)
+	deps, ok := s.loadGREDeps(w, r, companyID, env)
 	if !ok {
 		return
 	}
-	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	status, err := s.greClient.Poll(r.Context(), companyID, env, deps.greCredentials, *d.SunatTicket)
 	if err != nil {
-		s.log.Error("gre poll", "error", err, "despatchId", despatchID)
-		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", err.Error())
+		s.log.Error("gre poll", "error", err, "despatchId", despatchID, "env", env)
+		writeError(w, http.StatusBadGateway, "SUNAT_ERROR", greSendErrorMessage(env, err))
 		return
 	}
 

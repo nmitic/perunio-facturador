@@ -218,6 +218,10 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 		return nil, newPipelineError(http.StatusBadRequest, "ALREADY_ACCEPTED",
 			"El documento ya fue aceptado por SUNAT")
 	}
+	env, pErr := stampedPipelineEnv(envOverride, doc.SunatEnvironment)
+	if pErr != nil {
+		return nil, pErr
+	}
 
 	items, err := s.pool.GetIssuedDocumentItems(ctx, docID)
 	if err != nil {
@@ -233,7 +237,6 @@ func (s *Server) runIssuePipeline(ctx context.Context, companyID, docID, envOver
 	if pErr != nil {
 		return nil, pErr
 	}
-	env := resolvePipelineEnv(envOverride, deps.company.SunatEnvironment)
 
 	// 3. Fiscal address from the company row (populated during onboarding from the
 	// SUNAT RUC scrape), falling back to a placeholder when missing so the pipeline

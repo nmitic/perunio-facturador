@@ -17,30 +17,48 @@ import (
 
 // Client talks to the SUNAT Nueva Plataforma GRE REST API.
 //
-// It holds the per-environment base URLs and an in-memory OAuth2 token
+// It holds each environment's endpoints and an in-memory OAuth2 token
 // cache. One instance is shared across requests — tokens are keyed by
 // (companyID, environment) so multi-tenant requests don't thrash each
 // other's credentials.
+//
+// The two environments share nothing: a beta call requests its token from
+// the beta security URL and sends to the beta comprobantes URL. SUNAT has no
+// GRE sandbox, so beta is a third-party test server (see config.Config) and
+// the caller passes that server's shared test credentials, never a company's.
 type Client struct {
-	securityURL string // https://api-seguridad.sunat.gob.pe
-	cpeBetaURL  string // https://api-cpe.sunat.gob.pe (beta)
-	cpeProdURL  string // https://api-cpe.sunat.gob.pe (prod)
-	httpClient  *http.Client
-	tokens      *tokenCache
+	beta       Endpoints
+	production Endpoints
+	httpClient *http.Client
+	tokens     *tokenCache
+}
+
+// Endpoints are one environment's base URLs, without the /v1 path.
+type Endpoints struct {
+	// SecurityURL issues OAuth2 tokens (production: api-seguridad.sunat.gob.pe).
+	SecurityURL string
+	// CpeURL receives comprobantes and answers tickets (production: api-cpe.sunat.gob.pe).
+	CpeURL string
+}
+
+func (e Endpoints) trimmed() Endpoints {
+	return Endpoints{
+		SecurityURL: strings.TrimRight(e.SecurityURL, "/"),
+		CpeURL:      strings.TrimRight(e.CpeURL, "/"),
+	}
 }
 
 // NewClient constructs a GRE client. timeoutSeconds governs both token
 // and comprobante request timeouts.
-func NewClient(securityURL, cpeBetaURL, cpeProductionURL string, timeoutSeconds int) *Client {
+func NewClient(beta, production Endpoints, timeoutSeconds int) *Client {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 30
 	}
 	return &Client{
-		securityURL: strings.TrimRight(securityURL, "/"),
-		cpeBetaURL:  strings.TrimRight(cpeBetaURL, "/"),
-		cpeProdURL:  strings.TrimRight(cpeProductionURL, "/"),
-		httpClient:  &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second},
-		tokens:      newTokenCache(),
+		beta:       beta.trimmed(),
+		production: production.trimmed(),
+		httpClient: &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second},
+		tokens:     newTokenCache(),
 	}
 }
 
@@ -53,12 +71,13 @@ type Credentials struct {
 	SunatPassword string
 }
 
-// cpeBaseURL returns the comprobante base URL for an environment.
-func (c *Client) cpeBaseURL(environment string) string {
+// endpoints returns an environment's URLs. Anything that is not exactly
+// "production" is beta, so an unexpected value can never reach SUNAT.
+func (c *Client) endpoints(environment string) Endpoints {
 	if environment == "production" {
-		return c.cpeProdURL
+		return c.production
 	}
-	return c.cpeBetaURL
+	return c.beta
 }
 
 // tokenKey keys the token cache. Different environments get different
@@ -76,7 +95,7 @@ func (c *Client) getToken(ctx context.Context, companyID, environment string, cr
 		return tok, nil
 	}
 
-	tok, err := c.requestToken(ctx, creds)
+	tok, err := c.requestToken(ctx, environment, creds)
 	if err != nil {
 		return "", err
 	}
@@ -86,8 +105,8 @@ func (c *Client) getToken(ctx context.Context, companyID, environment string, cr
 
 // requestToken performs the OAuth2 password grant against
 // POST /v1/clientessol/{client_id}/oauth2/token/.
-func (c *Client) requestToken(ctx context.Context, creds Credentials) (*apiToken, error) {
-	endpoint := fmt.Sprintf("%s/v1/clientessol/%s/oauth2/token/", c.securityURL, url.PathEscape(creds.ClientID))
+func (c *Client) requestToken(ctx context.Context, environment string, creds Credentials) (*apiToken, error) {
+	endpoint := fmt.Sprintf("%s/v1/clientessol/%s/oauth2/token/", c.endpoints(environment).SecurityURL, url.PathEscape(creds.ClientID))
 
 	form := url.Values{}
 	form.Set("grant_type", "password")
@@ -124,6 +143,11 @@ func (c *Client) requestToken(ctx context.Context, creds Credentials) (*apiToken
 		return nil, fmt.Errorf("decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
+		// The beta test server reports a refused grant as HTTP 200 with the
+		// error envelope ("RUC incorrecto", "'client_secret' incorrecto").
+		if apiErr := parseAPIError(resp.StatusCode, body, "oauth2 token"); apiErr.Err != nil {
+			return nil, apiErr
+		}
 		return nil, fmt.Errorf("oauth2 token response missing access_token")
 	}
 	return &tok, nil
@@ -173,7 +197,7 @@ func (c *Client) doSend(ctx context.Context, environment, token, filename string
 		return nil, fmt.Errorf("marshal cpe request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/v1/contribuyente/gem/comprobantes/%s", c.cpeBaseURL(environment), url.PathEscape(filename))
+	endpoint := fmt.Sprintf("%s/v1/contribuyente/gem/comprobantes/%s", c.endpoints(environment).CpeURL, url.PathEscape(filename))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("build send request: %w", err)
@@ -230,7 +254,7 @@ func (c *Client) Poll(ctx context.Context, companyID, environment string, creds 
 }
 
 func (c *Client) doPoll(ctx context.Context, environment, token, numTicket string) (*StatusResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/contribuyente/gem/comprobantes/envios/%s", c.cpeBaseURL(environment), url.PathEscape(numTicket))
+	endpoint := fmt.Sprintf("%s/v1/contribuyente/gem/comprobantes/envios/%s", c.endpoints(environment).CpeURL, url.PathEscape(numTicket))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build poll request: %w", err)
@@ -280,7 +304,7 @@ func (e *APIErrorResponse) Error() string {
 	return fmt.Sprintf("gre %s failed: HTTP %d", e.Stage, e.StatusCode)
 }
 
-func parseAPIError(status int, body []byte, stage string) error {
+func parseAPIError(status int, body []byte, stage string) *APIErrorResponse {
 	out := &APIErrorResponse{StatusCode: status, Stage: stage}
 	if status == http.StatusUnprocessableEntity {
 		var v APIValidationError

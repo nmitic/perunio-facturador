@@ -22,7 +22,7 @@ import (
 )
 
 // pipelineBody is the optional body accepted by every issue/poll endpoint.
-// Environment defaults to "beta" when not set.
+// See stampedPipelineEnv and resolvePipelineEnv for how it is used.
 type pipelineBody struct {
 	Environment string `json:"environment,omitempty"`
 }
@@ -44,6 +44,24 @@ func readPipelineEnv(r *http.Request) string {
 		return body.Environment
 	}
 	return ""
+}
+
+// stampedPipelineEnv returns the SUNAT environment of a document that carries
+// its own stamp (issued_documents, despatches). The stamp was set when the
+// draft was created and chose the correlative counter, so it is the only
+// environment the document may be sent to: a draft numbered in beta must not
+// reach production after the company switches, nor the reverse. An explicit
+// override that disagrees with the stamp is refused instead of obeyed.
+func stampedPipelineEnv(override, stamped string) (string, *pipelineError) {
+	env := "production"
+	if stamped == "beta" {
+		env = "beta"
+	}
+	if override != "" && override != env {
+		return "", newPipelineError(http.StatusBadRequest, "ENVIRONMENT_MISMATCH",
+			"El documento pertenece al ambiente "+env+" y no se puede enviar a "+override)
+	}
+	return env, nil
 }
 
 // resolvePipelineEnv picks the SUNAT environment for this pipeline run. An

@@ -159,7 +159,26 @@ Read-only GROUP BY reports. Reuse the historial's company+environment scope (`do
 - `POST /gre/{companyId}/{despatchId}/poll` — poll SUNAT ticket, decode base64 CDR, persist outcome
 - `GET /gre/{companyId}/{despatchId}/files/{fileType}` — presigned R2 URL (`xml|signed_xml|zip|cdr`)
 
-GRE credentials (OAuth2 `client_id` + `client_secret`) are stored AES-encrypted on the `companies` row (`encrypted_client_id`, `encrypted_client_secret`). The token cache in `greclient` is keyed by `(companyID, environment)`.
+GRE credentials (OAuth2 `client_id` + `client_secret`) are stored AES-encrypted on the `companies` row (`client_id`, `client_secret`). The token cache in `greclient` is keyed by `(companyID, environment)`.
+
+**Guías in beta.** SUNAT has no GRE sandbox, so a beta guía goes to Nubefact's
+free test server (`gre-test.nubefact.com`, same paths as SUNAT, basic validation
+only: XSD and part of the XSL rules; it answers with SUNAT's codes and a CDR).
+The rules:
+
+- A guía is stamped with the company's environment when the draft is created
+  (`despatches.sunat_environment`). The stamp decides its correlative counter
+  (`next_correlative_beta` in beta), where it is sent, and the list it shows in
+  (`despatchScope`, the company's current environment). Issue and poll read the
+  stamp (`stampedPipelineEnv`); a body `environment` that disagrees is a
+  `400 ENVIRONMENT_MISMATCH`. Comprobantes follow the same rule.
+- Beta uses the test server's shared credentials (`SUNAT_GRE_BETA_CLIENT_ID/SECRET`,
+  `{RUC}MODDATOS` / `MODDATOS`). A company's `client_secret` and clave SOL are
+  never sent there, and a company without GRE API credentials can still test.
+- The service refuses to start if a beta GRE URL is a SUNAT host
+  (`checkGREBetaIsNotProduction`): until 2026-11 the beta default *was* the
+  production host and every "prueba" guía was a real one.
+- "Aceptada" in beta is not a promise: production validates more.
 
 Despatch doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). Statuses: `draft → signed → sent → accepted / rejected / error`.
 
@@ -191,8 +210,13 @@ SUNAT_CONSULT_URL=
 
 # SUNAT GRE REST endpoints (defaults baked in)
 SUNAT_GRE_SECURITY_URL=     # default: https://api-seguridad.sunat.gob.pe
-SUNAT_GRE_BETA_URL=         # default: https://api-cpe.sunat.gob.pe
 SUNAT_GRE_PRODUCTION_URL=   # default: https://api-cpe.sunat.gob.pe
+
+# GRE beta = a test server, never SUNAT (startup fails on a sunat.gob.pe host)
+SUNAT_GRE_BETA_SECURITY_URL=   # default: https://gre-test.nubefact.com
+SUNAT_GRE_BETA_URL=            # default: https://gre-test.nubefact.com
+SUNAT_GRE_BETA_CLIENT_ID=      # default: the test server's published client_id
+SUNAT_GRE_BETA_CLIENT_SECRET=  # default: the test server's published client_secret
 ```
 
 ## SUNAT catalogs

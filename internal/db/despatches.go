@@ -30,6 +30,7 @@ type DespatchListResult struct {
 // with the despatches table definition.
 const despatchColumns = `
 	id, tenant_id, company_id, series_id, doc_type, series, correlative, status,
+	sunat_environment,
 	issue_date, issue_time,
 	recipient_doc_type, recipient_doc_number, recipient_name, recipient_address,
 	transport_modality, transfer_reason, transfer_reason_desc, start_date,
@@ -47,6 +48,7 @@ const despatchColumns = `
 func scanDespatch(row pgx.Row, d *model.Despatch) error {
 	return row.Scan(
 		&d.ID, &d.TenantID, &d.CompanyID, &d.SeriesID, &d.DocType, &d.Series, &d.Correlative, &d.Status,
+		&d.SunatEnvironment,
 		&d.IssueDate, &d.IssueTime,
 		&d.RecipientDocType, &d.RecipientDocNumber, &d.RecipientName, &d.RecipientAddress,
 		&d.TransportModality, &d.TransferReason, &d.TransferReasonDesc, &d.StartDate,
@@ -62,7 +64,15 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 	)
 }
 
-// ListDespatches returns a paginated slice of despatches for the company.
+// despatchScope restricts a query over despatches to one company AND its
+// current SUNAT environment, the rule docScope applies to issued_documents:
+// guías made in "beta" stay in the table but leave the list once the company
+// switches to "production", and come back if it switches again. `$1` must be
+// the company id.
+const despatchScope = "company_id = $1 AND sunat_environment = (SELECT sunat_environment FROM companies WHERE id = $1)"
+
+// ListDespatches returns a paginated slice of the company's despatches in its
+// current SUNAT environment.
 func (p *Pool) ListDespatches(ctx context.Context, companyID string, filter DespatchListFilter) (DespatchListResult, error) {
 	page := filter.Page
 	if page < 1 {
@@ -75,7 +85,7 @@ func (p *Pool) ListDespatches(ctx context.Context, companyID string, filter Desp
 	offset := (page - 1) * limit
 
 	args := []any{companyID}
-	conditions := []string{"company_id = $1"}
+	conditions := []string{despatchScope}
 	if filter.DocType != "" {
 		args = append(args, filter.DocType)
 		conditions = append(conditions, fmt.Sprintf("doc_type = $%d", len(args)))
@@ -296,6 +306,14 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 	}
 	var out model.Despatch
 	err := p.WithTenant(ctx, func(tx pgx.Tx) error {
+		// The guía is stamped with the company's current SUNAT environment and
+		// numbered from that environment's counter. The stamp then decides
+		// where it is sent: a beta guía never reaches SUNAT.
+		environment, correlativeCol, err := companyEnvironment(ctx, tx, in.CompanyID)
+		if err != nil {
+			return err
+		}
+
 		// Correlative reservation. When the caller passes correlative <= 0 we
 		// atomically allocate the next value from the series row (and take the
 		// canonical series code from it), mirroring CreateDocumentWithItems.
@@ -303,12 +321,12 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 		correlative := in.Correlative
 		series := in.Series
 		if correlative <= 0 {
-			err := tx.QueryRow(ctx, `
+			err := tx.QueryRow(ctx, fmt.Sprintf(`
 				UPDATE document_series
-				SET next_correlative = next_correlative + 1, updated_at = now()
+				SET %[1]s = %[1]s + 1, updated_at = now()
 				WHERE id = $1 AND company_id = $2 AND is_active = true
-				RETURNING next_correlative - 1, series
-			`, in.SeriesID, in.CompanyID).Scan(&correlative, &series)
+				RETURNING %[1]s - 1, series
+			`, correlativeCol), in.SeriesID, in.CompanyID).Scan(&correlative, &series)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					return ErrSeriesInactive
@@ -328,7 +346,8 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				vehicle_plate,
 				carrier_ruc, carrier_name, carrier_mtc,
 				event_code, original_gre_id,
-				driver_family_name, delivery_date
+				driver_family_name, delivery_date,
+				sunat_environment
 			) VALUES (
 				$1,$2,$3,$4,$5,$6,'draft',
 				$7,$8,
@@ -340,7 +359,8 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				$28,
 				$29,$30,$31,
 				$32,$33,
-				$34, $35
+				$34, $35,
+				$36
 			) RETURNING `+despatchColumns,
 			tenantID, in.CompanyID, in.SeriesID, in.DocType, series, correlative,
 			in.IssueDate, in.IssueTime,
@@ -353,6 +373,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 			in.CarrierRUC, in.CarrierName, in.CarrierMTC,
 			in.EventCode, in.OriginalGreID,
 			in.DriverFamilyName, in.DeliveryDate,
+			environment,
 		)
 		if err := scanDespatch(row, &out); err != nil {
 			return err

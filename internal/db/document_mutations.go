@@ -202,19 +202,9 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		// 0. Resolve the company's current SUNAT environment. The document is
 		// stamped with it and draws its correlative from that environment's
 		// counter, so beta (sandbox) and production keep independent sequences.
-		var environment string
-		if err := tx.QueryRow(ctx,
-			`SELECT COALESCE(sunat_environment::text, 'production') FROM companies WHERE id = $1`,
-			companyID,
-		).Scan(&environment); err != nil {
+		environment, correlativeCol, err := companyEnvironment(ctx, tx, companyID)
+		if err != nil {
 			return err
-		}
-		if environment != "beta" {
-			environment = "production"
-		}
-		correlativeCol := "next_correlative"
-		if environment == "beta" {
-			correlativeCol = "next_correlative_beta"
 		}
 
 		// 1. Atomically bump the environment's correlative and read back the
@@ -222,7 +212,7 @@ func (p *Pool) CreateDocumentWithItems(ctx context.Context, companyID string, in
 		// (never client input), so interpolating it is safe.
 		var correlative int
 		var seriesCode, docType string
-		err := tx.QueryRow(ctx, fmt.Sprintf(`
+		err = tx.QueryRow(ctx, fmt.Sprintf(`
 			UPDATE document_series
 			SET %[1]s = %[1]s + 1, updated_at = now()
 			WHERE id = $1 AND company_id = $2 AND is_active = true

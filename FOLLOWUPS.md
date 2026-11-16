@@ -8,6 +8,18 @@ and where the code is, so it can be picked up later without re-investigating.
 When you pick one up: add spec cases first (`internal/xmlbuilder/spec/`, see its
 README), then fix, then delete the entry here.
 
+## FU-12 — Summaries and voids are not stamped with an environment
+
+`daily_summaries` and `voided_documents` have no `sunat_environment`. Their
+issue and poll handlers (`routes_pipeline.go`, `resolvePipelineEnv`) send to
+the body override, else to whatever the company is set to *now*. A resumen or
+baja created in beta and issued after the company switches to production goes
+to SUNAT production, and a ticket obtained in one environment is polled in the
+other. Comprobantes and guías are stamped at creation and always go to their
+own environment (`stampedPipelineEnv`); these two should follow: add the
+column in perunio-backend, stamp it on create, scope the lists, read it on
+issue and poll. Found while giving guías a beta (2026-11-16).
+
 ## FU-11 — Exonerado and inafecto anticipos (Cat.53 05/06)
 
 Perunio emits only gravado anticipos: the anticipo line is always Cat.07 10

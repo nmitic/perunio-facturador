@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -43,11 +44,21 @@ type Config struct {
 	// SOAP billService used for Factura/Boleta/NC/ND, GRE uses OAuth2 +
 	// REST under the "Plataforma Nueva GRE" (see
 	// cpe.sunat.gob.pe/sites/default/files/inline-files/Manual_Servicios_GRE.pdf).
-	// SunatGRESecurityURL issues tokens; SunatGREBetaURL / SunatGREProductionURL
-	// host the /v1/contribuyente/gem/comprobantes/... endpoints.
-	SunatGRESecurityURL   string
-	SunatGREBetaURL       string
-	SunatGREProductionURL string
+	// SunatGRESecurityURL issues production tokens; SunatGREProductionURL hosts
+	// the production /v1/contribuyente/gem/comprobantes/... endpoints.
+	//
+	// SUNAT has no GRE sandbox. Beta guías go to Nubefact's free test server,
+	// which copies SUNAT's paths and answers with SUNAT's error codes after a
+	// basic validation (XSD and part of the XSL rules). It takes one shared
+	// credential set, published in Nubefact's documentation, so a company's own
+	// client_secret and clave SOL never leave for it: SunatGREBetaClientID /
+	// SunatGREBetaClientSecret are used instead, with {RUC}MODDATOS / MODDATOS.
+	SunatGRESecurityURL      string
+	SunatGREProductionURL    string
+	SunatGREBetaSecurityURL  string
+	SunatGREBetaURL          string
+	SunatGREBetaClientID     string
+	SunatGREBetaClientSecret string
 
 	SunatTimeoutSeconds int
 
@@ -75,10 +86,18 @@ func Load() (Config, error) {
 		SunatProductionURL:    env("SUNAT_PRODUCTION_URL", "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService"),
 		SunatConsultURL:       env("SUNAT_CONSULT_URL", "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"),
 		SunatGRESecurityURL:   env("SUNAT_GRE_SECURITY_URL", "https://api-seguridad.sunat.gob.pe"),
-		SunatGREBetaURL:       env("SUNAT_GRE_BETA_URL", "https://api-cpe.sunat.gob.pe"),
 		SunatGREProductionURL: env("SUNAT_GRE_PRODUCTION_URL", "https://api-cpe.sunat.gob.pe"),
 		SunatTimeoutSeconds:   30,
 		AllowedOrigins:        parseAllowedOrigins(env("ALLOWED_ORIGINS", "http://localhost:5173")),
+
+		SunatGREBetaSecurityURL:  env("SUNAT_GRE_BETA_SECURITY_URL", "https://gre-test.nubefact.com"),
+		SunatGREBetaURL:          env("SUNAT_GRE_BETA_URL", "https://gre-test.nubefact.com"),
+		SunatGREBetaClientID:     env("SUNAT_GRE_BETA_CLIENT_ID", "test-85e5b0ae-255c-4891-a595-0b98c65c9854"),
+		SunatGREBetaClientSecret: env("SUNAT_GRE_BETA_CLIENT_SECRET", "test-Hty/M6QshYvPgItX2P0+Kw=="),
+	}
+
+	if err := c.checkGREBetaIsNotProduction(); err != nil {
+		return Config{}, err
 	}
 
 	if c.DatabaseURL == "" {
@@ -91,6 +110,47 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required")
 	}
 	return c, nil
+}
+
+// checkGREBetaIsNotProduction refuses a configuration in which a beta guía
+// would reach SUNAT. Until this check existed SUNAT_GRE_BETA_URL defaulted to
+// the production host, so every "prueba" guía was a real one.
+func (c Config) checkGREBetaIsNotProduction() error {
+	productionHosts := map[string]bool{}
+	for _, v := range []struct{ name, url string }{
+		{"SUNAT_GRE_SECURITY_URL", c.SunatGRESecurityURL},
+		{"SUNAT_GRE_PRODUCTION_URL", c.SunatGREProductionURL},
+	} {
+		host, err := urlHost(v.url)
+		if err != nil {
+			return fmt.Errorf("%s: %w", v.name, err)
+		}
+		productionHosts[host] = true
+	}
+	for _, v := range []struct{ name, url string }{
+		{"SUNAT_GRE_BETA_SECURITY_URL", c.SunatGREBetaSecurityURL},
+		{"SUNAT_GRE_BETA_URL", c.SunatGREBetaURL},
+	} {
+		host, err := urlHost(v.url)
+		if err != nil {
+			return fmt.Errorf("%s: %w", v.name, err)
+		}
+		if productionHosts[host] || host == "sunat.gob.pe" || strings.HasSuffix(host, ".sunat.gob.pe") {
+			return fmt.Errorf("%s points at %s: SUNAT has no GRE sandbox, so beta guías sent there would be real ones", v.name, host)
+		}
+	}
+	return nil
+}
+
+func urlHost(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("%q is not an absolute URL", raw)
+	}
+	return strings.ToLower(u.Hostname()), nil
 }
 
 func env(key, fallback string) string {

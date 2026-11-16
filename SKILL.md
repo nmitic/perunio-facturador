@@ -540,6 +540,7 @@ R.S. 123-2022/SUNAT replaced the old SOAP guía with **GRE 2.0**: a UBL 2.1
 | Send | `POST https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/{fileName}` with `{"archivo": {"nomArchivo", "arcGreZip" (base64 ZIP), "hashZip"}}` → `numTicket` |
 | Poll | `GET https://api-cpe.sunat.gob.pe/v1/contribuyente/gem/comprobantes/envios/{numTicket}` → status + CDR (base64 ZIP) |
 | Rules | `resources/reglas/reglas-validacion-gre-2026-09-25.xlsx` (Guía-Remitente2_0, Guía-Transportista2_0) and the validators in `resources/xsl/gre/` |
+| Beta | SUNAT has none for GRE. Nubefact's free test server copies the three paths under `https://gre-test.nubefact.com/v1` and takes one published credential set (`test-…` client id/secret, `{RUC}MODDATOS` / `MODDATOS`). It checks the RUC's check digit, the XSD and part of the XSL rules, and answers with SUNAT's codes and a CDR. Its error envelope differs: `cod` may be a number, and a refused token is an HTTP 200 |
 
 There is no GRE "guía de elaboración" PDF: the rules workbook and the XSL are the
 structure spec. GRE answers with its own codes (e.g. UBLVersionID 2111/2110,

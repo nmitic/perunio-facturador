@@ -8,6 +8,8 @@
 //	https://cpe.sunat.gob.pe/sites/default/files/inline-files/Manual_Servicios_GRE.pdf
 package greclient
 
+import "encoding/json"
+
 // apiToken is the OAuth2 token response returned by
 // POST /v1/clientessol/{client_id}/oauth2/token/.
 type apiToken struct {
@@ -56,9 +58,41 @@ type StatusError struct {
 // APIError is the generic non-validation error envelope returned by the
 // GRE REST API. HTTP 5xx responses typically use this shape.
 type APIError struct {
-	Cod string `json:"cod"`
-	Msg string `json:"msg"`
-	Exc string `json:"exc,omitempty"`
+	Cod string
+	Msg string
+	Exc string
+}
+
+// UnmarshalJSON accepts what both servers send: SUNAT writes cod and exc as
+// strings, the beta test server writes cod as a number and exc as a string or
+// an array. A strict decode would drop the whole envelope, message included.
+func (e *APIError) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Cod json.RawMessage `json:"cod"`
+		Msg string          `json:"msg"`
+		Exc json.RawMessage `json:"exc"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	e.Cod = scalarText(raw.Cod)
+	e.Msg = raw.Msg
+	e.Exc = scalarText(raw.Exc)
+	return nil
+}
+
+// scalarText returns a JSON string's value, a number's digits, and "" for
+// anything else (null, object, array).
+func scalarText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var n json.Number
+	if json.Unmarshal(raw, &n) == nil {
+		return n.String()
+	}
+	return ""
 }
 
 // APIValidationError is the HTTP 422 response shape.
