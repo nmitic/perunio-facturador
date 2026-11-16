@@ -39,6 +39,7 @@ const despatchColumns = `
 	driver_doc_type, driver_doc_number, driver_license, driver_name, driver_family_name, delivery_date,
 	vehicle_plate,
 	carrier_ruc, carrier_name, carrier_mtc,
+	vehicle_m1l,
 	event_code, original_gre_id,
 	sunat_ticket, sunat_response_code, sunat_response_description,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key,
@@ -57,6 +58,7 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 		&d.DriverDocType, &d.DriverDocNumber, &d.DriverLicense, &d.DriverName, &d.DriverFamilyName, &d.DeliveryDate,
 		&d.VehiclePlate,
 		&d.CarrierRUC, &d.CarrierName, &d.CarrierMTC,
+		&d.VehicleM1L,
 		&d.EventCode, &d.OriginalGreID,
 		&d.SunatTicket, &d.SunatResponseCode, &d.SunatResponseDescription,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey,
@@ -278,6 +280,8 @@ type DespatchCreateInput struct {
 	CarrierRUC  *string
 	CarrierName *string
 	CarrierMTC  *string
+	// VehicleM1L: an M1 or L vehicle, no plate/conductor/transportista.
+	VehicleM1L bool
 
 	EventCode     *string
 	OriginalGreID *string
@@ -347,7 +351,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				carrier_ruc, carrier_name, carrier_mtc,
 				event_code, original_gre_id,
 				driver_family_name, delivery_date,
-				sunat_environment
+				sunat_environment, vehicle_m1l
 			) VALUES (
 				$1,$2,$3,$4,$5,$6,'draft',
 				$7,$8,
@@ -360,7 +364,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 				$29,$30,$31,
 				$32,$33,
 				$34, $35,
-				$36
+				$36, $37
 			) RETURNING `+despatchColumns,
 			tenantID, in.CompanyID, in.SeriesID, in.DocType, series, correlative,
 			in.IssueDate, in.IssueTime,
@@ -373,7 +377,7 @@ func (p *Pool) CreateDespatch(ctx context.Context, in DespatchCreateInput) (*mod
 			in.CarrierRUC, in.CarrierName, in.CarrierMTC,
 			in.EventCode, in.OriginalGreID,
 			in.DriverFamilyName, in.DeliveryDate,
-			environment,
+			environment, in.VehicleM1L,
 		)
 		if err := scanDespatch(row, &out); err != nil {
 			return err
@@ -468,6 +472,7 @@ type DespatchUpdateInput struct {
 	CarrierRUC  *string
 	CarrierName *string
 	CarrierMTC  *string
+	VehicleM1L  *bool
 
 	EventCode     *string
 	OriginalGreID *string
@@ -636,6 +641,9 @@ func buildDespatchUpdateSet(in DespatchUpdateInput) ([]string, []any) {
 	}
 	if in.CarrierMTC != nil {
 		add("carrier_mtc", *in.CarrierMTC)
+	}
+	if in.VehicleM1L != nil {
+		add("vehicle_m1l", *in.VehicleM1L)
 	}
 	if in.EventCode != nil {
 		add("event_code", *in.EventCode)

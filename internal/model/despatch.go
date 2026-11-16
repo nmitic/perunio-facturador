@@ -93,6 +93,12 @@ type Despatch struct {
 	// Optional MTC registration number for the carrier.
 	CarrierMTC *string `json:"carrierMtc"`
 
+	// VehicleM1L: the goods travel in an M1 or L vehicle (car, motorcycle).
+	// SUNAT then wants no plate, no conductor and no transportista on the
+	// guía, and the XML carries SUNAT_Envio_IndicadorTrasladoVehiculoM1L.
+	// Remitente (09) only.
+	VehicleM1L bool `json:"vehicleM1l"`
+
 	// Por Eventos only.
 	EventCode     *string `json:"eventCode"`     // Cat.59
 	OriginalGreID *string `json:"originalGreId"` // FK to despatches.id
@@ -144,3 +150,8 @@ type RelatedDocument struct {
 	Number    string `json:"number"`
 	IssuerRUC string `json:"issuerRuc,omitempty"`
 }
+
+// IndicadorTrasladoVehiculoM1L is the cac:Shipment/cbc:SpecialInstructions
+// value of a guía whose goods travel in an M1 or L vehicle (SUNAT 3344 allows
+// it once). Not a catálogo code: SUNAT's validators name it literally.
+const IndicadorTrasladoVehiculoM1L = "SUNAT_Envio_IndicadorTrasladoVehiculoM1L"

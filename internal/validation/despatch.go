@@ -169,9 +169,22 @@ func validateDespatchShipment(d *model.Despatch) []model.ValidationError {
 func validateDespatchTransport(d *model.Despatch) []model.ValidationError {
 	var errs []model.ValidationError
 
+	// An M1 or L vehicle needs no plate, conductor or transportista
+	// (ValidaExprRegGreRemitente: 2558, 2566, 2568 skip it). The indicador
+	// exists on the remitente only.
+	m1l := d.VehicleM1L
+	if m1l && d.DocType == sunat.GreDocTypeTransportista {
+		errs = append(errs, model.ValidationError{Code: 2811, Field: "vehicleM1l",
+			Message: "una guía transportista no puede declarar un vehículo M1 o L (auto o moto)"})
+		m1l = false
+	}
+
 	switch d.TransportModality {
 	case model.TransportModalityPublic:
 		// Public: third-party carrier RUC is mandatory.
+		if m1l {
+			break
+		}
 		if d.CarrierRUC == nil || *d.CarrierRUC == "" {
 			errs = append(errs, model.ValidationError{Code: 2810, Field: "carrierRuc", Message: "falta el RUC de la empresa de transporte"})
 		} else if !rucRegex.MatchString(*d.CarrierRUC) {
@@ -180,6 +193,9 @@ func validateDespatchTransport(d *model.Despatch) []model.ValidationError {
 	case model.TransportModalityPrivate:
 		// Private: driver license + at least one vehicle plate are
 		// hard-required by SUNAT.
+		if m1l {
+			break
+		}
 		if d.DriverLicense == nil || *d.DriverLicense == "" {
 			errs = append(errs, model.ValidationError{Code: 2820, Field: "driverLicense", Message: "falta la licencia de conducir del conductor"})
 		}

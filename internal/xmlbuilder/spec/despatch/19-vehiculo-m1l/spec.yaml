@@ -1,0 +1,32 @@
+case: vehiculo-m1l
+document: despatch
+why: >-
+  A GRE remitente whose goods travel in an M1 or L vehicle (car, motorcycle),
+  in the emisor's own vehicle (Cat.18 02). SUNAT then wants its indicador once
+  and no plate and no conductor: the validator skips 2566/2568 under the
+  indicador and refuses a vehicle or a conductor next to it (3453-3456). The
+  input still carries a plate and a conductor, as a draft switched to "auto o
+  moto" would; the builder must leave them out.
+sources:
+  - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
+  - "resources/reglas/reglas-validacion-gre-2026-09-25.xlsx › Guía-Remitente2_0"
+assert:
+  - xpath: "/*/cac:Shipment/cbc:SpecialInstructions"
+    equals: "SUNAT_Envio_IndicadorTrasladoVehiculoM1L"
+    sunat: "3344"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cbc:TransportModeCode"
+    equals: "02"
+    sunat: "2532/2773"
+  - xpath: "/*/cac:Shipment/cac:TransportHandlingUnit"
+    absent: true
+    sunat: "3452/3453"
+    why: >-
+      No vehicle with the indicador
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:DriverPerson"
+    absent: true
+    sunat: "3455"
+    why: >-
+      No conductor with the indicador
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:TransitPeriod/cbc:StartDate"
+    equals: "2024-01-16"
+    sunat: "3406"

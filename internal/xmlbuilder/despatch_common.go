@@ -103,9 +103,12 @@ type shipment struct {
 	HandlingInstructions               string        `xml:"cbc:HandlingInstructions,omitempty"`
 	GrossWeightMeasure                 weightMeasure `xml:"cbc:GrossWeightMeasure"`
 	TotalTransportHandlingUnitQuantity string        `xml:"cbc:TotalTransportHandlingUnitQuantity,omitempty"`
-	SplitConsignmentIndicator          string        `xml:"cbc:SplitConsignmentIndicator,omitempty"`
-	ShipmentStage                      shipmentStage `xml:"cac:ShipmentStage"`
-	Delivery                           delivery      `xml:"cac:Delivery"`
+	// SpecialInstructions are SUNAT's indicadores (UBL 2.1 places them after
+	// the quantities and before SplitConsignmentIndicator).
+	SpecialInstructions       []string      `xml:"cbc:SpecialInstructions,omitempty"`
+	SplitConsignmentIndicator string        `xml:"cbc:SplitConsignmentIndicator,omitempty"`
+	ShipmentStage             shipmentStage `xml:"cac:ShipmentStage"`
+	Delivery                  delivery      `xml:"cac:Delivery"`
 	// TransportHandlingUnit carries the vehicle plate on GRE 2.0
 	// (TransportEquipment/cbc:ID, ERROR 2566).
 	TransportHandlingUnit *transportHandlingUnit `xml:"cac:TransportHandlingUnit,omitempty"`
@@ -338,13 +341,21 @@ func buildShipment(d *model.Despatch) shipment {
 		}
 	}
 
+	// An M1 or L vehicle (car, motorcycle) on a remitente: SUNAT's indicador,
+	// and then no plate, no conductor and no transportista — the validator
+	// refuses each of them next to the indicador (3453-3456).
+	m1l := d.VehicleM1L && d.DocType != sunat.GreDocTypeTransportista
+	if m1l {
+		ship.SpecialInstructions = []string{model.IndicadorTrasladoVehiculoM1L}
+	}
+
 	// Remitente (09) with transporte público → CarrierParty (the third-party
 	// carrier's RUC + name). Otherwise → the vehicle plate + DriverPerson. A
 	// GRE transportista (31) always declares its own vehicle and driver and
 	// never a CarrierParty (ERROR 2566, 3357): the carrier is the issuer, so a
 	// transporte público modalidad saved on its draft changes nothing.
 	if d.DocType != sunat.GreDocTypeTransportista && d.TransportModality == model.TransportModalityPublic {
-		if d.CarrierRUC != nil && *d.CarrierRUC != "" {
+		if !m1l && d.CarrierRUC != nil && *d.CarrierRUC != "" {
 			cp := &carrierParty{
 				PartyIdentification: partyIdentification{
 					ID: schemeID{
@@ -364,7 +375,7 @@ func buildShipment(d *model.Despatch) shipment {
 		ship.ShipmentStage.LoadingTransportEvent = &transportEvent{
 			OccurrenceDate: carrierDeliveryDate(d).Format("2006-01-02"),
 		}
-	} else {
+	} else if !m1l {
 		// Private transport — emit driver + vehicle when present.
 		if d.VehiclePlate != nil && *d.VehiclePlate != "" {
 			ship.TransportHandlingUnit = &transportHandlingUnit{

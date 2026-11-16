@@ -243,6 +243,8 @@ type createDespatchBody struct {
 	CarrierRUC  *string `json:"carrierRuc,omitempty"`
 	CarrierName *string `json:"carrierName,omitempty"`
 	CarrierMTC  *string `json:"carrierMtc,omitempty"`
+	// VehicleM1L: the goods travel in a car or motorcycle (M1/L).
+	VehicleM1L bool `json:"vehicleM1l,omitempty"`
 
 	EventCode     *string `json:"eventCode,omitempty"`
 	OriginalGreID *string `json:"originalGreId,omitempty"`
@@ -347,6 +349,7 @@ func (b createDespatchBody) toInput(companyID string) db.DespatchCreateInput {
 		CarrierRUC:         b.CarrierRUC,
 		CarrierName:        b.CarrierName,
 		CarrierMTC:         b.CarrierMTC,
+		VehicleM1L:         b.VehicleM1L,
 		EventCode:          b.EventCode,
 		OriginalGreID:      b.OriginalGreID,
 		RelatedDocuments:   relatedDocumentsFromBody(b.RelatedDocuments),
@@ -450,6 +453,7 @@ type updateDespatchBody struct {
 	CarrierRUC  *string `json:"carrierRuc,omitempty"`
 	CarrierName *string `json:"carrierName,omitempty"`
 	CarrierMTC  *string `json:"carrierMtc,omitempty"`
+	VehicleM1L  *bool   `json:"vehicleM1l,omitempty"`
 
 	EventCode     *string `json:"eventCode,omitempty"`
 	OriginalGreID *string `json:"originalGreId,omitempty"`
@@ -489,6 +493,7 @@ func (b updateDespatchBody) toInput() db.DespatchUpdateInput {
 		CarrierRUC:         b.CarrierRUC,
 		CarrierName:        b.CarrierName,
 		CarrierMTC:         b.CarrierMTC,
+		VehicleM1L:         b.VehicleM1L,
 		EventCode:          b.EventCode,
 		OriginalGreID:      b.OriginalGreID,
 	}

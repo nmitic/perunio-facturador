@@ -1,0 +1,18 @@
+case: vehiculo-m1l-transporte-publico
+document: despatch
+why: >-
+  The M1/L indicador on a transporte público (Cat.18 01) guía: no
+  transportista is required (2558 skips it) and none is sent, yet the date the
+  goods are handed over still is (3617 applies to every 01).
+sources:
+  - "resources/xsl/gre/ValidaExprRegGreRemitente-2.0.1.xsl"
+assert:
+  - xpath: "/*/cac:Shipment/cbc:SpecialInstructions"
+    equals: "SUNAT_Envio_IndicadorTrasladoVehiculoM1L"
+    sunat: "3344"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:CarrierParty"
+    absent: true
+    sunat: "2558"
+  - xpath: "/*/cac:Shipment/cac:ShipmentStage/cac:LoadingTransportEvent/cbc:OccurrenceDate"
+    count: 1
+    sunat: "3617"
