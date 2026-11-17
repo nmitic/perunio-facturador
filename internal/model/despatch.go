@@ -119,6 +119,10 @@ type Despatch struct {
 	R2ZipKey       *string `json:"r2ZipKey"`
 	R2CdrKey       *string `json:"r2CdrKey"`
 
+	// PdfBrandingID: the company's PDF branding version when the guía was first
+	// sent (perunio-backend company_pdf_brandings). Nil for drafts.
+	PdfBrandingID *string `json:"pdfBrandingId"`
+
 	SentAt     *time.Time `json:"sentAt"`
 	AcceptedAt *time.Time `json:"acceptedAt"`
 	CreatedAt  time.Time  `json:"createdAt"`

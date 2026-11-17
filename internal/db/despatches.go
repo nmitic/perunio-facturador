@@ -43,6 +43,7 @@ const despatchColumns = `
 	event_code, original_gre_id,
 	sunat_ticket, sunat_response_code, sunat_response_description,
 	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key,
+	pdf_branding_id,
 	sent_at, accepted_at, created_at, updated_at
 `
 
@@ -62,6 +63,7 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 		&d.EventCode, &d.OriginalGreID,
 		&d.SunatTicket, &d.SunatResponseCode, &d.SunatResponseDescription,
 		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey,
+		&d.PdfBrandingID,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
 	)
 }
@@ -708,6 +710,13 @@ func (p *Pool) ApplyDespatchResult(ctx context.Context, despatchID string, res D
 		}
 		if res.MarkSent {
 			set = append(set, "sent_at = COALESCE(sent_at, now())")
+			// Freeze the marca the guía's PDF renders with, on the first send,
+			// exactly as issued_documents does on the first issue.
+			if err := ensureDespatchCompanyPdfBranding(ctx, tx, despatchID); err != nil {
+				return err
+			}
+			set = append(set, "pdf_branding_id = COALESCE(pdf_branding_id, "+
+				"(SELECT pdf_branding_id FROM companies WHERE companies.id = despatches.company_id))")
 		}
 		if res.MarkAccepted {
 			set = append(set, "accepted_at = now()")

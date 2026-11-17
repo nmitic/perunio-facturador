@@ -476,26 +476,37 @@ func (p *Pool) ApplyIssueResult(ctx context.Context, docID string, res IssuedDoc
 // FOR UPDATE serialises two concurrent first issues: the second re-checks
 // pdf_branding_id after the first commits and finds nothing to do.
 func ensureCompanyPdfBranding(ctx context.Context, tx pgx.Tx, docID string) error {
+	return ensurePdfBrandingFor(ctx, tx, "SELECT company_id FROM issued_documents WHERE id = $1", docID)
+}
+
+// ensureDespatchCompanyPdfBranding is ensureCompanyPdfBranding for a guía.
+func ensureDespatchCompanyPdfBranding(ctx context.Context, tx pgx.Tx, despatchID string) error {
+	return ensurePdfBrandingFor(ctx, tx, "SELECT company_id FROM despatches WHERE id = $1", despatchID)
+}
+
+// ensurePdfBrandingFor runs the first-version copy for the company that
+// companyOf (a constant query over $1) returns.
+func ensurePdfBrandingFor(ctx context.Context, tx pgx.Tx, companyOf, id string) error {
 	_, err := tx.Exec(ctx, `
 		WITH c AS (
-			SELECT id, tenant_id, pdf_template, brand_color, logo_base64,
+			SELECT id, tenant_id, pdf_template, pdf_template_gre, brand_color, logo_base64,
 			       pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
 			FROM companies
-			WHERE id = (SELECT company_id FROM issued_documents WHERE id = $1)
+			WHERE id = (`+companyOf+`)
 			  AND pdf_branding_id IS NULL
 			FOR UPDATE
 		), v AS (
 			INSERT INTO company_pdf_brandings (
-				tenant_id, company_id, pdf_template, brand_color, logo_base64,
+				tenant_id, company_id, pdf_template, pdf_template_gre, brand_color, logo_base64,
 				pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
 			)
-			SELECT tenant_id, id, pdf_template, brand_color, logo_base64,
+			SELECT tenant_id, id, pdf_template, pdf_template_gre, brand_color, logo_base64,
 			       pdf_trade_name, pdf_tagline, pdf_website, pdf_phone, pdf_email
 			FROM c
 			RETURNING id, company_id
 		)
 		UPDATE companies SET pdf_branding_id = v.id FROM v WHERE companies.id = v.company_id`,
-		docID)
+		id)
 	if err != nil {
 		return fmt.Errorf("ensure company pdf branding: %w", err)
 	}

@@ -197,7 +197,7 @@ Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed
 |---|---|---|
 | `GET /gre/{companyId}` | List despatches (paginated). | Query `page`, `limit`, `docType`, `status` → `{ data: Despatch[], pagination }`. |
 | `POST /gre/{companyId}` | Create a draft despatch (quota check + atomic correlative). | Body: `seriesId`, `docType`, `series`, `correlative`, `issueDate`, recipient (`recipientDocType/Number/Name/Address`), transport (`transportModality`, `transferReason`, weights, packages), route (`startUbigeo/Address`, `arrivalUbigeo/Address`), optional driver/vehicle (modality 02) or carrier (modality 01) blocks, optional `eventCode`/`originalGreId` (EV) and related-doc refs, plus `lines[]` → `201 Despatch`. |
-| `GET /gre/{companyId}/{despatchId}` | Despatch + its `lines[]`. | → despatch + `lines`. `404 NOT_FOUND`. |
+| `GET /gre/{companyId}/{despatchId}` | Despatch + its `lines[]`. | → despatch + `lines`. `404 NOT_FOUND`. The despatch carries `pdfBrandingId`: the company's PDF branding version at the first send (as on comprobantes), which the frontend renders the guía's PDF with; `null` on drafts. |
 | `PUT /gre/{companyId}/{despatchId}` | Update a despatch SUNAT has not ruled on, so it can be corrected and sent again with the same número. | Status `draft` or `error` (the send failed, no ticket); else `400 NOT_DRAFT`. Patch: an absent field is kept, `""` clears it. |
 | `DELETE /gre/{companyId}/{despatchId}` | Delete a draft despatch. | Draft-only. |
 | `POST /gre/{companyId}/{despatchId}/issue` | validate → build XML → sign → ZIP → send via **GRE OAuth2 REST**; store ticket. | Body `{ environment? }`. |
