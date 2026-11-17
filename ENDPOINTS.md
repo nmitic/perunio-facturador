@@ -202,7 +202,8 @@ Despatch guides over SUNAT's **GRE REST API** with **OAuth2** (token cache keyed
 | `DELETE /gre/{companyId}/{despatchId}` | Delete a draft despatch. | Draft-only. |
 | `POST /gre/{companyId}/{despatchId}/issue` | validate → build XML → sign → ZIP → send via **GRE OAuth2 REST**; store ticket. | Body `{ environment? }`. |
 | `POST /gre/{companyId}/{despatchId}/poll` | Poll the SUNAT ticket; base64-decode the CDR; persist outcome. | Body `{ environment? }`. |
-| `GET /gre/{companyId}/{despatchId}/files/{fileType}` | Presigned R2 URL. `fileType` ∈ `xml \| signed_xml \| zip \| cdr`. | → `{ url, fileType }`. |
+| `GET /gre/{companyId}/{despatchId}/files/{fileType}` | Presigned R2 URL. `fileType` ∈ `xml \| signed_xml \| zip \| cdr \| pdf`. | → `{ url, fileType }`. |
+| `POST /gre/{companyId}/{despatchId}/files/pdf` | Store the guía's client-rendered PDF (representación impresa), as for a comprobante. | Raw PDF body, max 15 MiB; accepted guías only, else `409 NOT_ACCEPTED`. Sets `r2PdfKey`, which perunio-backend's share links (email, WhatsApp) serve. → `{ r2PdfKey }`. |
 
 > **`EV` cannot reach SUNAT.** R.S. 123-2022/SUNAT (numeral 5.2) says a GRE por evento "se emite únicamente a través del SEE - SOL", and the GRE validators reject the event-type tag a por evento guía would carry (ERR 3374). Issuing an `EV` draft here can only end rejected. See `internal/xmlbuilder/spec/README.md` › Known deviations F8; the other open GRE deviations (F16–F22) are listed there too.
 

@@ -42,7 +42,7 @@ const despatchColumns = `
 	vehicle_m1l,
 	event_code, original_gre_id,
 	sunat_ticket, sunat_response_code, sunat_response_description,
-	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key,
+	r2_xml_key, r2_signed_xml_key, r2_zip_key, r2_cdr_key, r2_pdf_key,
 	pdf_branding_id,
 	sent_at, accepted_at, created_at, updated_at
 `
@@ -62,7 +62,7 @@ func scanDespatch(row pgx.Row, d *model.Despatch) error {
 		&d.VehicleM1L,
 		&d.EventCode, &d.OriginalGreID,
 		&d.SunatTicket, &d.SunatResponseCode, &d.SunatResponseDescription,
-		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey,
+		&d.R2XmlKey, &d.R2SignedXmlKey, &d.R2ZipKey, &d.R2CdrKey, &d.R2PdfKey,
 		&d.PdfBrandingID,
 		&d.SentAt, &d.AcceptedAt, &d.CreatedAt, &d.UpdatedAt,
 	)
@@ -732,4 +732,15 @@ func (p *Pool) ApplyDespatchResult(ctx context.Context, despatchID string, res D
 		return nil, err
 	}
 	return &d, nil
+}
+
+// SetDespatchPdfKey persists the R2 key of a guía's client-rendered PDF, the
+// counterpart of SetDocumentPdfKey: only r2_pdf_key (and updated_at) change.
+func (p *Pool) SetDespatchPdfKey(ctx context.Context, despatchID, key string) error {
+	return p.WithTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			"UPDATE despatches SET r2_pdf_key = $1, updated_at = now() WHERE id = $2",
+			key, despatchID)
+		return err
+	})
 }

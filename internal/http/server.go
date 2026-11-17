@@ -180,6 +180,7 @@ func NewServer(deps Deps) *Server {
 		r.Post("/gre/{companyId}/{despatchId}/issue", s.issueDespatchHandler)
 		r.Post("/gre/{companyId}/{despatchId}/poll", s.pollDespatchHandler)
 		r.Get("/gre/{companyId}/{despatchId}/files/{fileType}", s.despatchFileHandler)
+		r.Post("/gre/{companyId}/{despatchId}/files/pdf", s.uploadDespatchPdfHandler)
 	})
 
 	return s

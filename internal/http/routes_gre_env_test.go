@@ -58,3 +58,14 @@ func TestGRESendErrorMessage(t *testing.T) {
 		t.Errorf("production, no answer: %q, want the raw error", got)
 	}
 }
+
+// Only a guía SUNAT accepted gets a PDF: it is what email and share links serve.
+func TestDespatchPdfUploadable(t *testing.T) {
+	for status, want := range map[string]bool{
+		"accepted": true, "draft": false, "signed": false, "sent": false, "rejected": false, "error": false,
+	} {
+		if got := despatchPdfUploadable(status); got != want {
+			t.Errorf("status %q: uploadable = %v, want %v", status, got, want)
+		}
+	}
+}

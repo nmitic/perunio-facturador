@@ -118,6 +118,9 @@ type Despatch struct {
 	R2SignedXmlKey *string `json:"r2SignedXmlKey"`
 	R2ZipKey       *string `json:"r2ZipKey"`
 	R2CdrKey       *string `json:"r2CdrKey"`
+	// R2PdfKey: the representación impresa, rendered by the frontend once SUNAT
+	// accepted the guía and uploaded (POST …/files/pdf). Served by share links.
+	R2PdfKey *string `json:"r2PdfKey"`
 
 	// PdfBrandingID: the company's PDF branding version when the guía was first
 	// sent (perunio-backend company_pdf_brandings). Nil for drafts.

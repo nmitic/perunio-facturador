@@ -8,16 +8,6 @@ and where the code is, so it can be picked up later without re-investigating.
 When you pick one up: add spec cases first (`internal/xmlbuilder/spec/`, see its
 README), then fix, then delete the entry here.
 
-## FU-13 — Guía PDFs are not stored
-
-A comprobante's PDF is rendered in the browser and uploaded to R2
-(`POST /documents/{companyId}/{docId}/files/pdf`, `r2_pdf_key`) because email
-and the public API serve it. A guía's PDF is rendered in the browser on demand
-from the guía and its stamped `pdf_branding_id`, and never stored: nothing
-emails a guía or serves it by API yet. The day something does, mirror the
-comprobante: `despatches.r2_pdf_key`, an upload route and `pdf` in the guía's
-`files/{fileType}`. Decided while adding the guía PDF (2026-11-16).
-
 ## FU-12 — Summaries and voids are not stamped with an environment
 
 `daily_summaries` and `voided_documents` have no `sunat_environment`. Their

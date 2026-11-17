@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -862,6 +863,8 @@ func (s *Server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
 		r2Key, r2FileType = d.R2ZipKey, r2.FileZIP
 	case "cdr":
 		r2Key, r2FileType = d.R2CdrKey, r2.FileCDR
+	case "pdf":
+		r2Key, r2FileType = d.R2PdfKey, r2.FilePDF
 	default:
 		writeError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", "Tipo de archivo inválido")
 		return
@@ -886,4 +889,64 @@ func (s *Server) despatchFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccess(w, map[string]string{"url": url, "fileType": fileType})
+}
+
+// despatchPdfUploadable says whether a guía may receive its PDF: only one SUNAT
+// accepted. Its PDF is a representación impresa of what SUNAT holds, and it is
+// what email and share links serve, so a draft or a rejected guía never has one.
+func despatchPdfUploadable(status string) bool {
+	return status == "accepted"
+}
+
+// uploadDespatchPdfHandler stores the guía's client-rendered PDF, the
+// counterpart of uploadDocumentPdfHandler (same key layout, same size cap).
+func (s *Server) uploadDespatchPdfHandler(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "companyId")
+	despatchID := chi.URLParam(r, "despatchId")
+
+	payload, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Autenticación requerida")
+		return
+	}
+
+	d, err := s.pool.GetDespatch(r.Context(), companyID, despatchID)
+	if err != nil {
+		s.log.Error("get despatch for pdf upload", "error", err, "despatchId", despatchID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+	if d == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Guía no encontrada")
+		return
+	}
+	if !despatchPdfUploadable(d.Status) {
+		writeError(w, http.StatusConflict, "NOT_ACCEPTED", "La guía aún no ha sido aceptada")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxDocumentPdfBytes)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "No se pudo leer el archivo PDF")
+		return
+	}
+	if len(data) == 0 {
+		writeError(w, http.StatusBadRequest, "EMPTY_BODY", "El archivo PDF está vacío")
+		return
+	}
+
+	key := r2.DocumentKey(payload.TenantID, companyID, despatchID, r2.FilePDF)
+	if err := s.r2.UploadDocumentFile(r.Context(), key, r2.FilePDF, data); err != nil {
+		s.log.Error("upload despatch pdf", "error", err, "key", key)
+		writeError(w, http.StatusInternalServerError, "R2_UPLOAD_ERROR", "No se pudo guardar el PDF")
+		return
+	}
+	if err := s.pool.SetDespatchPdfKey(r.Context(), despatchID, key); err != nil {
+		s.log.Error("persist despatch pdf key", "error", err, "despatchId", despatchID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+		return
+	}
+
+	writeSuccess(w, map[string]string{"r2PdfKey": key})
 }
