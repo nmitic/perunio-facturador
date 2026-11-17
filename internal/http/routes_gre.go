@@ -378,7 +378,8 @@ func relatedDocumentsFromBody(list []model.RelatedDocument) []model.RelatedDocum
 
 func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "companyId")
-	if _, ok := auth.TenantIDFromContext(r.Context()); !ok {
+	tenantID, ok := auth.TenantIDFromContext(r.Context())
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "No autenticado")
 		return
 	}
@@ -405,6 +406,12 @@ func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		body.IssueTime = &t
 	}
 
+	// Guías share the facturador plan's monthly allowance with comprobantes.
+	if pErr := s.checkDocumentQuota(r.Context(), tenantID); pErr != nil {
+		writeError(w, pErr.status, pErr.code, pErr.message)
+		return
+	}
+
 	d, err := s.pool.CreateDespatch(r.Context(), body.toInput(companyID))
 	if err != nil {
 		if errors.Is(err, db.ErrSeriesInactive) {
@@ -414,6 +421,10 @@ func (s *Server) createDespatchHandler(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("create despatch", "error", err, "companyId", companyID)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
 		return
+	}
+	if err := s.pool.IncrementDocumentUsage(r.Context(), 1); err != nil {
+		// Best-effort, as for comprobantes: the draft already exists.
+		s.log.Error("increment document usage", "error", err, "tenantId", tenantID)
 	}
 	writeSuccessStatus(w, http.StatusCreated, d)
 }

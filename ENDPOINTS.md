@@ -35,9 +35,9 @@ Who actually calls each endpoint at runtime (see `ARCHITECTURE.md` for the full 
 ## Usage
 
 ### `GET /api/facturador/usage` — 🟢 frontend (live)
-**Purpose:** current billing period's issued-document count vs. the tenant's tier limit. Drives quota UI and "X of Y documents used" indicators. Mirrors the Node `getDocumentUsage` shape.
+**Purpose:** current billing period's issued-document count vs. the tenant owner's **facturador plan** (`users.facturador_tier`, billed apart from the Perunio tier; an expired plan counts as `free`). Comprobantes and guías share the allowance: `POST /documents` and `POST /gre` both refuse with `403 DOCUMENT_QUOTA_EXCEEDED` once it is used. Drives the "N de M comprobantes este mes" meter.
 **Request:** none (tenant comes from JWT).
-**Response:** `{ used: number, limit: number|null, tier: string, period: string }` — `limit` is `null` for unlimited tiers.
+**Response:** `{ used: number, limit: number|null, plan: 'free'|'emprende'|'negocio'|'empresa', period: string }` — `limit` is `null` on Empresa (unlimited). Allowances: free 10, emprende 150, negocio 600 (`monthlyDocumentLimits` in `internal/db/usage.go`, mirroring `perunio-backend/src/config/facturador-plans.ts`).
 **Consumed by:** `documentsApi.getUsage()` in the frontend.
 
 ---

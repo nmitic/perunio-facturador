@@ -156,6 +156,25 @@ func createDocumentError(err error) *pipelineError {
 	}
 }
 
+// checkDocumentQuota refuses a new draft (comprobante or guía) once the
+// tenant's facturador plan has used its monthly allowance.
+func (s *Server) checkDocumentQuota(ctx context.Context, tenantID string) *pipelineError {
+	quota, err := s.pool.CheckDocumentQuota(ctx, tenantID, 1)
+	if err != nil {
+		s.log.Error("check document quota", "error", err, "tenantId", tenantID)
+		return newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
+	}
+	if !quota.Allowed {
+		limitStr := "ilimitado"
+		if quota.Limit != nil {
+			limitStr = strconv.Itoa(*quota.Limit)
+		}
+		return newPipelineError(http.StatusForbidden, "DOCUMENT_QUOTA_EXCEEDED",
+			"Límite mensual de comprobantes alcanzado ("+limitStr+"). Mejora tu plan Facturador para emitir más.")
+	}
+	return nil
+}
+
 // createDocumentDraft inserts a draft issued_document after checking the tenant's
 // monthly quota, then bumps the issued-document counter.
 func (s *Server) createDocumentDraft(ctx context.Context, companyID string, in db.CreateDocumentInput) (*model.IssuedDocument, *pipelineError) {
@@ -164,18 +183,8 @@ func (s *Server) createDocumentDraft(ctx context.Context, companyID string, in d
 		return nil, newPipelineError(http.StatusUnauthorized, "UNAUTHORIZED", "No autenticado")
 	}
 
-	quota, err := s.pool.CheckDocumentQuota(ctx, tenantID, 1)
-	if err != nil {
-		s.log.Error("check document quota", "error", err, "tenantId", tenantID)
-		return nil, newPipelineError(http.StatusInternalServerError, "INTERNAL_ERROR", "Error interno del servidor")
-	}
-	if !quota.Allowed {
-		limitStr := "ilimitado"
-		if quota.Limit != nil {
-			limitStr = strconv.Itoa(*quota.Limit)
-		}
-		return nil, newPipelineError(http.StatusForbidden, "DOCUMENT_QUOTA_EXCEEDED",
-			"Límite mensual de documentos alcanzado ("+limitStr+")")
+	if pErr := s.checkDocumentQuota(ctx, tenantID); pErr != nil {
+		return nil, pErr
 	}
 
 	doc, err := s.pool.CreateDocumentWithItems(ctx, companyID, in)

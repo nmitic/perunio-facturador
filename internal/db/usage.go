@@ -10,19 +10,21 @@ import (
 	"github.com/perunio/perunio-facturador/internal/auth"
 )
 
-// monthlyDocumentLimits mirrors monthlyIssuedDocuments in
-// perunio-backend/src/config/subscription-limits.ts. nil means unlimited.
+// monthlyDocumentLimits mirrors FACTURADOR_PLANS[*].monthlyDocuments in
+// perunio-backend/src/config/facturador-plans.ts, keyed by users.facturador_tier.
+// The facturador plan is billed apart from users.subscription_tier, which this
+// service no longer reads. nil means unlimited. Comprobantes and guías share it.
 var monthlyDocumentLimits = map[string]*int{
-	"free":             intPtr(5),
-	"accounting_basic": intPtr(50),
-	"accounting":       intPtr(500),
-	"accounting_pro":   nil,
+	"free":     intPtr(10),
+	"emprende": intPtr(150),
+	"negocio":  intPtr(600),
+	"empresa":  nil,
 }
 
 func intPtr(i int) *int { return &i }
 
 // MonthlyDocumentLimit returns the issued-document quota for the given
-// subscription tier (nil = unlimited). Unknown tiers fall back to the free
+// facturador plan (nil = unlimited). Unknown plans fall back to the free
 // limit so we err on the side of restriction.
 func MonthlyDocumentLimit(tier string) *int {
 	if v, ok := monthlyDocumentLimits[tier]; ok {
@@ -35,41 +37,52 @@ func currentPeriod() string {
 	return time.Now().UTC().Format("200601")
 }
 
-// GetTenantTier reads the subscription_tier of the user that owns the tenant.
-// Used by quota checks. Runs WITHOUT a tenant context because users/tenants
-// are not RLS-scoped.
-func (p *Pool) GetTenantTier(ctx context.Context, tenantID string) (string, error) {
+// GetTenantFacturadorPlan reads the facturador plan of the user that owns the
+// tenant, so a team member gets the owner's plan. An expired plan counts as
+// "free", as getEffectiveFacturadorTier does in perunio-backend; the nightly
+// expiry job there resets the column later. Runs WITHOUT a tenant context
+// because users/tenants are not RLS-scoped.
+func (p *Pool) GetTenantFacturadorPlan(ctx context.Context, tenantID string) (string, error) {
 	row := p.pool.QueryRow(ctx, `
-		SELECT u.subscription_tier
+		SELECT u.facturador_tier::text, u.facturador_tier_expires_at
 		FROM tenants t
 		JOIN users u ON u.id = t.user_id
 		WHERE t.id = $1
 		LIMIT 1
 	`, tenantID)
-	var tier string
-	if err := row.Scan(&tier); err != nil {
+	var plan string
+	var expiresAt *time.Time
+	if err := row.Scan(&plan, &expiresAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "free", nil
 		}
 		return "", err
 	}
-	return tier, nil
+	return effectivePlan(plan, expiresAt, time.Now()), nil
 }
 
-// QuotaResult mirrors checkDocumentQuota in perunio-backend/src/db/index.ts.
+// effectivePlan treats a plan whose expiry has passed as "free".
+func effectivePlan(plan string, expiresAt *time.Time, now time.Time) string {
+	if expiresAt != nil && !expiresAt.After(now) {
+		return "free"
+	}
+	return plan
+}
+
+// QuotaResult is one tenant's issued-document allowance for the period.
 type QuotaResult struct {
 	Allowed   bool
 	Used      int
 	Remaining int
-	Limit     *int // nil = unlimited
-	Tier      string
+	Limit     *int   // nil = unlimited
+	Tier      string // the facturador plan (users.facturador_tier)
 	Period    string
 }
 
 // CheckDocumentQuota returns whether the tenant can issue `documentCount` more
 // documents this period.
 func (p *Pool) CheckDocumentQuota(ctx context.Context, tenantID string, documentCount int) (QuotaResult, error) {
-	tier, err := p.GetTenantTier(ctx, tenantID)
+	tier, err := p.GetTenantFacturadorPlan(ctx, tenantID)
 	if err != nil {
 		return QuotaResult{}, err
 	}
@@ -101,7 +114,7 @@ func (p *Pool) CheckDocumentQuota(ctx context.Context, tenantID string, document
 }
 
 // IncrementDocumentUsage atomically bumps the period's document_count for the
-// tenant. Mirrors incrementDocumentUsage in perunio-backend.
+// tenant (comprobantes and guías alike).
 func (p *Pool) IncrementDocumentUsage(ctx context.Context, documentCount int) error {
 	tenantID, ok := auth.TenantIDFromContext(ctx)
 	if !ok {
@@ -122,7 +135,7 @@ func (p *Pool) IncrementDocumentUsage(ctx context.Context, documentCount int) er
 // GetDocumentUsage returns the current period's count + tier metadata for the
 // /api/facturador/usage endpoint.
 func (p *Pool) GetDocumentUsage(ctx context.Context, tenantID string) (QuotaResult, error) {
-	tier, err := p.GetTenantTier(ctx, tenantID)
+	tier, err := p.GetTenantFacturadorPlan(ctx, tenantID)
 	if err != nil {
 		return QuotaResult{}, err
 	}

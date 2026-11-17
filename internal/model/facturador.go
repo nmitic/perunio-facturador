@@ -414,11 +414,3 @@ type VoidedDocumentItem struct {
 	IssueDate time.Time `json:"issueDate"`
 	CreatedAt time.Time `json:"createdAt"`
 }
-
-// FacturadorUsage is the response shape for GET /api/facturador/usage.
-type FacturadorUsage struct {
-	Period        string `json:"period"`
-	DocumentCount int    `json:"documentCount"`
-	Limit         *int   `json:"limit"`
-	Tier          string `json:"tier"`
-}

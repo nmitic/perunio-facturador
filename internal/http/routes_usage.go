@@ -6,12 +6,12 @@ import (
 	"github.com/perunio/perunio-facturador/internal/auth"
 )
 
-// usageResponse mirrors the Node.js getDocumentUsage shape: { used, limit,
-// tier, period }. limit is null for unlimited tiers.
+// usageResponse is { used, limit, plan, period }: plan is the facturador plan
+// (free|emprende|negocio|empresa) and limit is null when it is unlimited.
 type usageResponse struct {
 	Used   int    `json:"used"`
 	Limit  *int   `json:"limit"`
-	Tier   string `json:"tier"`
+	Plan   string `json:"plan"`
 	Period string `json:"period"`
 }
 
@@ -34,7 +34,7 @@ func (s *Server) usageHandler(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, usageResponse{
 		Used:   usage.Used,
 		Limit:  usage.Limit,
-		Tier:   usage.Tier,
+		Plan:   usage.Tier,
 		Period: usage.Period,
 	})
 }

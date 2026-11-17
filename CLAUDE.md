@@ -183,7 +183,7 @@ The rules:
 Despatch doc types: `09` (Remitente), `31` (Transportista), `EV` (Por-eventos). Statuses: `draft → signed → sent → accepted / rejected / error`.
 
 ### Other
-- `GET /usage` — current month's document usage + tier limit
+- `GET /usage` — current month's document usage + the facturador plan's allowance (`users.facturador_tier`, not the Perunio tier; comprobantes and guías share it)
 - `GET /health` — unauthenticated health check
 
 ## Environment Variables
