@@ -29,8 +29,12 @@ type DocumentListFilter struct {
 	// VentaAnticipoID narrows to the comprobantes of one venta con anticipos —
 	// its advances plus the factura final. Empty = all.
 	VentaAnticipoID string
-	Page            int
-	Limit           int
+	// From / To bound the fecha de emisión, inclusive, as YYYY-MM-DD (Peru
+	// calendar dates, compared as dates — no timezone). Empty = unbounded.
+	From  string
+	To    string
+	Page  int
+	Limit int
 }
 
 // paymentRollupJoin is a LATERAL subquery over `issued_documents d` that derives
@@ -246,6 +250,14 @@ func (p *Pool) ListIssuedDocuments(ctx context.Context, companyID string, filter
 	if filter.VentaAnticipoID != "" {
 		args = append(args, filter.VentaAnticipoID)
 		conditions = append(conditions, fmt.Sprintf("d.venta_anticipo_id = $%d", len(args)))
+	}
+	if filter.From != "" {
+		args = append(args, filter.From)
+		conditions = append(conditions, fmt.Sprintf("d.issue_date >= $%d::date", len(args)))
+	}
+	if filter.To != "" {
+		args = append(args, filter.To)
+		conditions = append(conditions, fmt.Sprintf("d.issue_date <= $%d::date", len(args)))
 	}
 	if filter.Customer != "" {
 		// Free-text search over name + doc number. LIKE metacharacters in the raw

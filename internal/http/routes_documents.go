@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -40,12 +41,31 @@ func (s *Server) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(q.Get("page"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
 
+	// Fecha de emisión range, inclusive. Validated here so a malformed date is a
+	// 400 rather than a Postgres cast error surfacing as a 500.
+	from, to := q.Get("from"), q.Get("to")
+	for _, d := range []string{from, to} {
+		if d == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Las fechas deben tener el formato AAAA-MM-DD")
+			return
+		}
+	}
+	if from != "" && to != "" && from > to {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "La fecha inicial no puede ser posterior a la final")
+		return
+	}
+
 	filter := db.DocumentListFilter{
 		DocType:       q.Get("docType"),
 		Status:        q.Get("status"),
 		Customer:      q.Get("customer"),
 		Payment:       q.Get("payment"),
 		OperationType: q.Get("operationType"),
+		From:          from,
+		To:            to,
 		Page:          page,
 		Limit:         limit,
 	}
